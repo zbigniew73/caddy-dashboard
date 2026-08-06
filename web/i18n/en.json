@@ -5,7 +5,7 @@
   "login.error_wrong_password": "Invalid username or password",
   "login.error_session_expired": "Session expired - please log in again",
   "header.logout": "Log out",
-  "nav.system": "System",
+  "nav.system": "System Info",
   "system.loading": "Loading...",
   "system.hostname": "Hostname",
   "system.platform": "Platform",

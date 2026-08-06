@@ -5,7 +5,7 @@
   "login.error_wrong_password": "Nieprawidłowy użytkownik lub hasło",
   "login.error_session_expired": "Sesja wygasła - zaloguj się ponownie",
   "header.logout": "Wyloguj",
-  "nav.system": "System",
+  "nav.system": "System Info",
   "system.loading": "Wczytywanie...",
   "system.hostname": "Hostname",
   "system.platform": "Platforma",
