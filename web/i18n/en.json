@@ -1,0 +1,22 @@
+{
+  "login.username_placeholder": "System login",
+  "login.password_placeholder": "Password",
+  "login.button": "Log in",
+  "login.error_wrong_password": "Invalid username or password",
+  "login.error_session_expired": "Session expired - please log in again",
+  "header.logout": "Log out",
+  "nav.system": "System",
+  "system.loading": "Loading...",
+  "system.hostname": "Hostname",
+  "system.platform": "Platform",
+  "system.kernel": "Kernel version",
+  "system.uptime": "Uptime",
+  "system.cpu": "CPU",
+  "system.cpu_detail": "{model} · {cores} cores",
+  "system.ram": "RAM",
+  "system.disk": "Disk ({path})",
+  "system.used_of": "{used} of {total}",
+  "theme.light": "Light",
+  "theme.dark": "Dark",
+  "theme.system": "System"
+}

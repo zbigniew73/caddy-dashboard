@@ -1,0 +1,22 @@
+{
+  "login.username_placeholder": "Login systemowy",
+  "login.password_placeholder": "Hasło",
+  "login.button": "Zaloguj",
+  "login.error_wrong_password": "Nieprawidłowy użytkownik lub hasło",
+  "login.error_session_expired": "Sesja wygasła - zaloguj się ponownie",
+  "header.logout": "Wyloguj",
+  "nav.system": "System",
+  "system.loading": "Wczytywanie...",
+  "system.hostname": "Hostname",
+  "system.platform": "Platforma",
+  "system.kernel": "Wersja jądra",
+  "system.uptime": "Uptime",
+  "system.cpu": "CPU",
+  "system.cpu_detail": "{model} · {cores} rdzeni",
+  "system.ram": "RAM",
+  "system.disk": "Dysk ({path})",
+  "system.used_of": "{used} z {total}",
+  "theme.light": "Jasny",
+  "theme.dark": "Ciemny",
+  "theme.system": "Systemowy"
+}
