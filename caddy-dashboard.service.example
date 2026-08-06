@@ -1,0 +1,35 @@
+# Szablon jednostki systemd. Skopiuj, podmien sciezki i uzytkownika, potem:
+#
+#   sudo cp caddy-dashboard.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now caddy-dashboard
+#
+# Plik z podmienionymi wartosciami jest w .gitignore - trzymaj go lokalnie.
+
+[Unit]
+Description=Caddy Dashboard
+After=network.target
+
+[Service]
+Type=simple
+
+# Katalog, do ktorego sklonowales repo.
+WorkingDirectory=/sciezka/do/caddy-dashboard
+EnvironmentFile=/sciezka/do/caddy-dashboard/.env
+
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+
+# Konto, na ktorym dziala panel.
+User=twoj-user
+
+# Odkomentuj TYLKO jesli AUTH_USERS zawiera konto inne niz powyzsze - bez tego
+# PAM pozwoli zweryfikowac wylacznie haslo wlasnego uzytkownika procesu.
+# Konsekwencja: dajesz wszystkim z AUTH_USERS mozliwosc odczytu /etc/shadow.
+# SupplementaryGroups=shadow
+
+# NIE dodawaj NoNewPrivileges=true - blokuje setuid, przez co pomocniczy
+# unix_chkpwd nie moze sprawdzic hasla i logowanie przestaje dzialac calkowicie.
+
+[Install]
+WantedBy=multi-user.target

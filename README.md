@@ -23,6 +23,18 @@ npm start
 
 Logowanie odbywa się przez konta systemowe (login + hasło jak przy SSH), whitelistowane w `AUTH_USERS`. Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
 
+## Uruchamianie jako usluga systemd (autostart po restarcie)
+
+```bash
+cp caddy-dashboard.service.example caddy-dashboard.service
+# podmien w nim WorkingDirectory, EnvironmentFile i User na swoje wartosci
+sudo cp caddy-dashboard.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy-dashboard
+```
+
+Plik `caddy-dashboard.service` (z podmienionymi wartosciami) jest w `.gitignore` - zostaje lokalnie na serwerze, nie w repo.
+
 ## Struktura
 
 ```
