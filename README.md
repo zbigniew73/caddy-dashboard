@@ -19,9 +19,14 @@ cp .env.example .env
 npm start
 ```
 
-## Logowanie systemowe (PAM)
+## Logowanie systemowe (PAM + sudo)
 
-Logowanie odbywa się przez konta systemowe (login + hasło jak przy SSH), whitelistowane w `AUTH_USERS`. Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
+Logowanie wymaga spełnienia trzech warunków naraz:
+1. login jest na jawnej whiteliście `AUTH_USERS`,
+2. hasło poprawnie weryfikuje się przez PAM (jak przy SSH),
+3. konto należy do grupy `wheel` (AlmaLinux/Rocky) lub `sudo` (Debian/Ubuntu) — do panelu logują się wyłącznie sudoerzy, bo zarządzają całym systemem i usługami.
+
+Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
 
 ## Uruchamianie jako usluga systemd (autostart po restarcie)
 

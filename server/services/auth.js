@@ -1,5 +1,9 @@
 import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { createRequire } from 'module';
+
+const execFileAsync = promisify(execFile);
 
 // authenticate-pam to natywny dodatek CommonJS (jego "main" wskazuje wprost
 // na plik .node) - ESM `import` tego nie obsluguje, wiec ladujemy go przez
@@ -59,17 +63,34 @@ function getAllowedUsers() {
     .filter(Boolean);
 }
 
-function authenticateSystemUser(username, password) {
+const SUDO_GROUPS = ['wheel', 'sudo'];
+
+async function userHasSudoAccess(username) {
+  try {
+    const { stdout } = await execFileAsync('id', ['-nG', username]);
+    const groups = stdout.trim().split(/\s+/);
+    return groups.some((g) => SUDO_GROUPS.includes(g));
+  } catch {
+    return false;
+  }
+}
+
+function pamAuthenticate(username, password) {
   return new Promise((resolve) => {
-    const allowed = getAllowedUsers();
-    if (!username || !allowed.includes(username)) {
-      resolve(false);
-      return;
-    }
     pam.authenticate(username, password || '', (err) => resolve(!err), {
       serviceName: process.env.PAM_SERVICE || 'login'
     });
   });
+}
+
+async function authenticateSystemUser(username, password) {
+  const allowed = getAllowedUsers();
+  if (!username || !allowed.includes(username)) return false;
+
+  const pamOk = await pamAuthenticate(username, password);
+  if (!pamOk) return false;
+
+  return userHasSudoAccess(username);
 }
 
 function issueSessionCookie(res, username) {
