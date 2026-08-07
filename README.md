@@ -47,13 +47,13 @@ Logowanie wymaga spełnienia trzech warunków naraz:
 2. hasło poprawnie weryfikuje się przez PAM (jak przy SSH),
 3. konto należy do grupy `wheel` — do panelu logują się wyłącznie sudoerzy, bo zarządzają całym systemem i usługami.
 
-Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
+Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu. Uwaga: na (przynajmniej niektórych) obrazach AlmaLinux/Rocky grupa `shadow` domyślnie **nie istnieje** — `install.sh` wykrywa to i wtedy dodaje `cdadmin` tylko do `wheel`, bez wywalania się. W takim wypadku, jeśli PAM jako `cdadmin` nie będzie mógł sprawdzać haseł innych userów, zostaw `User=root` w `caddy-dashboard.service` (usługa) albo znajdź realny odpowiednik grupy `shadow` na swoim systemie.
 
 ### Dedykowany użytkownik `cdadmin`
 
 `install.sh` sprawdza, czy w systemie istnieje user `cdadmin` i proponuje go skonfigurować (albo utworzyć, jeśli nie istnieje) jako administratora panelu — zamiast logować się/uruchamiać usługę na koncie `root`:
 
-- należy do grup `wheel` (sudo, wymóg logowania do panelu) i `shadow` (wymóg PAM opisany wyżej),
+- należy do grupy `wheel` (sudo, wymóg logowania do panelu) i do `shadow` (wymóg PAM opisany wyżej) **tylko jeśli ta grupa istnieje** w systemie — skrypt sprawdza to automatycznie (`getent group shadow`),
 - tworzony bez katalogu domowego, z powłoką `/sbin/nologin` (brak bezpośredniego logowania po SSH — tylko przez panel + sudo),
 - jeśli user jest tworzony od nowa, skrypt generuje losowe 12-znakowe hasło (wielkie/małe litery, cyfry, znaki specjalne) i zapisuje je w `/root/.usercd` (`chmod 600`, tylko root) — stamtąd trzeba je odczytać po instalacji,
 - jeśli `cdadmin` jest gotowy, staje się domyślną propozycją zarówno dla `AUTH_USERS` w `.env`, jak i dla `User=` w `caddy-dashboard.service` (nadal można wpisać inne konto podczas pytań skryptu).

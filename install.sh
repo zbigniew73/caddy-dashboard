@@ -85,13 +85,14 @@ declare -A MSG_PL=(
   [caddy_version]="Caddy: %s"
   [cdadmin_checking]="Sprawdzam dedykowanego uzytkownika administracyjnego (%s)..."
   [cdadmin_exists]="Uzytkownik systemowy '%s' juz istnieje."
-  [cdadmin_setup_prompt]="Skonfigurowac '%s' jako admina panelu (grupy wheel+shadow, usluga systemd zamiast root)?"
-  [cdadmin_groups_added]="'%s' dodany do grup wheel, shadow (haslo bez zmian)."
+  [cdadmin_no_shadow_group]="Grupa 'shadow' nie istnieje w tym systemie - pomijam ja. Bez niej PAM jako '%s' moze nie miec dostepu do hasel innych userow (patrz README)."
+  [cdadmin_setup_prompt]="Skonfigurowac '%s' jako admina panelu (grupy: %s, usluga systemd zamiast root)?"
+  [cdadmin_groups_added]="'%s' dodany do grup: %s (haslo bez zmian)."
   [cdadmin_skip_existing]="Pomijam '%s' - logowanie do panelu i usluga systemd zostana skonfigurowane jak dotychczas."
-  [cdadmin_create_prompt]="Uzytkownik '%s' nie istnieje - utworzyc go jako admina panelu (bez katalogu domowego, wheel+shadow)?"
+  [cdadmin_create_prompt]="Uzytkownik '%s' nie istnieje - utworzyc go jako admina panelu (bez katalogu domowego, grupy: %s)?"
   [err_cdadmin_create]="Nie udalo sie utworzyc uzytkownika %s."
   [err_cdadmin_password]="Nie udalo sie ustawic hasla dla %s."
-  [cdadmin_created]="Utworzono '%s' (wheel+shadow, bez katalogu domowego)."
+  [cdadmin_created]="Utworzono '%s' (grupy: %s, bez katalogu domowego)."
   [cdadmin_password_saved]="Haslo zapisane w /root/.usercd (chmod 600, tylko root)."
   [cdadmin_create_skip]="Pomijam tworzenie '%s'."
   [firewalld_installing]="firewalld nie znaleziony - instaluje..."
@@ -170,13 +171,14 @@ declare -A MSG_EN=(
   [caddy_version]="Caddy: %s"
   [cdadmin_checking]="Checking for the dedicated admin user (%s)..."
   [cdadmin_exists]="System user '%s' already exists."
-  [cdadmin_setup_prompt]="Configure '%s' as the panel admin (wheel+shadow groups, systemd service instead of root)?"
-  [cdadmin_groups_added]="'%s' added to the wheel, shadow groups (password unchanged)."
+  [cdadmin_no_shadow_group]="The 'shadow' group does not exist on this system - skipping it. Without it, PAM as '%s' may not be able to check other users' passwords (see README)."
+  [cdadmin_setup_prompt]="Configure '%s' as the panel admin (groups: %s, systemd service instead of root)?"
+  [cdadmin_groups_added]="'%s' added to groups: %s (password unchanged)."
   [cdadmin_skip_existing]="Skipping '%s' - panel login and the systemd service will be configured as before."
-  [cdadmin_create_prompt]="User '%s' does not exist - create it as the panel admin (no home directory, wheel+shadow)?"
+  [cdadmin_create_prompt]="User '%s' does not exist - create it as the panel admin (no home directory, groups: %s)?"
   [err_cdadmin_create]="Failed to create user %s."
   [err_cdadmin_password]="Failed to set the password for %s."
-  [cdadmin_created]="Created '%s' (wheel+shadow, no home directory)."
+  [cdadmin_created]="Created '%s' (groups: %s, no home directory)."
   [cdadmin_password_saved]="Password saved to /root/.usercd (chmod 600, root only)."
   [cdadmin_create_skip]="Skipping creation of '%s'."
   [firewalld_installing]="firewalld not found - installing..."
@@ -389,26 +391,33 @@ log "$(t caddy_version "$(caddy version)")"
 CD_ADMIN_USER="cdadmin"
 CD_ADMIN_READY=0
 
+CD_ADMIN_GROUPS="wheel"
+if getent group shadow >/dev/null 2>&1; then
+  CD_ADMIN_GROUPS="wheel,shadow"
+else
+  log "$(t cdadmin_no_shadow_group "$CD_ADMIN_USER")"
+fi
+
 log "$(t cdadmin_checking "$CD_ADMIN_USER")"
 if id "$CD_ADMIN_USER" >/dev/null 2>&1; then
   log "$(t cdadmin_exists "$CD_ADMIN_USER")"
-  prompt SETUP_CD_ADMIN "$(t cdadmin_setup_prompt "$CD_ADMIN_USER")" "$YES_DEFAULT"
+  prompt SETUP_CD_ADMIN "$(t cdadmin_setup_prompt "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")" "$YES_DEFAULT"
   if is_yes "$SETUP_CD_ADMIN"; then
-    usermod -aG wheel,shadow "$CD_ADMIN_USER"
-    log "$(t cdadmin_groups_added "$CD_ADMIN_USER")"
+    usermod -aG "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER"
+    log "$(t cdadmin_groups_added "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")"
     CD_ADMIN_READY=1
   else
     log "$(t cdadmin_skip_existing "$CD_ADMIN_USER")"
   fi
 else
-  prompt CREATE_CD_ADMIN "$(t cdadmin_create_prompt "$CD_ADMIN_USER")" "$YES_DEFAULT"
+  prompt CREATE_CD_ADMIN "$(t cdadmin_create_prompt "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")" "$YES_DEFAULT"
   if is_yes "$CREATE_CD_ADMIN"; then
-    useradd --no-create-home --shell /sbin/nologin --groups wheel,shadow "$CD_ADMIN_USER" \
+    useradd --no-create-home --shell /sbin/nologin --groups "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER" \
       || die "$(t err_cdadmin_create "$CD_ADMIN_USER")"
     CD_ADMIN_PASSWORD="$(gen_password)"
     echo "${CD_ADMIN_USER}:${CD_ADMIN_PASSWORD}" | chpasswd || die "$(t err_cdadmin_password "$CD_ADMIN_USER")"
     ( umask 077; printf '%s:%s\n' "$CD_ADMIN_USER" "$CD_ADMIN_PASSWORD" > /root/.usercd )
-    log "$(t cdadmin_created "$CD_ADMIN_USER")"
+    log "$(t cdadmin_created "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")"
     log "$(t cdadmin_password_saved)"
     CD_ADMIN_READY=1
   else
