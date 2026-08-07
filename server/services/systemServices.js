@@ -3,14 +3,14 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-// Rejestr uslug widocznych w panelu. Docelowy system to AlmaLinux/Rocky,
-// stad kolejnosc kandydatow (crond.service, firewalld.service) - cron.service
-// jako fallback dla dystrybucji Debianopodobnych (dev/test box).
+// Rejestr uslug widocznych w panelu. Docelowy system to wylacznie
+// AlmaLinux/Rocky, stad nazwy jednostek systemd sa jednoznaczne (sshd,
+// crond) - bez fallbackow dla innych dystrybucji.
 // Caddy/MySQL/PHP doloza sie tu gdy user bedzie mogl je instalowac z panelu.
 const SERVICE_REGISTRY = [
-  { key: 'ssh', unitCandidates: ['sshd.service', 'ssh.service'] },
+  { key: 'ssh', unitCandidates: ['sshd.service'] },
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
-  { key: 'cron', unitCandidates: ['crond.service', 'cron.service'] }
+  { key: 'cron', unitCandidates: ['crond.service'] }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];
@@ -29,8 +29,9 @@ function getServiceDef(key) {
   return SERVICE_REGISTRY.find((s) => s.key === key) || null;
 }
 
-// Nazwa jednostki systemd rozni sie miedzy dystrybucjami (np. sshd.service
-// na AlmaLinux vs ssh.service na Debianie) - sprawdzamy kandydatow po kolei.
+// unitCandidates to lista - w tej chwili kazda usluga ma jedna,
+// jednoznaczna nazwe jednostki na Alma/Rocky, ale struktura zostaje
+// tablica na wypadek aliasow w przyszlosci.
 async function resolveUnit(candidates) {
   for (const unit of candidates) {
     const { stdout } = await execFileAsync('systemctl', ['show', unit, '--no-page', '-p', 'LoadState,Id']);

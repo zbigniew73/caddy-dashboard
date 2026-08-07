@@ -63,7 +63,7 @@ function getAllowedUsers() {
     .filter(Boolean);
 }
 
-const SUDO_GROUPS = ['wheel', 'sudo'];
+const SUDO_GROUPS = ['wheel'];
 
 async function userHasSudoAccess(username) {
   try {

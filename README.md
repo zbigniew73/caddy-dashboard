@@ -39,7 +39,7 @@ npm start
 Logowanie wymaga spełnienia trzech warunków naraz:
 1. login jest na jawnej whiteliście `AUTH_USERS`,
 2. hasło poprawnie weryfikuje się przez PAM (jak przy SSH),
-3. konto należy do grupy `wheel` (AlmaLinux/Rocky) lub `sudo` (Debian/Ubuntu) — do panelu logują się wyłącznie sudoerzy, bo zarządzają całym systemem i usługami.
+3. konto należy do grupy `wheel` — do panelu logują się wyłącznie sudoerzy, bo zarządzają całym systemem i usługami.
 
 Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
 
