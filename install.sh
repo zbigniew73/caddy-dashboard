@@ -113,6 +113,7 @@ declare -A MSG_PL=(
   [prompt_svc_user]="Konto systemowe, na ktorym ma dzialac usluga (root upraszcza wymog PAM+shadow, patrz README)"
   [systemd_ready]="caddy-dashboard.service gotowy (User=%s). NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [systemd_exists]="caddy-dashboard.service juz istnieje - pomijam generowanie."
+  [chown_install_dir]="Ustawiam wlasciciela %s na %s (samo-aktualizacja z panelu)..."
   [done_installed]="Gotowe. Zainstalowano w: %s"
   [summary_block]="
 Nastepne kroki (recznie, swiadomie - skrypt niczego tu sam nie wlacza):
@@ -197,6 +198,7 @@ declare -A MSG_EN=(
   [prompt_svc_user]="System account the service should run as (root simplifies the PAM+shadow requirement, see README)"
   [systemd_ready]="caddy-dashboard.service ready (User=%s). NOT copied to /etc/systemd/system - see below."
   [systemd_exists]="caddy-dashboard.service already exists - skipping generation."
+  [chown_install_dir]="Setting owner of %s to %s (self-update from the panel)..."
   [done_installed]="Done. Installed in: %s"
   [summary_block]="
 Next steps (manual, deliberate - the script does not enable anything here on its own):
@@ -488,6 +490,12 @@ if [ ! -f caddy-dashboard.service ]; then
   log "$(t systemd_ready "$SVC_USER")"
 else
   log "$(t systemd_exists)"
+  SVC_USER="$(grep '^User=' caddy-dashboard.service | cut -d= -f2)"
+fi
+
+if [ -n "${SVC_USER:-}" ] && [ "$SVC_USER" != "root" ]; then
+  log "$(t chown_install_dir "$INSTALL_DIR" "$SVC_USER")"
+  chown -R "$SVC_USER":"$SVC_USER" "$INSTALL_DIR"
 fi
 
 log "$(t done_installed "$INSTALL_DIR")"

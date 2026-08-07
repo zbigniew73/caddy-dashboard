@@ -44,6 +44,13 @@
   "system.ram": "RAM",
   "system.disk": "Dysk ({path})",
   "system.used_of": "{used} z {total}",
+  "update.stable": "Stable",
+  "update.update_to": "Update → v{version}",
+  "update.confirm": "Zaktualizować panel do wersji {version}? Trzeba będzie ręcznie zrestartować usługę po zakończeniu.",
+  "update.checking": "Sprawdzanie...",
+  "update.updating": "Aktualizowanie...",
+  "update.updated_restart": "Zaktualizowano do v{version} - zrestartuj usługę",
+  "update.error": "Błąd aktualizacji",
   "theme.light": "Jasny",
   "theme.dark": "Ciemny",
   "theme.system": "Systemowy"

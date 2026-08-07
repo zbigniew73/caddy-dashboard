@@ -44,6 +44,13 @@
   "system.ram": "RAM",
   "system.disk": "Disk ({path})",
   "system.used_of": "{used} of {total}",
+  "update.stable": "Stable",
+  "update.update_to": "Update → v{version}",
+  "update.confirm": "Update the panel to version {version}? You'll need to manually restart the service afterward.",
+  "update.checking": "Checking...",
+  "update.updating": "Updating...",
+  "update.updated_restart": "Updated to v{version} - restart the service",
+  "update.error": "Update failed",
   "theme.light": "Light",
   "theme.dark": "Dark",
   "theme.system": "System"

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import os from 'os';
 import fs from 'fs';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction } from '../services/systemServices.js';
+import { checkForUpdate, applyUpdate } from '../services/update.js';
 
 const router = Router();
 
@@ -101,6 +102,24 @@ router.post('/services/:key/:action', async (req, res) => {
     res.json(status);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/update/check', async (req, res) => {
+  try {
+    const result = await checkForUpdate();
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/update/apply', async (req, res) => {
+  try {
+    const result = await applyUpdate();
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
 });
 

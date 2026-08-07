@@ -45,7 +45,10 @@ function renderThemeSwitches() {
 
 function onLanguageChange() {
   renderThemeSwitches();
-  if (document.getElementById('app').style.display === 'flex') renderTab();
+  if (document.getElementById('app').style.display === 'flex') {
+    renderTab();
+    renderUpdateBadge();
+  }
 }
 
 function showLogin(msg) {
@@ -59,7 +62,53 @@ function showApp(username) {
   document.getElementById('app').style.display = 'flex';
   if (username) document.getElementById('current-user').textContent = username;
   renderTab();
+  refreshUpdateBadge();
 }
+
+let latestUpdateInfo = null;
+
+function renderUpdateBadge() {
+  const badge = document.getElementById('update-badge');
+  if (!latestUpdateInfo) return;
+  badge.style.display = '';
+  if (latestUpdateInfo.updateAvailable) {
+    badge.textContent = t('update.update_to', { version: latestUpdateInfo.remoteVersion });
+    badge.className = 'update-badge update';
+    badge.disabled = false;
+  } else {
+    badge.textContent = t('update.stable');
+    badge.className = 'update-badge stable';
+    badge.disabled = true;
+  }
+}
+
+async function refreshUpdateBadge() {
+  try {
+    latestUpdateInfo = await api('GET', '/update/check');
+    renderUpdateBadge();
+  } catch {
+    document.getElementById('update-badge').style.display = 'none';
+  }
+}
+
+document.getElementById('update-badge').onclick = async () => {
+  if (!latestUpdateInfo || !latestUpdateInfo.updateAvailable) return;
+  if (!window.confirm(t('update.confirm', { version: latestUpdateInfo.remoteVersion }))) return;
+
+  const badge = document.getElementById('update-badge');
+  badge.disabled = true;
+  badge.textContent = t('update.updating');
+  try {
+    const result = await api('POST', '/update/apply');
+    badge.textContent = t('update.updated_restart', { version: result.newVersion });
+    badge.className = 'update-badge stable';
+    latestUpdateInfo = { updateAvailable: false };
+  } catch (e) {
+    badge.textContent = t('update.error');
+    badge.className = 'update-badge update';
+    badge.disabled = false;
+  }
+};
 
 document.getElementById('login-btn').onclick = async () => {
   const username = document.getElementById('username-input').value;
