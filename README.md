@@ -12,6 +12,21 @@ Panel webowy do zarządzania usługami wystawianymi przez Caddy na serwerze: sub
 
 ## Instalacja
 
+### Na docelowym VPS (AlmaLinux/Rocky) - jedna komenda
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zbigniew73/caddy-dashboard/main/install.sh | sudo bash
+```
+
+Skrypt (`install.sh`, szkielet - patrz komentarz na gorze pliku co jeszcze
+niedopracowane) klonuje repo do `/opt/caddy-dashboard`, instaluje Node.js
+jesli brak, robi `npm install`, generuje `.env` (pyta o `AUTH_USERS`/`HOST`,
+`SESSION_SECRET` generowany automatycznie) i przygotowuje
+`caddy-dashboard.service`. Autostart (systemd) i otwarcie portu w firewalld
+zostawia do recznego wykonania - na koncu wypisuje dokladne komendy.
+
+### Recznie (dowolna dystrybucja, np. do developmentu)
+
 ```bash
 npm install
 cp .env.example .env
