@@ -18,12 +18,12 @@ Panel webowy do zarządzania usługami wystawianymi przez Caddy na serwerze: sub
 curl -fsSL https://raw.githubusercontent.com/zbigniew73/caddy-dashboard/main/install.sh | sudo bash
 ```
 
-Skrypt (`install.sh`, szkielet - patrz komentarz na gorze pliku co jeszcze
-niedopracowane) klonuje repo do `/opt/caddy-dashboard`, instaluje Node.js
-jesli brak, robi `npm install`, generuje `.env` (pyta o `AUTH_USERS`/`HOST`,
-`SESSION_SECRET` generowany automatycznie) i przygotowuje
-`caddy-dashboard.service`. Autostart (systemd) i otwarcie portu w firewalld
-zostawia do recznego wykonania - na koncu wypisuje dokladne komendy.
+Skrypt (`install.sh`) wymaga AlmaLinux/Rocky Linux 9 lub 10, klonuje repo do
+`/opt/caddy-dashboard`, instaluje Node.js jesli brak, robi `npm install`,
+generuje `.env` (pyta o `AUTH_USERS`/`HOST`, `SESSION_SECRET` generowany
+automatycznie), otwiera w firewalld http/https/ssh i port dashboardu, oraz
+przygotowuje `caddy-dashboard.service`. Autostart (systemd) zostawia do
+recznego wykonania - na koncu wypisuje dokladne komendy.
 
 ### Recznie (dowolna dystrybucja, np. do developmentu)
 

@@ -1,47 +1,6 @@
 #!/usr/bin/env bash
 #
-# Skrypt instalacyjny Caddy Dashboard - SZKIELET (2026-08-07).
-#
-# Cel: na czystym VPS AlmaLinux/Rocky Linux (9 lub 10 - inne systemy nie sa
-# wspierane, skrypt sie zatrzyma) postawic caddy-dashboard w
-# /opt/caddy-dashboard jedna komenda:
-#
-#   curl -fsSL https://raw.githubusercontent.com/zbigniew73/caddy-dashboard/main/install.sh | sudo bash
-#
-# albo pobrac i uruchomic recznie (jako root, lub jako zwykly user z
-# dostepem do sudo - skrypt sam sie wtedy podnosi):
-#
-#   bash install.sh
-#
-# Co robi: weryfikuje system (musi byc Alma/Rocky 9 lub 10), wymusza
-# SELinux=disabled, aktualizuje system (dnf update), instaluje pakiety
-# podstawowe + Node.js, klonuje/aktualizuje repo w /opt/caddy-dashboard,
-# npm install, tworzy .env (SESSION_SECRET generowany automatycznie,
-# AUTH_USERS/HOST pytane interaktywnie), weryfikuje firewalld i otwiera
-# w nim http/https/ssh + port dashboardu, przygotowuje jednostke systemd
-# (bez automatycznego enable/start - to zostaje reczne, swiadomie).
-#
-# ZALOZENIA o czystym VPS (Alma/Rocky) - skrypt ZAKLADA, ze juz sa:
-# - SSH i firewalld zainstalowane fabrycznie (skrypt tylko weryfikuje,
-#   NIE instaluje firewalld sam - jesli go nie ma, to odstepstwo od
-#   zalozen i skrypt sie zatrzymuje zamiast zgadywac).
-#
-# SELinux MUSI byc disabled (wymog projektu, nie tylko zalecenie) - jesli
-# nie jest, skrypt SAM to naprawia: /etc/selinux/config -> SELINUX=disabled
-# (trwale) + doraznie `setenforce 0` (Permissive) na czas tej instalacji.
-# Pelne "Disabled" wymaga restartu serwera - skrypt o tym jasno informuje
-# na koncu, ale sam NIE restartuje (zbyt ryzykowna/przerywajaca operacja
-# do robienia bez pytania).
-#
-# CO JESZCZE NIEDOPRACOWANE (szkielet, nie finalna wersja):
-# - instalacja Node.js zaklada dnf module (sprawdzone na RHEL9-owym
-#   modelu pakietow) - do przetestowania na docelowym Alma/Rocky VPS;
-# - zarzadzanie portami firewalla Z POZIOMU PANELU (zakladka FIREWALL)
-#   to osobna, niezrobiona jeszcze funkcja - ten skrypt tylko JEDNORAZOWO
-#   otwiera porty przy instalacji, nie ma to nic wspolnego z zakladka;
-# - usluga systemd domyslnie proponowana jako User=root (PAM+shadow -
-#   patrz README) - dedykowany user o wezszych uprawnieniach to temat
-#   do przemyslenia pozniej, nie zalatwiony tutaj.
+# Skrypt instalacyjny Caddy Dashboard
 
 set -euo pipefail
 
@@ -52,27 +11,16 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
 log() { echo -e "\n==> $*"; }
 die() { echo -e "\n[BLAD] $*" >&2; exit 1; }
 
-# Prosi o wartosc na terminalu nawet gdy skrypt jest odpalony przez
-# `curl | bash` (stdin zajete jest wtedy przez tresc skryptu).
 prompt() {
   local __var="$1" __msg="$2" __default="$3" __input=""
   if [ -t 0 ]; then
     read -rp "$__msg [$__default]: " __input
   else
-    # np. `curl | bash` - stdin zajete jest przez tresc skryptu, wiec probujemy
-    # czytac z terminala bezposrednio; jesli i to niedostepne (brak
-    # kontrolujacego terminala), po cichu zostajemy przy wartosci domyslnej
-    # zamiast wywalac caly skrypt (dziala pod `set -e`).
     read -rp "$__msg [$__default]: " __input 2>/dev/null < /dev/tty || __input=""
   fi
   printf -v "$__var" '%s' "${__input:-$__default}"
 }
 
-# Root - albo zwykly user z dostepem do sudo (skrypt sam sie podnosi).
-# Samopodniesienie dziala tylko gdy skrypt lezy na dysku jako plik
-# (np. pobrany i uruchomiony `bash install.sh`) - przy `curl | bash` (bez
-# sudo w potoku) nie ma z czego ponownie odczytac tresci skryptu, wiec w
-# tym trybie sudo trzeba dodac do samego polecenia w potoku (patrz README).
 if [ "$(id -u)" -ne 0 ]; then
   SELF="${BASH_SOURCE[0]:-}"
   if [ -n "$SELF" ] && [ -f "$SELF" ]; then
@@ -84,10 +32,6 @@ if [ "$(id -u)" -ne 0 ]; then
   fi
 fi
 
-# Twardy wymog - tylko AlmaLinux/Rocky 9 lub 10 (patrz tez check-os.sh w
-# tym repo, ta sama logika, do wielokrotnego uzytku przez inne skrypty
-# po sklonowaniu - tutaj musi byc wbudowana, bo przy `curl | bash` repo
-# jeszcze nie istnieje na dysku).
 OS_ID="" ; OS_VERSION_MAJOR=""
 if [ -f /etc/os-release ]; then
   . /etc/os-release
@@ -114,10 +58,6 @@ if command -v getenforce >/dev/null 2>&1; then
     else
       echo "SELINUX=disabled" >> /etc/selinux/config
     fi
-    # Pelne "Disabled" (bez zaladowanej polityki w jadrze) wymaga restartu -
-    # setenforce dziala tylko doraznie, przelaczajac na Permissive (nie
-    # blokuje, tylko loguje), zeby reszta tej instalacji (PAM, logowanie)
-    # nie ucierpiala do czasu restartu.
     setenforce 0 2>/dev/null || true
     SELINUX_REBOOT_REQUIRED=1
     echo "        /etc/selinux/config -> SELINUX=disabled (trwale, po restarcie)."
@@ -140,9 +80,6 @@ fi
 command -v node >/dev/null 2>&1 || die "Node.js nadal niedostepny po probie instalacji."
 log "Node.js: $(node -v)"
 
-# Firewalld ma juz byc zainstalowany fabrycznie na czystym Alma/Rocky VPS -
-# TYLKO weryfikujemy (analogicznie do rejestru uslug w samym panelu dla
-# ssh/cron), nie instalujemy go tutaj.
 FIREWALLD_LOAD_STATE="$(systemctl show firewalld.service --no-page -p LoadState 2>/dev/null | cut -d= -f2)"
 if [ "$FIREWALLD_LOAD_STATE" != "loaded" ] || ! command -v firewall-cmd >/dev/null 2>&1; then
   die "firewalld nie jest zainstalowany (LoadState=${FIREWALLD_LOAD_STATE:-brak}), a zakladalismy ze jest fabrycznie. Zainstaluj firewalld recznie (dnf install -y firewalld) i uruchom skrypt ponownie."
