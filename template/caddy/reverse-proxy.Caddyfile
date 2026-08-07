@@ -1,0 +1,17 @@
+# Szablon: reverse proxy do uslugi wystawianej w internecie.
+# Podmien "przyklad.domena.pl" na swoja domene (musi wskazywac na ten serwer,
+# rekord A/AAAA w DNS) i "127.0.0.1:8080" na adres:port lokalnej uslugi.
+# Caddy automatycznie zalatwia certyfikat TLS (Let's Encrypt) dla tej domeny.
+
+przyklad.domena.pl {
+	reverse_proxy 127.0.0.1:8080
+
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "no-referrer-when-downgrade"
+	}
+}

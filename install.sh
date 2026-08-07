@@ -4,6 +4,7 @@
 
 set -euo pipefail
 
+APP_VERSION="1.0.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -51,6 +52,7 @@ dnf_retry() {
 }
 
 declare -A MSG_PL=(
+  [banner]="Caddy Dashboard v%s - instalator"
   [err_no_sudo]="Nie jestes rootem i brak polecenia sudo - zaloguj sie jako root."
   [elevating]="Nie jestes rootem - probuje podniesc uprawnienia przez sudo (moze zapytac o haslo)..."
   [err_run_as_root]="Uruchom jako root albo przez sudo, np.: curl -fsSL <url>/install.sh | sudo bash"
@@ -134,6 +136,7 @@ patrz log wyzej."
 )
 
 declare -A MSG_EN=(
+  [banner]="Caddy Dashboard v%s - installer"
   [err_no_sudo]="You are not root and sudo is not available - log in as root."
   [elevating]="You are not root - trying to elevate privileges via sudo (it may ask for a password)..."
   [err_run_as_root]="Run as root or via sudo, e.g.: curl -fsSL <url>/install.sh | sudo bash"
@@ -250,6 +253,8 @@ if [ -z "${LANG_CHOICE:-}" ]; then
   prompt_lang
 fi
 export LANG_CHOICE
+
+log "$(t banner "$APP_VERSION")"
 
 YES_DEFAULT="t"
 [ "$LANG_CHOICE" = "en" ] && YES_DEFAULT="y"
