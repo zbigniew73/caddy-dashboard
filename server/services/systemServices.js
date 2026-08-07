@@ -89,4 +89,10 @@ async function runServiceAction(key, action) {
   return getServiceStatus(def);
 }
 
-export { getServiceDef, getServiceStatus, listServices, runServiceAction, SERVICE_REGISTRY };
+function rebootSystem() {
+  setTimeout(() => {
+    execFile('sudo', ['-n', 'systemctl', 'reboot'], () => {});
+  }, 500);
+}
+
+export { getServiceDef, getServiceStatus, listServices, runServiceAction, rebootSystem, SERVICE_REGISTRY };

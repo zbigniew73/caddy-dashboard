@@ -179,6 +179,28 @@ function meterTile(label, percent, detail) {
   `;
 }
 
+function wireSystemRebootButton() {
+  const btn = document.getElementById('system-reboot-btn');
+  if (!btn) return;
+  btn.onclick = async () => {
+    if (!window.confirm(t('system.confirm_reboot'))) return;
+
+    const msgEl = document.getElementById('system-reboot-msg');
+    btn.disabled = true;
+    msgEl.textContent = t('system.rebooting');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/system/reboot');
+      msgEl.textContent = t('system.reboot_initiated');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 async function renderTab() {
   const content = document.getElementById('content');
   if (currentTab === 'services') {
@@ -201,13 +223,17 @@ async function renderTab() {
 
       content.innerHTML = `
         <div class="system-info-card">
-          <dl>
-            <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
-            <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
-            <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
-            <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
-            <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
-          </dl>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+            <dl>
+              <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
+              <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
+              <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
+              <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
+              <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
+            </dl>
+            <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
+          </div>
+          <div class="action-msg" id="system-reboot-msg"></div>
         </div>
         <div class="system-grid">
           ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
@@ -217,6 +243,7 @@ async function renderTab() {
         </div>
       `;
       applyTranslations();
+      wireSystemRebootButton();
     } catch (e) {
       content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
     }
@@ -290,6 +317,165 @@ function serviceDetailHtml(svc) {
   `;
 }
 
+async function renderSshPortSection() {
+  try {
+    const { port } = await api('GET', '/ssh/port');
+    return `
+      <div class="system-info-card">
+        <dl>
+          <dt data-i18n="ssh.current_port"></dt><dd id="ssh-current-port">${port}</dd>
+        </dl>
+        <div class="service-actions">
+          <input type="number" id="ssh-new-port" min="1" max="65535" placeholder="${t('ssh.new_port_placeholder')}" style="width:140px;">
+          <button type="button" id="ssh-change-port-btn">${t('ssh.change_port_button')}</button>
+        </div>
+        <div class="action-msg" id="ssh-port-msg"></div>
+      </div>
+    `;
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function wireSshPortSection() {
+  const btn = document.getElementById('ssh-change-port-btn');
+  if (!btn) return;
+  btn.onclick = async () => {
+    const input = document.getElementById('ssh-new-port');
+    const newPort = parseInt(input.value, 10);
+    const msgEl = document.getElementById('ssh-port-msg');
+
+    if (!Number.isInteger(newPort) || newPort < 1 || newPort > 65535) {
+      msgEl.textContent = t('ssh.invalid_port');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('ssh.confirm_change_port', { port: newPort }))) return;
+
+    btn.disabled = true;
+    input.disabled = true;
+    msgEl.textContent = t('ssh.changing_port');
+    msgEl.className = 'action-msg';
+    try {
+      const result = await api('POST', '/ssh/port', { port: newPort });
+      document.getElementById('ssh-current-port').textContent = result.port;
+      msgEl.textContent = t('ssh.port_changed', { port: result.port });
+      msgEl.className = 'action-msg success';
+      input.value = '';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+      input.disabled = false;
+    }
+  };
+}
+
+async function renderFirewallSection() {
+  try {
+    const { entries } = await api('GET', '/firewall/entries');
+    const rows = entries.map((e) => {
+      if (e.type === 'service') {
+        return `<tr><td>${escapeHtml(e.name)}</td><td>${t('firewall.type_service')}</td><td></td></tr>`;
+      }
+      const value = `${e.port}/${e.protocol}`;
+      return `
+        <tr>
+          <td>${escapeHtml(e.port)}</td>
+          <td>${escapeHtml(e.protocol.toUpperCase())}</td>
+          <td><button type="button" class="danger" data-remove-type="port" data-remove-value="${escapeHtml(value)}">${t('firewall.remove')}</button></td>
+        </tr>
+      `;
+    }).join('');
+
+    return `
+      <div style="overflow-x:auto;">
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th data-i18n="firewall.col_port"></th>
+              <th data-i18n="firewall.col_protocol"></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="service-actions">
+        <input type="number" id="fw-new-port" min="1" max="65535" placeholder="${t('firewall.new_port_placeholder')}" style="width:140px;">
+        <select id="fw-new-protocol">
+          <option value="tcp">TCP</option>
+          <option value="udp">UDP</option>
+        </select>
+        <button type="button" id="fw-add-port-btn">${t('firewall.add_button')}</button>
+      </div>
+      <div class="action-msg" id="fw-port-msg"></div>
+    `;
+  } catch (e) {
+    return `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function refreshFirewallSection() {
+  const container = document.getElementById('fw-section-container');
+  if (!container) return;
+  container.innerHTML = await renderFirewallSection();
+  applyTranslations();
+  wireFirewallSection();
+}
+
+function wireFirewallSection() {
+  document.querySelectorAll('[data-remove-type]').forEach((btn) => {
+    btn.onclick = async () => {
+      const type = btn.dataset.removeType;
+      const value = btn.dataset.removeValue;
+      if (!window.confirm(t('firewall.confirm_remove', { value }))) return;
+
+      const msgEl = document.getElementById('fw-port-msg');
+      btn.disabled = true;
+      try {
+        await api('POST', '/firewall/entries/remove', { type, value });
+        await refreshFirewallSection();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const addBtn = document.getElementById('fw-add-port-btn');
+  if (addBtn) {
+    addBtn.onclick = async () => {
+      const portInput = document.getElementById('fw-new-port');
+      const protocolSelect = document.getElementById('fw-new-protocol');
+      const port = parseInt(portInput.value, 10);
+      const protocol = protocolSelect.value;
+      const msgEl = document.getElementById('fw-port-msg');
+
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        msgEl.textContent = t('firewall.invalid_port');
+        msgEl.className = 'action-msg error';
+        return;
+      }
+      if (!window.confirm(t('firewall.confirm_add', { port, protocol: protocol.toUpperCase() }))) return;
+
+      addBtn.disabled = true;
+      msgEl.textContent = t('firewall.adding');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/firewall/entries', { port, protocol });
+        await refreshFirewallSection();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        addBtn.disabled = false;
+      }
+    };
+  }
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -309,8 +495,13 @@ function wireServiceActions(key) {
       msgEl.className = 'action-msg';
       try {
         const svc = await api('POST', `/services/${key}/${action}`);
-        document.getElementById('content').innerHTML = serviceDetailHtml(svc);
+        let html = serviceDetailHtml(svc);
+        if (key === 'ssh' && svc.found) html += await renderSshPortSection();
+        if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
+        document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
+        if (key === 'ssh' && svc.found) wireSshPortSection();
+        if (key === 'firewall' && svc.found) wireFirewallSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -327,8 +518,13 @@ async function renderServiceDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const svc = await api('GET', `/services/${key}`);
-    content.innerHTML = serviceDetailHtml(svc);
+    let html = serviceDetailHtml(svc);
+    if (key === 'ssh' && svc.found) html += await renderSshPortSection();
+    if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
+    content.innerHTML = html;
     wireServiceActions(key);
+    if (key === 'ssh' && svc.found) wireSshPortSection();
+    if (key === 'firewall' && svc.found) wireFirewallSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

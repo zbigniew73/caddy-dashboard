@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.1.0"
+APP_VERSION="1.2.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -114,6 +114,9 @@ declare -A MSG_PL=(
   [systemd_ready]="caddy-dashboard.service gotowy (User=%s). NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [systemd_exists]="caddy-dashboard.service juz istnieje - pomijam generowanie."
   [chown_install_dir]="Ustawiam wlasciciela %s na %s (samo-aktualizacja z panelu)..."
+  [sudoers_configuring]="Konfiguruje sudoers NOPASSWD dla '%s' (systemctl, dnf, firewall-cmd, zmiana portu SSH, restart systemu)..."
+  [sudoers_configured]="sudoers skonfigurowany: /etc/sudoers.d/caddy-dashboard."
+  [err_sudoers_invalid]="Wygenerowany plik sudoers nie przeszedl walidacji (visudo -c) - nie zostal zainstalowany."
   [done_installed]="Gotowe. Zainstalowano w: %s"
   [summary_block]="
 Nastepne kroki (recznie, swiadomie - skrypt niczego tu sam nie wlacza):
@@ -199,6 +202,9 @@ declare -A MSG_EN=(
   [systemd_ready]="caddy-dashboard.service ready (User=%s). NOT copied to /etc/systemd/system - see below."
   [systemd_exists]="caddy-dashboard.service already exists - skipping generation."
   [chown_install_dir]="Setting owner of %s to %s (self-update from the panel)..."
+  [sudoers_configuring]="Configuring NOPASSWD sudoers for '%s' (systemctl, dnf, firewall-cmd, SSH port change, system reboot)..."
+  [sudoers_configured]="sudoers configured: /etc/sudoers.d/caddy-dashboard."
+  [err_sudoers_invalid]="The generated sudoers file failed validation (visudo -c) - it was not installed."
   [done_installed]="Done. Installed in: %s"
   [summary_block]="
 Next steps (manual, deliberate - the script does not enable anything here on its own):
@@ -498,6 +504,26 @@ fi
 if [ -n "${SVC_USER:-}" ] && [ "$SVC_USER" != "root" ]; then
   log "$(t chown_install_dir "$INSTALL_DIR" "$SVC_USER")"
   chown -R "$SVC_USER":"$SVC_USER" "$INSTALL_DIR"
+
+  log "$(t sudoers_configuring "$SVC_USER")"
+  SUDOERS_TMP="$(mktemp)"
+  cat > "$SUDOERS_TMP" <<EOF
+Cmnd_Alias CDDASH_SYSTEMCTL = /usr/bin/systemctl start *.service, /usr/bin/systemctl stop *.service, /usr/bin/systemctl restart *.service, /usr/bin/systemctl reload *.service, /usr/bin/systemctl enable *.service, /usr/bin/systemctl disable *.service
+Cmnd_Alias CDDASH_DNF = /usr/bin/dnf install -y *, /usr/bin/dnf remove -y *
+Cmnd_Alias CDDASH_FIREWALL = /usr/bin/firewall-cmd *
+Cmnd_Alias CDDASH_SSH_PORT = ${INSTALL_DIR}/server/scripts/ssh-set-port.sh *
+Cmnd_Alias CDDASH_REBOOT = /usr/bin/systemctl reboot
+
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT
+EOF
+  if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
+    install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/caddy-dashboard
+    rm -f "$SUDOERS_TMP"
+    log "$(t sudoers_configured)"
+  else
+    rm -f "$SUDOERS_TMP"
+    die "$(t err_sudoers_invalid)"
+  fi
 fi
 
 log "$(t done_installed "$INSTALL_DIR")"

@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import os from 'os';
 import fs from 'fs';
-import { getServiceDef, getServiceStatus, listServices, runServiceAction } from '../services/systemServices.js';
+import { getServiceDef, getServiceStatus, listServices, runServiceAction, rebootSystem } from '../services/systemServices.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
+import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
+import { listFirewallEntries, addFirewallPort, removeFirewallEntry } from '../services/firewall.js';
 
 const router = Router();
 
@@ -112,6 +114,11 @@ router.get('/system', async (req, res) => {
   });
 });
 
+router.post('/system/reboot', (req, res) => {
+  res.json({ success: true });
+  rebootSystem();
+});
+
 router.get('/services', async (req, res) => {
   try {
     const services = await listServices();
@@ -156,6 +163,46 @@ router.post('/update/apply', async (req, res) => {
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/firewall/entries', async (req, res) => {
+  try {
+    const result = await listFirewallEntries();
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/firewall/entries', async (req, res) => {
+  try {
+    const result = await addFirewallPort(req.body?.port, req.body?.protocol);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/firewall/entries/remove', async (req, res) => {
+  try {
+    const result = await removeFirewallEntry(req.body?.type, req.body?.value);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/ssh/port', (req, res) => {
+  res.json({ port: getCurrentSshPort() });
+});
+
+router.post('/ssh/port', async (req, res) => {
+  try {
+    const result = await setSshPort(req.body?.port);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
   }
 });
 
