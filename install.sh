@@ -96,6 +96,8 @@ fi
 
 cd "$INSTALL_DIR"
 
+git config core.hooksPath .githooks
+
 log "npm install (production)..."
 npm install --omit=dev
 
