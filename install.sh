@@ -66,19 +66,73 @@ if command -v getenforce >/dev/null 2>&1; then
   fi
 fi
 
+log "Blokuje sleep/suspend/hibernate (serwer nie powinien usypiac)..."
+systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+
+if swapon --show | grep -q .; then
+  log "SWAP juz istnieje - pomijam tworzenie swapfile."
+else
+  log "Brak SWAP - tworze /swapfile (1G)..."
+  fallocate -l 1G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  log "SWAP wlaczony: $(swapon --show | tr '\n' ' ')"
+fi
+
+log "Konfiguruje sysctl (vm.swappiness, vm.vfs_cache_pressure, vm.overcommit_memory)..."
+for KV in "vm.swappiness=10" "vm.vfs_cache_pressure=50" "vm.overcommit_memory=1"; do
+  KEY="${KV%%=*}"
+  if grep -q "^${KEY}[[:space:]]*=" /etc/sysctl.conf 2>/dev/null; then
+    sed -i "s/^${KEY}[[:space:]]*=.*/${KV}/" /etc/sysctl.conf
+  else
+    echo "$KV" >> /etc/sysctl.conf
+  fi
+done
+sysctl -p >/dev/null
+
 log "Aktualizuje system (dnf update)..."
+dnf clean all -y -q
+dnf autoremove -y -q
+dnf update -y -q
+dnf install sudo epel-release -y
 dnf update -y
 
-log "Instaluje pakiety podstawowe (git, curl, wget, tar, gzip)..."
-dnf install -y git curl wget tar gzip
+log "Instaluje pakiety podstawowe ..."
+dnf install -y nano mc htop wget curl zip unzip gzip bzip2 tar git
+dnf install -y net-tools gcc make bash-completion socat which cronie
+dnf install -y glibc-langpack-pl bind-utils ca-certificates
+dnf update -y
 
 if ! command -v node >/dev/null 2>&1; then
-  log "Node.js nie znaleziony - instaluje (dnf module nodejs:20)..."
-  dnf module enable -y nodejs:20 2>/dev/null || true
-  dnf install -y nodejs npm || die "Nie udalo sie zainstalowac Node.js automatycznie - zainstaluj recznie i uruchom skrypt ponownie."
+  log "Node.js nie znaleziony - instaluje (NodeSource, Node.js 24 LTS)..."
+  curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - || die "Nie udalo sie dodac repo NodeSource."
+  dnf install -y nodejs || die "Nie udalo sie zainstalowac Node.js automatycznie - zainstaluj recznie i uruchom skrypt ponownie."
 fi
 command -v node >/dev/null 2>&1 || die "Node.js nadal niedostepny po probie instalacji."
 log "Node.js: $(node -v)"
+
+if ! command -v caddy >/dev/null 2>&1; then
+  log "Caddy nie znaleziony - instaluje (COPR @caddy/caddy)..."
+  dnf install 'dnf-command(copr)' -y
+  dnf copr enable @caddy/caddy -y
+  dnf install -y caddy
+  systemctl enable --now caddy
+
+  log "Ustawiam domyslny fallback Caddyfile (/etc/caddy/Caddyfile)..."
+  cat > /etc/caddy/Caddyfile <<'EOF'
+# Default fallback for unconfigured domains
+:80, :443 {
+    respond "Caddy Dashboard - No site configured for this domain" 404
+}
+EOF
+  caddy validate --config /etc/caddy/Caddyfile || die "Caddyfile nie przeszedl walidacji."
+  systemctl reload caddy
+else
+  log "Caddy juz zainstalowany - pomijam instalacje i nadpisywanie Caddyfile."
+fi
+log "Caddy: $(caddy version)"
 
 FIREWALLD_LOAD_STATE="$(systemctl show firewalld.service --no-page -p LoadState 2>/dev/null | cut -d= -f2)"
 if [ "$FIREWALLD_LOAD_STATE" != "loaded" ] || ! command -v firewall-cmd >/dev/null 2>&1; then
