@@ -341,7 +341,7 @@ dnf_retry update -y
 
 log "$(t installing_base_pkgs)"
 dnf_retry install -y nano mc htop wget curl zip unzip gzip bzip2 tar git
-dnf_retry install -y net-tools gcc make bash-completion socat which cronie
+dnf_retry install -y net-tools gcc gcc-c++ make bash-completion socat which cronie
 dnf_retry install -y glibc-langpack-pl bind-utils ca-certificates
 dnf_retry update -y
 
