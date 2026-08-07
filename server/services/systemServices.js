@@ -6,7 +6,8 @@ const execFileAsync = promisify(execFile);
 const SERVICE_REGISTRY = [
   { key: 'ssh', unitCandidates: ['sshd.service'] },
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
-  { key: 'cron', unitCandidates: ['crond.service'] }
+  { key: 'cron', unitCandidates: ['crond.service'] },
+  { key: 'caddy', unitCandidates: ['caddy.service'] }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];

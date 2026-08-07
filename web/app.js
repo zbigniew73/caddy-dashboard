@@ -1,5 +1,5 @@
 const API = '/api';
-const SERVICE_DETAIL_TABS = ['ssh', 'firewall', 'cron'];
+const SERVICE_DETAIL_TABS = ['ssh', 'firewall', 'cron', 'caddy'];
 let currentTab = 'system';
 
 async function api(method, url, body) {
@@ -293,6 +293,7 @@ function serviceDetailHtml(svc) {
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
+  if (action === 'stop' && key === 'caddy') return t('services.confirm_stop_caddy');
   return t('services.confirm_action', { action: t('services.action_' + action) });
 }
 
