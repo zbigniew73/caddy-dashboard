@@ -7,9 +7,10 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/zbigniew73/caddy-dashboard/main/install.sh | sudo bash
 #
-# albo pobrac i uruchomic recznie:
+# albo pobrac i uruchomic recznie (jako root, lub jako zwykly user z
+# dostepem do sudo - skrypt sam sie wtedy podnosi):
 #
-#   sudo bash install.sh
+#   bash install.sh
 #
 # Co robi: klonuje/aktualizuje repo w /opt/caddy-dashboard, instaluje
 # Node.js (jesli brak), npm install, tworzy .env (SESSION_SECRET
@@ -51,7 +52,21 @@ prompt() {
   printf -v "$__var" '%s' "${__input:-$__default}"
 }
 
-[ "$(id -u)" -eq 0 ] || die "Uruchom jako root (sudo)."
+# Root - albo zwykly user z dostepem do sudo (skrypt sam sie podnosi).
+# Samopodniesienie dziala tylko gdy skrypt lezy na dysku jako plik
+# (np. pobrany i uruchomiony `bash install.sh`) - przy `curl | bash` (bez
+# sudo w potoku) nie ma z czego ponownie odczytac tresci skryptu, wiec w
+# tym trybie sudo trzeba dodac do samego polecenia w potoku (patrz README).
+if [ "$(id -u)" -ne 0 ]; then
+  SELF="${BASH_SOURCE[0]:-}"
+  if [ -n "$SELF" ] && [ -f "$SELF" ]; then
+    command -v sudo >/dev/null 2>&1 || die "Nie jestes rootem i brak polecenia sudo - zaloguj sie jako root."
+    log "Nie jestes rootem - probuje podniesc uprawnienia przez sudo (moze zapytac o haslo)..."
+    exec sudo -E bash "$SELF" "$@"
+  else
+    die "Uruchom jako root albo przez sudo, np.: curl -fsSL <url>/install.sh | sudo bash"
+  fi
+fi
 
 if [ ! -f /etc/redhat-release ]; then
   echo "[UWAGA] To nie wyglada na AlmaLinux/Rocky (brak /etc/redhat-release)."
