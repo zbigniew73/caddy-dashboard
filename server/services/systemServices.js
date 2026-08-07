@@ -3,10 +3,6 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-// Rejestr uslug widocznych w panelu. Docelowy system to wylacznie
-// AlmaLinux/Rocky, stad nazwy jednostek systemd sa jednoznaczne (sshd,
-// crond) - bez fallbackow dla innych dystrybucji.
-// Caddy/MySQL/PHP doloza sie tu gdy user bedzie mogl je instalowac z panelu.
 const SERVICE_REGISTRY = [
   { key: 'ssh', unitCandidates: ['sshd.service'] },
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
@@ -29,9 +25,6 @@ function getServiceDef(key) {
   return SERVICE_REGISTRY.find((s) => s.key === key) || null;
 }
 
-// unitCandidates to lista - w tej chwili kazda usluga ma jedna,
-// jednoznaczna nazwe jednostki na Alma/Rocky, ale struktura zostaje
-// tablica na wypadek aliasow w przyszlosci.
 async function resolveUnit(candidates) {
   for (const unit of candidates) {
     const { stdout } = await execFileAsync('systemctl', ['show', unit, '--no-page', '-p', 'LoadState,Id']);
@@ -80,8 +73,6 @@ async function runServiceAction(key, action) {
   if (!unit) throw Object.assign(new Error('Usluga nie jest zainstalowana w systemie'), { status: 404 });
 
   try {
-    // "-n" (non-interactive): jesli sudoers nie ma NOPASSWD dla tej komendy,
-    // ma sie to skonczyc od razu bledem zamiast wisiec czekajac na haslo.
     await execFileAsync('sudo', ['-n', 'systemctl', action, unit], { timeout: 8000 });
   } catch (e) {
     const stderr = (e.stderr || '').toString();

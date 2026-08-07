@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = parseInt(process.env.PORT || '4300', 10);
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN;
-const EXPOSURE = process.env.EXPOSURE || 'local'; // local | lan | world
+const EXPOSURE = process.env.EXPOSURE || 'local';
 
 const isLoopbackHost = HOST === '127.0.0.1' || HOST === 'localhost';
 

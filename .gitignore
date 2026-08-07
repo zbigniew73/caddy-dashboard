@@ -4,6 +4,5 @@ caddy-dashboard.service
 *.log
 .DS_Store
 
-# notatki robocze (tylko lokalnie, nie do repo)
 zrobione.md
 do_zrobienia.md

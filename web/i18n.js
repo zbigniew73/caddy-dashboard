@@ -1,5 +1,3 @@
-// Zeby dodac nowy jezyk: 1) skopiuj web/i18n/en.json na web/i18n/<kod>.json
-// i przetlumacz wartosci, 2) dopisz <kod> do SUPPORTED_LANGS ponizej.
 const SUPPORTED_LANGS = ['pl', 'en'];
 
 let currentLang = 'en';

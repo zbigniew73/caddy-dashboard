@@ -5,9 +5,6 @@ import { createRequire } from 'module';
 
 const execFileAsync = promisify(execFile);
 
-// authenticate-pam to natywny dodatek CommonJS (jego "main" wskazuje wprost
-// na plik .node) - ESM `import` tego nie obsluguje, wiec ladujemy go przez
-// createRequire zamiast zwyklego `import`.
 const require = createRequire(import.meta.url);
 const pam = require('authenticate-pam');
 
