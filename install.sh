@@ -431,6 +431,9 @@ fi
 command -v firewall-cmd >/dev/null 2>&1 || die "$(t err_firewalld_missing)"
 log "$(t firewalld_installed)"
 
+git config --global --get-all safe.directory 2>/dev/null | grep -qxF "$INSTALL_DIR" \
+  || git config --global --add safe.directory "$INSTALL_DIR"
+
 if [ -d "$INSTALL_DIR/.git" ]; then
   log "$(t repo_updating "$INSTALL_DIR")"
   git -C "$INSTALL_DIR" pull --ff-only
