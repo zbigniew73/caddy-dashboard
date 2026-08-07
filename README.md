@@ -18,12 +18,18 @@ Panel webowy do zarządzania usługami wystawianymi przez Caddy na serwerze: sub
 curl -fsSL https://raw.githubusercontent.com/zbigniew73/caddy-dashboard/main/install.sh | sudo bash
 ```
 
+Na starcie skrypt pyta o jezyk instalacji: `pl` albo `en` - trzeba wpisac
+jeden z nich, dopiero wtedy leci reszta (pytanie i wszystkie kolejne
+komunikaty sa w wybranym jezyku).
+
 Skrypt (`install.sh`) wymaga AlmaLinux/Rocky Linux 9 lub 10, klonuje repo do
-`/opt/caddy-dashboard`, instaluje Node.js jesli brak, robi `npm install`,
-generuje `.env` (pyta o `AUTH_USERS`/`HOST`, `SESSION_SECRET` generowany
-automatycznie), otwiera w firewalld http/https/ssh i port dashboardu, oraz
-przygotowuje `caddy-dashboard.service`. Autostart (systemd) zostawia do
-recznego wykonania - na koncu wypisuje dokladne komendy.
+`/opt/caddy-dashboard`, instaluje Node.js 24 LTS (NodeSource) jesli brak lub
+aktualizuje do 24 gdy jest inna wersja, instaluje Caddy (COPR), tworzy
+dedykowanego uzytkownika `cdadmin` (patrz sekcja ponizej), robi
+`npm install`, generuje `.env` (pyta o `AUTH_USERS`/`HOST`, `SESSION_SECRET`
+generowany automatycznie), otwiera w firewalld http/https/ssh i port
+dashboardu, oraz przygotowuje `caddy-dashboard.service`. Autostart (systemd)
+zostawia do recznego wykonania - na koncu wypisuje dokladne komendy.
 
 ### Recznie (dowolna dystrybucja, np. do developmentu)
 
@@ -42,6 +48,15 @@ Logowanie wymaga spełnienia trzech warunków naraz:
 3. konto należy do grupy `wheel` — do panelu logują się wyłącznie sudoerzy, bo zarządzają całym systemem i usługami.
 
 Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwoli sprawdzać tylko hasło własnego użytkownika procesu.
+
+### Dedykowany użytkownik `cdadmin`
+
+`install.sh` sprawdza, czy w systemie istnieje user `cdadmin` i proponuje go skonfigurować (albo utworzyć, jeśli nie istnieje) jako administratora panelu — zamiast logować się/uruchamiać usługę na koncie `root`:
+
+- należy do grup `wheel` (sudo, wymóg logowania do panelu) i `shadow` (wymóg PAM opisany wyżej),
+- tworzony bez katalogu domowego, z powłoką `/sbin/nologin` (brak bezpośredniego logowania po SSH — tylko przez panel + sudo),
+- jeśli user jest tworzony od nowa, skrypt generuje losowe 12-znakowe hasło (wielkie/małe litery, cyfry, znaki specjalne) i zapisuje je w `/root/.usercd` (`chmod 600`, tylko root) — stamtąd trzeba je odczytać po instalacji,
+- jeśli `cdadmin` jest gotowy, staje się domyślną propozycją zarówno dla `AUTH_USERS` w `.env`, jak i dla `User=` w `caddy-dashboard.service` (nadal można wpisać inne konto podczas pytań skryptu).
 
 ## Uruchamianie jako usluga systemd (autostart po restarcie)
 
