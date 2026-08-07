@@ -85,7 +85,6 @@ declare -A MSG_PL=(
   [caddy_version]="Caddy: %s"
   [cdadmin_checking]="Sprawdzam dedykowanego uzytkownika administracyjnego (%s)..."
   [cdadmin_exists]="Uzytkownik systemowy '%s' juz istnieje."
-  [cdadmin_no_shadow_group]="Grupa 'shadow' nie istnieje w tym systemie - pomijam ja. Bez niej PAM jako '%s' moze nie miec dostepu do hasel innych userow (patrz README)."
   [cdadmin_setup_prompt]="Skonfigurowac '%s' jako admina panelu (grupy: %s, usluga systemd zamiast root)?"
   [cdadmin_groups_added]="'%s' dodany do grup: %s (haslo bez zmian)."
   [cdadmin_skip_existing]="Pomijam '%s' - logowanie do panelu i usluga systemd zostana skonfigurowane jak dotychczas."
@@ -171,7 +170,6 @@ declare -A MSG_EN=(
   [caddy_version]="Caddy: %s"
   [cdadmin_checking]="Checking for the dedicated admin user (%s)..."
   [cdadmin_exists]="System user '%s' already exists."
-  [cdadmin_no_shadow_group]="The 'shadow' group does not exist on this system - skipping it. Without it, PAM as '%s' may not be able to check other users' passwords (see README)."
   [cdadmin_setup_prompt]="Configure '%s' as the panel admin (groups: %s, systemd service instead of root)?"
   [cdadmin_groups_added]="'%s' added to groups: %s (password unchanged)."
   [cdadmin_skip_existing]="Skipping '%s' - panel login and the systemd service will be configured as before."
@@ -392,11 +390,6 @@ CD_ADMIN_USER="cdadmin"
 CD_ADMIN_READY=0
 
 CD_ADMIN_GROUPS="wheel"
-if getent group shadow >/dev/null 2>&1; then
-  CD_ADMIN_GROUPS="wheel,shadow"
-else
-  log "$(t cdadmin_no_shadow_group "$CD_ADMIN_USER")"
-fi
 
 log "$(t cdadmin_checking "$CD_ADMIN_USER")"
 if id "$CD_ADMIN_USER" >/dev/null 2>&1; then
