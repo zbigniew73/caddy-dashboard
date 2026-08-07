@@ -12,18 +12,25 @@
 #
 #   bash install.sh
 #
-# Co robi: aktualizuje system (dnf update), instaluje pakiety podstawowe
-# + Node.js, klonuje/aktualizuje repo w /opt/caddy-dashboard, npm install,
-# tworzy .env (SESSION_SECRET generowany automatycznie, AUTH_USERS/HOST
-# pytane interaktywnie), weryfikuje firewalld i otwiera w nim
-# http/https/ssh + port dashboardu, przygotowuje jednostke systemd (bez
-# automatycznego enable/start - to zostaje reczne, swiadomie).
+# Co robi: wymusza SELinux=disabled, aktualizuje system (dnf update),
+# instaluje pakiety podstawowe + Node.js, klonuje/aktualizuje repo w
+# /opt/caddy-dashboard, npm install, tworzy .env (SESSION_SECRET
+# generowany automatycznie, AUTH_USERS/HOST pytane interaktywnie),
+# weryfikuje firewalld i otwiera w nim http/https/ssh + port dashboardu,
+# przygotowuje jednostke systemd (bez automatycznego enable/start - to
+# zostaje reczne, swiadomie).
 #
 # ZALOZENIA o czystym VPS (Alma/Rocky) - skrypt ZAKLADA, ze juz sa:
 # - SSH i firewalld zainstalowane fabrycznie (skrypt tylko weryfikuje,
 #   NIE instaluje firewalld sam - jesli go nie ma, to odstepstwo od
-#   zalozen i skrypt sie zatrzymuje zamiast zgadywac);
-# - SELinux ustawiony na disabled (wymog projektu - patrz ponizej check).
+#   zalozen i skrypt sie zatrzymuje zamiast zgadywac).
+#
+# SELinux MUSI byc disabled (wymog projektu, nie tylko zalecenie) - jesli
+# nie jest, skrypt SAM to naprawia: /etc/selinux/config -> SELINUX=disabled
+# (trwale) + doraznie `setenforce 0` (Permissive) na czas tej instalacji.
+# Pelne "Disabled" wymaga restartu serwera - skrypt o tym jasno informuje
+# na koncu, ale sam NIE restartuje (zbyt ryzykowna/przerywajaca operacja
+# do robienia bez pytania).
 #
 # CO JESZCZE NIEDOPRACOWANE (szkielet, nie finalna wersja):
 # - instalacja Node.js zaklada dnf module (sprawdzone na RHEL9-owym
@@ -81,13 +88,25 @@ if [ ! -f /etc/redhat-release ]; then
   echo "        Skrypt jest pisany pod te dystrybucje - kontynuuje, ale bez gwarancji."
 fi
 
+SELINUX_REBOOT_REQUIRED=""
 if command -v getenforce >/dev/null 2>&1; then
   SELINUX_STATE="$(getenforce)"
   if [ "$SELINUX_STATE" != "Disabled" ]; then
-    echo "[UWAGA] SELinux jest w trybie '$SELINUX_STATE', a projekt zaklada 'Disabled'."
-    echo "        Enforcing/Permissive moze blokowac PAM przy logowaniu do panelu"
-    echo "        (odczyt /etc/shadow) - ustaw SELINUX=disabled w /etc/selinux/config"
-    echo "        i zrestartuj VPS. Kontynuuje instalacje, ale logowanie moze nie dzialac."
+    log "SELinux jest w trybie '$SELINUX_STATE' - projekt wymaga 'Disabled'. Ustawiam..."
+    if [ -f /etc/selinux/config ]; then
+      sed -i 's/^SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
+    else
+      echo "SELINUX=disabled" >> /etc/selinux/config
+    fi
+    # Pelne "Disabled" (bez zaladowanej polityki w jadrze) wymaga restartu -
+    # setenforce dziala tylko doraznie, przelaczajac na Permissive (nie
+    # blokuje, tylko loguje), zeby reszta tej instalacji (PAM, logowanie)
+    # nie ucierpiala do czasu restartu.
+    setenforce 0 2>/dev/null || true
+    SELINUX_REBOOT_REQUIRED=1
+    echo "        /etc/selinux/config -> SELINUX=disabled (trwale, po restarcie)."
+    echo "        Na czas tej sesji doraznie: setenforce 0 (Permissive, nie blokuje)."
+    echo "        WYMAGANY RESTART serwera po zakonczeniu instalacji - patrz podsumowanie na koncu."
   fi
 fi
 
@@ -189,5 +208,14 @@ Nastepne kroki (recznie, swiadomie - skrypt niczego tu sam nie wlacza):
 
 Firewall (http, https, ssh, port dashboardu) juz otwarty automatycznie -
 patrz log wyzej.
-
 EOF
+
+if [ -n "$SELINUX_REBOOT_REQUIRED" ]; then
+  cat <<'EOF'
+
+[WAZNE] SELinux zostal ustawiony na disabled w /etc/selinux/config, ale
+        pelne wylaczenie wymaga RESTARTU serwera (do tego czasu dziala
+        dorazne "setenforce 0" - Permissive). Zrob teraz:
+          sudo reboot
+EOF
+fi
