@@ -134,10 +134,22 @@ dnf_retry install -y net-tools gcc make bash-completion socat which cronie
 dnf_retry install -y glibc-langpack-pl bind-utils ca-certificates
 dnf_retry update -y
 
-if ! command -v node >/dev/null 2>&1; then
-  log "Node.js nie znaleziony - instaluje (NodeSource, Node.js 24 LTS)..."
+NODE_MAJOR_CURRENT=""
+if command -v node >/dev/null 2>&1; then
+  NODE_MAJOR_CURRENT="$(node -v | sed -E 's/^v([0-9]+).*/\1/')"
+fi
+
+if [ "$NODE_MAJOR_CURRENT" != "24" ]; then
+  if [ -n "$NODE_MAJOR_CURRENT" ]; then
+    log "Node.js w wersji ${NODE_MAJOR_CURRENT} - aktualizuje do 24 LTS (NodeSource)..."
+  else
+    log "Node.js nie znaleziony - instaluje (NodeSource, Node.js 24 LTS)..."
+  fi
   curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - || die "Nie udalo sie dodac repo NodeSource."
+  dnf module reset nodejs -y 2>/dev/null || true
   dnf_retry install -y nodejs
+else
+  log "Node.js juz w wersji 24 - pomijam reinstalacje."
 fi
 command -v node >/dev/null 2>&1 || die "Node.js nadal niedostepny po probie instalacji."
 log "Node.js: $(node -v)"
