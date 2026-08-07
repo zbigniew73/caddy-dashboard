@@ -38,6 +38,18 @@ gen_password() {
   printf '%s' "$pass"
 }
 
+dnf_retry() {
+  local attempt=1 max_attempts=3 delay=5
+  until dnf "$@"; do
+    if [ "$attempt" -ge "$max_attempts" ]; then
+      die "dnf $* nie powiodlo sie po ${max_attempts} probach."
+    fi
+    log "dnf $* nie powiodlo sie (proba ${attempt}/${max_attempts}) - ponawiam za ${delay}s..."
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   SELF="${BASH_SOURCE[0]:-}"
   if [ -n "$SELF" ] && [ -f "$SELF" ]; then
@@ -112,29 +124,29 @@ sysctl -p >/dev/null
 log "Aktualizuje system (dnf update)..."
 dnf clean all -y -q
 dnf autoremove -y -q
-dnf update -y -q
-dnf install sudo epel-release -y
-dnf update -y
+dnf_retry update -y -q
+dnf_retry install sudo epel-release -y
+dnf_retry update -y
 
 log "Instaluje pakiety podstawowe ..."
-dnf install -y nano mc htop wget curl zip unzip gzip bzip2 tar git
-dnf install -y net-tools gcc make bash-completion socat which cronie
-dnf install -y glibc-langpack-pl bind-utils ca-certificates
-dnf update -y
+dnf_retry install -y nano mc htop wget curl zip unzip gzip bzip2 tar git
+dnf_retry install -y net-tools gcc make bash-completion socat which cronie
+dnf_retry install -y glibc-langpack-pl bind-utils ca-certificates
+dnf_retry update -y
 
 if ! command -v node >/dev/null 2>&1; then
   log "Node.js nie znaleziony - instaluje (NodeSource, Node.js 24 LTS)..."
   curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - || die "Nie udalo sie dodac repo NodeSource."
-  dnf install -y nodejs || die "Nie udalo sie zainstalowac Node.js automatycznie - zainstaluj recznie i uruchom skrypt ponownie."
+  dnf_retry install -y nodejs
 fi
 command -v node >/dev/null 2>&1 || die "Node.js nadal niedostepny po probie instalacji."
 log "Node.js: $(node -v)"
 
 if ! command -v caddy >/dev/null 2>&1; then
   log "Caddy nie znaleziony - instaluje (COPR @caddy/caddy)..."
-  dnf install 'dnf-command(copr)' -y
-  dnf copr enable @caddy/caddy -y
-  dnf install -y caddy
+  dnf_retry install 'dnf-command(copr)' -y
+  dnf_retry copr enable @caddy/caddy -y
+  dnf_retry install -y caddy
   systemctl enable --now caddy
 
   log "Ustawiam domyslny fallback Caddyfile (/etc/caddy/Caddyfile)..."
@@ -183,7 +195,7 @@ fi
 
 if ! command -v firewall-cmd >/dev/null 2>&1; then
   log "firewalld nie znaleziony - instaluje..."
-  dnf install -y firewalld || die "Nie udalo sie zainstalowac firewalld automatycznie - zainstaluj recznie i uruchom skrypt ponownie."
+  dnf_retry install -y firewalld
 fi
 command -v firewall-cmd >/dev/null 2>&1 || die "firewall-cmd nadal niedostepny po probie instalacji."
 log "firewalld: zainstalowany."
