@@ -7,6 +7,7 @@ import {
   verifySessionToken,
   SESSION_COOKIE
 } from '../services/auth.js';
+import { APP_VERSION } from '../version.js';
 
 const router = Router();
 
@@ -67,7 +68,7 @@ router.get('/status', (req, res) => {
   const authRequired = getAllowedUsers().length > 0;
   const token = req.cookies?.[SESSION_COOKIE];
   const payload = token ? verifySessionToken(token) : null;
-  res.json({ authRequired, username: payload?.username || null });
+  res.json({ authRequired, username: payload?.username || null, version: APP_VERSION });
 });
 
 export default router;

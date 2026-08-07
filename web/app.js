@@ -290,6 +290,11 @@ function escapeHtml(str) {
   renderThemeSwitches();
   try {
     const status = await api('GET', '/auth/status');
+    if (status.version) {
+      const versionLabel = `v${status.version}`;
+      document.getElementById('app-version-login').textContent = versionLabel;
+      document.getElementById('app-version-header').textContent = versionLabel;
+    }
     if (status.username) {
       showApp(status.username);
     } else {

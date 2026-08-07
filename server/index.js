@@ -3,16 +3,14 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
-import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import { requireAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
+import { APP_VERSION } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-const { version: APP_VERSION } = JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf-8'));
 
 const HOST = process.env.HOST || '127.0.0.1';
 const PORT = parseInt(process.env.PORT || '4300', 10);

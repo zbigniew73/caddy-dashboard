@@ -1,0 +1,7 @@
+import { readFileSync } from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export const APP_VERSION = JSON.parse(readFileSync(path.join(__dirname, '../package.json'), 'utf-8')).version;
