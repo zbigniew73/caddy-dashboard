@@ -244,6 +244,8 @@ function wireSystemRebootButton() {
 
 async function renderTab() {
   const content = document.getElementById('content');
+  if (currentTab !== 'system') stopSystemAutoRefresh();
+
   if (currentTab === 'services') {
     await renderServicesTab(content);
     return;
@@ -257,41 +259,64 @@ async function renderTab() {
     return;
   }
   if (currentTab === 'system') {
-    content.innerHTML = `<div class="empty-state">${t('system.loading')}</div>`;
-    try {
-      const info = await api('GET', '/system');
-      const cpuDetail = t('system.cpu_detail', { model: info.cpu.model || '-', cores: info.cpu.cores });
-      const ramDetail = t('system.used_of', { used: formatBytes(info.memory.usedBytes), total: formatBytes(info.memory.totalBytes) });
-      const diskLabel = info.disk ? t('system.disk', { path: info.disk.path }) : null;
-      const diskDetail = info.disk ? t('system.used_of', { used: formatBytes(info.disk.usedBytes), total: formatBytes(info.disk.totalBytes) }) : null;
-      const swapDetail = info.swap ? t('system.used_of', { used: formatBytes(info.swap.usedBytes), total: formatBytes(info.swap.totalBytes) }) : null;
+    await renderSystemTab(content);
+    startSystemAutoRefresh();
+  }
+}
 
-      content.innerHTML = `
-        <div class="system-info-card">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-            <dl>
-              <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
-              <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
-              <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
-              <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
-              <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
-            </dl>
-            <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
-          </div>
-          <div class="action-msg" id="system-reboot-msg"></div>
-        </div>
-        <div class="system-grid">
-          ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
-          ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
-          ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
-          ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
-        </div>
-      `;
-      applyTranslations();
-      wireSystemRebootButton();
-    } catch (e) {
-      content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+let systemRefreshTimer = null;
+
+function startSystemAutoRefresh() {
+  stopSystemAutoRefresh();
+  systemRefreshTimer = setInterval(() => {
+    if (currentTab === 'system') {
+      renderSystemTab(document.getElementById('content'), { silent: true });
     }
+  }, 60000);
+}
+
+function stopSystemAutoRefresh() {
+  if (systemRefreshTimer) {
+    clearInterval(systemRefreshTimer);
+    systemRefreshTimer = null;
+  }
+}
+
+async function renderSystemTab(content, { silent = false } = {}) {
+  if (!silent) content.innerHTML = `<div class="empty-state">${t('system.loading')}</div>`;
+  try {
+    const info = await api('GET', '/system');
+    const cpuDetail = t('system.cpu_detail', { model: info.cpu.model || '-', cores: info.cpu.cores });
+    const ramDetail = t('system.used_of', { used: formatBytes(info.memory.usedBytes), total: formatBytes(info.memory.totalBytes) });
+    const diskLabel = info.disk ? t('system.disk', { path: info.disk.path }) : null;
+    const diskDetail = info.disk ? t('system.used_of', { used: formatBytes(info.disk.usedBytes), total: formatBytes(info.disk.totalBytes) }) : null;
+    const swapDetail = info.swap ? t('system.used_of', { used: formatBytes(info.swap.usedBytes), total: formatBytes(info.swap.totalBytes) }) : null;
+
+    content.innerHTML = `
+      <div class="system-info-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+          <dl>
+            <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
+            <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
+            <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
+            <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
+            <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
+          </dl>
+          <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
+        </div>
+        <div class="action-msg" id="system-reboot-msg"></div>
+      </div>
+      <div class="system-grid">
+        ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
+        ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
+        ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
+        ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
+      </div>
+    `;
+    applyTranslations();
+    wireSystemRebootButton();
+  } catch (e) {
+    if (!silent) content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
 }
 
