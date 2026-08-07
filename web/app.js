@@ -1,4 +1,5 @@
 const API = '/api';
+const SERVICE_DETAIL_TABS = ['ssh', 'firewall', 'cron'];
 let currentTab = 'system';
 
 async function api(method, url, body) {
@@ -135,8 +136,8 @@ async function renderTab() {
     await renderServicesTab(content);
     return;
   }
-  if (currentTab === 'ssh') {
-    await renderSshTab(content);
+  if (SERVICE_DETAIL_TABS.includes(currentTab)) {
+    await renderServiceDetailTab(currentTab, content);
     return;
   }
   if (currentTab === 'system') {
@@ -212,7 +213,7 @@ async function renderServicesTab(content) {
   }
 }
 
-function sshDetailHtml(svc) {
+function serviceDetailHtml(svc) {
   if (!svc.found) {
     return `<div class="empty-state">${t('services.not_installed_detail')}</div>`;
   }
@@ -232,27 +233,32 @@ function sshDetailHtml(svc) {
         <button type="button" data-action="restart">${t('services.action_restart')}</button>
         <button type="button" class="danger" data-action="stop">${t('services.action_stop')}</button>
       </div>
-      <div class="action-msg" id="ssh-action-msg"></div>
+      <div class="action-msg" id="${svc.key}-action-msg"></div>
     </div>
   `;
 }
 
-function wireSshActions() {
+function confirmMessageFor(key, action) {
+  if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
+  if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
+  return t('services.confirm_action', { action: t('services.action_' + action) });
+}
+
+function wireServiceActions(key) {
   document.querySelectorAll('#content [data-action]').forEach((btn) => {
     btn.onclick = async () => {
       const action = btn.dataset.action;
-      const confirmKey = action === 'stop' ? 'services.confirm_stop_ssh' : 'services.confirm_action';
-      if (!window.confirm(t(confirmKey, { action: t('services.action_' + action) }))) return;
+      if (!window.confirm(confirmMessageFor(key, action))) return;
 
-      const msgEl = document.getElementById('ssh-action-msg');
+      const msgEl = document.getElementById(`${key}-action-msg`);
       document.querySelectorAll('#content [data-action]').forEach((b) => { b.disabled = true; });
       msgEl.textContent = t('services.action_pending');
       msgEl.className = 'action-msg';
       try {
-        const svc = await api('POST', `/services/ssh/${action}`);
-        document.getElementById('content').innerHTML = sshDetailHtml(svc);
-        wireSshActions();
-        const successEl = document.getElementById('ssh-action-msg');
+        const svc = await api('POST', `/services/${key}/${action}`);
+        document.getElementById('content').innerHTML = serviceDetailHtml(svc);
+        wireServiceActions(key);
+        const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
       } catch (e) {
@@ -264,12 +270,12 @@ function wireSshActions() {
   });
 }
 
-async function renderSshTab(content) {
+async function renderServiceDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const svc = await api('GET', '/services/ssh');
-    content.innerHTML = sshDetailHtml(svc);
-    wireSshActions();
+    const svc = await api('GET', `/services/${key}`);
+    content.innerHTML = serviceDetailHtml(svc);
+    wireServiceActions(key);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

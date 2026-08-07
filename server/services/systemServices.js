@@ -3,11 +3,14 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 
-// Rejestr uslug widocznych w panelu. Na razie tylko SSH (zawsze jest na
-// "czystym" systemie startowym) - Caddy/MySQL/PHP doloza sie tu gdy user
-// bedzie mogl je instalowac z panelu.
+// Rejestr uslug widocznych w panelu. Docelowy system to AlmaLinux/Rocky,
+// stad kolejnosc kandydatow (crond.service, firewalld.service) - cron.service
+// jako fallback dla dystrybucji Debianopodobnych (dev/test box).
+// Caddy/MySQL/PHP doloza sie tu gdy user bedzie mogl je instalowac z panelu.
 const SERVICE_REGISTRY = [
-  { key: 'ssh', unitCandidates: ['sshd.service', 'ssh.service'] }
+  { key: 'ssh', unitCandidates: ['sshd.service', 'ssh.service'] },
+  { key: 'firewall', unitCandidates: ['firewalld.service'] },
+  { key: 'cron', unitCandidates: ['crond.service', 'cron.service'] }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];
