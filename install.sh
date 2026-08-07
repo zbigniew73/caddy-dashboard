@@ -181,11 +181,12 @@ else
   fi
 fi
 
-FIREWALLD_LOAD_STATE="$(systemctl show firewalld.service --no-page -p LoadState 2>/dev/null | cut -d= -f2)"
-if [ "$FIREWALLD_LOAD_STATE" != "loaded" ] || ! command -v firewall-cmd >/dev/null 2>&1; then
-  die "firewalld nie jest zainstalowany (LoadState=${FIREWALLD_LOAD_STATE:-brak}), a zakladalismy ze jest fabrycznie. Zainstaluj firewalld recznie (dnf install -y firewalld) i uruchom skrypt ponownie."
+if ! command -v firewall-cmd >/dev/null 2>&1; then
+  log "firewalld nie znaleziony - instaluje..."
+  dnf install -y firewalld || die "Nie udalo sie zainstalowac firewalld automatycznie - zainstaluj recznie i uruchom skrypt ponownie."
 fi
-log "firewalld: zainstalowany (jednostka ${FIREWALLD_LOAD_STATE})."
+command -v firewall-cmd >/dev/null 2>&1 || die "firewall-cmd nadal niedostepny po probie instalacji."
+log "firewalld: zainstalowany."
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   log "Repo juz jest w $INSTALL_DIR - aktualizuje (git pull)..."
