@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import os from 'os';
 import fs from 'fs';
+import { getServiceDef, getServiceStatus, listServices, runServiceAction } from '../services/systemServices.js';
 
 const router = Router();
 
@@ -72,6 +73,35 @@ router.get('/system', async (req, res) => {
     },
     disk
   });
+});
+
+router.get('/services', async (req, res) => {
+  try {
+    const services = await listServices();
+    res.json({ services });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/services/:key', async (req, res) => {
+  const def = getServiceDef(req.params.key);
+  if (!def) return res.status(404).json({ error: 'Nieznana usluga' });
+  try {
+    const status = await getServiceStatus(def);
+    res.json(status);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/services/:key/:action', async (req, res) => {
+  try {
+    const status = await runServiceAction(req.params.key, req.params.action);
+    res.json(status);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 export default router;

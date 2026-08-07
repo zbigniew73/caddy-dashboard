@@ -188,6 +188,47 @@
 
   .empty-state { color: var(--muted); padding: 40px; text-align: center; }
 
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+    max-width: 820px;
+  }
+  .service-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .service-card:hover { border-color: var(--accent); }
+  .service-card-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .service-card .service-name { font-weight: 600; font-size: 14px; }
+  .service-card .service-detail { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  .status-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .status-badge.active { background: rgba(43, 138, 94, 0.15); color: var(--accent); }
+  .status-badge.inactive { background: rgba(229, 83, 75, 0.15); color: var(--danger); }
+  .status-badge.unknown { background: rgba(107, 112, 120, 0.15); color: var(--muted); }
+
+  .service-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .service-actions button.danger { background: var(--danger); }
+  .service-actions button.danger:hover { background: #c94840; }
+  .service-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .action-msg { margin-top: 10px; font-size: 13px; min-height: 16px; }
+  .action-msg.error { color: var(--danger); }
+  .action-msg.success { color: var(--accent); }
+
   .app-footer {
     padding: 8px 20px;
     border-top: 1px solid var(--border);
@@ -232,6 +273,8 @@
   <main>
     <nav>
       <button class="tab active" data-tab="system" data-i18n="nav.system"></button>
+      <button class="tab" data-tab="services" data-i18n="nav.services"></button>
+      <button class="tab" data-tab="ssh" data-i18n="nav.ssh"></button>
     </nav>
     <div class="content" id="content"></div>
   </main>

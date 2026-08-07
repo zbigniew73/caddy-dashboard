@@ -82,13 +82,14 @@ document.getElementById('logout-btn').onclick = async () => {
   showLogin();
 };
 
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('nav .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  renderTab();
+}
+
 document.querySelectorAll('nav .tab').forEach((btn) => {
-  btn.onclick = () => {
-    document.querySelectorAll('nav .tab').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    currentTab = btn.dataset.tab;
-    renderTab();
-  };
+  btn.onclick = () => switchTab(btn.dataset.tab);
 });
 
 function formatBytes(bytes) {
@@ -130,6 +131,14 @@ function meterTile(label, percent, detail) {
 
 async function renderTab() {
   const content = document.getElementById('content');
+  if (currentTab === 'services') {
+    await renderServicesTab(content);
+    return;
+  }
+  if (currentTab === 'ssh') {
+    await renderSshTab(content);
+    return;
+  }
   if (currentTab === 'system') {
     content.innerHTML = `<div class="empty-state">${t('system.loading')}</div>`;
     try {
@@ -158,6 +167,111 @@ async function renderTab() {
     } catch (e) {
       content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
     }
+  }
+}
+
+function serviceCard(svc) {
+  const name = t(`services.${svc.key}.name`);
+  if (!svc.found) {
+    return `
+      <div class="service-card">
+        <div class="service-card-header">
+          <span class="service-name">${escapeHtml(name)}</span>
+          <span class="status-badge unknown">${t('services.not_installed')}</span>
+        </div>
+        <div class="service-detail">${t('services.not_installed_detail')}</div>
+      </div>
+    `;
+  }
+  const isActive = svc.activeState === 'active';
+  return `
+    <div class="service-card" data-nav-tab="${escapeHtml(svc.key)}">
+      <div class="service-card-header">
+        <span class="service-name">${escapeHtml(name)}</span>
+        <span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span>
+      </div>
+      <div class="service-detail">${escapeHtml(svc.unit)}</div>
+    </div>
+  `;
+}
+
+async function renderServicesTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const { services } = await api('GET', '/services');
+    if (!services.length) {
+      content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
+      return;
+    }
+    content.innerHTML = `<div class="services-grid">${services.map(serviceCard).join('')}</div>`;
+    content.querySelectorAll('[data-nav-tab]').forEach((card) => {
+      card.onclick = () => switchTab(card.dataset.navTab);
+    });
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function sshDetailHtml(svc) {
+  if (!svc.found) {
+    return `<div class="empty-state">${t('services.not_installed_detail')}</div>`;
+  }
+  const isActive = svc.activeState === 'active';
+  const isEnabled = svc.enabled === 'enabled';
+  return `
+    <div class="system-info-card">
+      <dl>
+        <dt data-i18n="services.unit"></dt><dd>${escapeHtml(svc.unit)}</dd>
+        <dt data-i18n="services.status"></dt><dd><span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span> (${escapeHtml(svc.subState)})</dd>
+        <dt data-i18n="services.enabled_label"></dt><dd>${isEnabled ? t('services.enabled') : t('services.disabled')}</dd>
+        <dt data-i18n="services.pid"></dt><dd>${svc.mainPid || '-'}</dd>
+        <dt data-i18n="services.since"></dt><dd>${escapeHtml(svc.since || '-')}</dd>
+      </dl>
+      <div class="service-actions">
+        <button type="button" data-action="start">${t('services.action_start')}</button>
+        <button type="button" data-action="restart">${t('services.action_restart')}</button>
+        <button type="button" class="danger" data-action="stop">${t('services.action_stop')}</button>
+      </div>
+      <div class="action-msg" id="ssh-action-msg"></div>
+    </div>
+  `;
+}
+
+function wireSshActions() {
+  document.querySelectorAll('#content [data-action]').forEach((btn) => {
+    btn.onclick = async () => {
+      const action = btn.dataset.action;
+      const confirmKey = action === 'stop' ? 'services.confirm_stop_ssh' : 'services.confirm_action';
+      if (!window.confirm(t(confirmKey, { action: t('services.action_' + action) }))) return;
+
+      const msgEl = document.getElementById('ssh-action-msg');
+      document.querySelectorAll('#content [data-action]').forEach((b) => { b.disabled = true; });
+      msgEl.textContent = t('services.action_pending');
+      msgEl.className = 'action-msg';
+      try {
+        const svc = await api('POST', `/services/ssh/${action}`);
+        document.getElementById('content').innerHTML = sshDetailHtml(svc);
+        wireSshActions();
+        const successEl = document.getElementById('ssh-action-msg');
+        successEl.textContent = t('services.action_success');
+        successEl.className = 'action-msg success';
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        document.querySelectorAll('#content [data-action]').forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
+}
+
+async function renderSshTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const svc = await api('GET', '/services/ssh');
+    content.innerHTML = sshDetailHtml(svc);
+    wireSshActions();
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
 }
 
