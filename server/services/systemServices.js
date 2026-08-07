@@ -7,7 +7,8 @@ const SERVICE_REGISTRY = [
   { key: 'ssh', unitCandidates: ['sshd.service'] },
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
   { key: 'cron', unitCandidates: ['crond.service'] },
-  { key: 'caddy', unitCandidates: ['caddy.service'] }
+  { key: 'caddy', unitCandidates: ['caddy.service'] },
+  { key: 'fail2ban', unitCandidates: ['fail2ban.service'], installable: { packageName: 'fail2ban' } }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];
@@ -36,8 +37,9 @@ async function resolveUnit(candidates) {
 }
 
 async function getServiceStatus(def) {
+  const installable = !!def.installable;
   const unit = await resolveUnit(def.unitCandidates);
-  if (!unit) return { key: def.key, found: false };
+  if (!unit) return { key: def.key, found: false, installable };
 
   const { stdout } = await execFileAsync('systemctl', [
     'show', unit, '--no-page', '-p',
@@ -48,6 +50,7 @@ async function getServiceStatus(def) {
   return {
     key: def.key,
     found: true,
+    installable,
     unit,
     description: props.Description || '',
     activeState: props.ActiveState || 'unknown',
@@ -89,10 +92,41 @@ async function runServiceAction(key, action) {
   return getServiceStatus(def);
 }
 
+async function installService(key) {
+  const def = getServiceDef(key);
+  if (!def || !def.installable) {
+    throw Object.assign(new Error('Ten wpis nie jest instalowalny'), { status: 400 });
+  }
+
+  try {
+    await execFileAsync('sudo', ['-n', 'dnf', 'install', '-y', def.installable.packageName], { timeout: 180000 });
+  } catch (e) {
+    const stderr = (e.stderr || '').toString();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla dnf - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr.trim() || e.message), { status: 500 });
+  }
+
+  const unit = await resolveUnit(def.unitCandidates);
+  if (unit) {
+    try {
+      await execFileAsync('sudo', ['-n', 'systemctl', 'enable', '--now', unit], { timeout: 15000 });
+    } catch {
+      // pakiet zainstalowany, ale enable/start moze wymagac recznej interwencji - nie blokujemy odpowiedzi
+    }
+  }
+
+  return getServiceStatus(def);
+}
+
 function rebootSystem() {
   setTimeout(() => {
     execFile('sudo', ['-n', 'systemctl', 'reboot'], () => {});
   }, 500);
 }
 
-export { getServiceDef, getServiceStatus, listServices, runServiceAction, rebootSystem, SERVICE_REGISTRY };
+export { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem, SERVICE_REGISTRY };

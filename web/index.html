@@ -150,6 +150,10 @@
   }
   nav button.tab.active { color: var(--text); background: var(--panel); border-left: 2px solid var(--accent); }
 
+  .nav-separator { height: 1px; background: var(--border); margin: 10px 20px; }
+  .nav-section-label { padding: 4px 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  nav button.tab.install-pending { color: var(--accent); }
+
   .content { flex: 1; overflow-y: auto; padding: 24px; }
 
   .system-info-card {
@@ -222,7 +226,6 @@
   }
   .status-badge.active { background: rgba(43, 138, 94, 0.15); color: var(--accent); }
   .status-badge.inactive { background: rgba(229, 83, 75, 0.15); color: var(--danger); }
-  .status-badge.unknown { background: rgba(107, 112, 120, 0.15); color: var(--muted); }
 
   .update-badge {
     font-size: 11px;
@@ -300,6 +303,10 @@
       <button class="tab" data-tab="firewall" data-i18n="nav.firewall"></button>
       <button class="tab" data-tab="cron" data-i18n="nav.cron"></button>
       <button class="tab" data-tab="caddy" data-i18n="nav.caddy"></button>
+      <div id="nav-installed-extra"></div>
+      <div class="nav-separator" id="nav-install-separator" style="display:none;"></div>
+      <div class="nav-section-label" id="nav-install-label" data-i18n="nav.install_section" style="display:none;"></div>
+      <div id="nav-install-list"></div>
     </nav>
     <div class="content" id="content"></div>
   </main>

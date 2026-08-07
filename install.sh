@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.2.0"
+APP_VERSION="1.3.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -114,7 +114,7 @@ declare -A MSG_PL=(
   [systemd_ready]="caddy-dashboard.service gotowy (User=%s). NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [systemd_exists]="caddy-dashboard.service juz istnieje - pomijam generowanie."
   [chown_install_dir]="Ustawiam wlasciciela %s na %s (samo-aktualizacja z panelu)..."
-  [sudoers_configuring]="Konfiguruje sudoers NOPASSWD dla '%s' (systemctl, dnf, firewall-cmd, zmiana portu SSH, restart systemu)..."
+  [sudoers_configuring]="Konfiguruje sudoers NOPASSWD dla '%s' (systemctl, dnf, firewall-cmd, zmiana portu SSH, restart systemu, konfiguracja fail2ban)..."
   [sudoers_configured]="sudoers skonfigurowany: /etc/sudoers.d/caddy-dashboard."
   [err_sudoers_invalid]="Wygenerowany plik sudoers nie przeszedl walidacji (visudo -c) - nie zostal zainstalowany."
   [done_installed]="Gotowe. Zainstalowano w: %s"
@@ -202,7 +202,7 @@ declare -A MSG_EN=(
   [systemd_ready]="caddy-dashboard.service ready (User=%s). NOT copied to /etc/systemd/system - see below."
   [systemd_exists]="caddy-dashboard.service already exists - skipping generation."
   [chown_install_dir]="Setting owner of %s to %s (self-update from the panel)..."
-  [sudoers_configuring]="Configuring NOPASSWD sudoers for '%s' (systemctl, dnf, firewall-cmd, SSH port change, system reboot)..."
+  [sudoers_configuring]="Configuring NOPASSWD sudoers for '%s' (systemctl, dnf, firewall-cmd, SSH port change, system reboot, fail2ban config)..."
   [sudoers_configured]="sudoers configured: /etc/sudoers.d/caddy-dashboard."
   [err_sudoers_invalid]="The generated sudoers file failed validation (visudo -c) - it was not installed."
   [done_installed]="Done. Installed in: %s"
@@ -516,8 +516,9 @@ Cmnd_Alias CDDASH_DNF = /usr/bin/dnf install -y *, /usr/bin/dnf remove -y *
 Cmnd_Alias CDDASH_FIREWALL = /usr/bin/firewall-cmd *
 Cmnd_Alias CDDASH_SSH_PORT = ${INSTALL_DIR}/server/scripts/ssh-set-port.sh *
 Cmnd_Alias CDDASH_REBOOT = /usr/bin/systemctl reboot
+Cmnd_Alias CDDASH_FAIL2BAN = ${INSTALL_DIR}/server/scripts/fail2ban-write-config.sh
 
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN
 EOF
   if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
     install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/caddy-dashboard

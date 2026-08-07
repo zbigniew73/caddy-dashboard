@@ -1,5 +1,7 @@
 const API = '/api';
-const SERVICE_DETAIL_TABS = ['ssh', 'firewall', 'cron', 'caddy'];
+const CORE_SERVICE_KEYS = ['ssh', 'firewall', 'cron', 'caddy'];
+let SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS];
+let INSTALL_DETAIL_TABS = [];
 let currentTab = 'system';
 
 async function api(method, url, body) {
@@ -48,6 +50,7 @@ function onLanguageChange() {
   if (document.getElementById('app').style.display === 'flex') {
     renderTab();
     renderUpdateBadge();
+    refreshDynamicNav();
   }
 }
 
@@ -63,6 +66,7 @@ function showApp(username) {
   if (username) document.getElementById('current-user').textContent = username;
   renderTab();
   refreshUpdateBadge();
+  refreshDynamicNav();
 }
 
 let latestUpdateInfo = null;
@@ -138,6 +142,43 @@ function switchTab(tab) {
   renderTab();
 }
 
+async function refreshDynamicNav() {
+  let services;
+  try {
+    services = (await api('GET', '/services')).services;
+  } catch {
+    return;
+  }
+
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key));
+  const notInstalled = services.filter((s) => !s.found && s.installable);
+
+  SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
+  INSTALL_DETAIL_TABS = notInstalled.map((s) => s.key);
+
+  const extraContainer = document.getElementById('nav-installed-extra');
+  extraContainer.innerHTML = installedExtra.map((s) =>
+    `<button type="button" class="tab" data-tab="${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+  ).join('');
+  extraContainer.querySelectorAll('button').forEach((btn) => {
+    btn.onclick = () => switchTab(btn.dataset.tab);
+  });
+
+  const installContainer = document.getElementById('nav-install-list');
+  installContainer.innerHTML = notInstalled.map((s) =>
+    `<button type="button" class="tab install-pending" data-tab="${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+  ).join('');
+  installContainer.querySelectorAll('button').forEach((btn) => {
+    btn.onclick = () => switchTab(btn.dataset.tab);
+  });
+
+  const hasInstallSection = notInstalled.length > 0;
+  document.getElementById('nav-install-separator').style.display = hasInstallSection ? '' : 'none';
+  document.getElementById('nav-install-label').style.display = hasInstallSection ? '' : 'none';
+
+  document.querySelectorAll('nav .tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
+}
+
 document.querySelectorAll('nav .tab').forEach((btn) => {
   btn.onclick = () => switchTab(btn.dataset.tab);
 });
@@ -211,6 +252,10 @@ async function renderTab() {
     await renderServiceDetailTab(currentTab, content);
     return;
   }
+  if (INSTALL_DETAIL_TABS.includes(currentTab)) {
+    await renderInstallDetailTab(currentTab, content);
+    return;
+  }
   if (currentTab === 'system') {
     content.innerHTML = `<div class="empty-state">${t('system.loading')}</div>`;
     try {
@@ -250,19 +295,59 @@ async function renderTab() {
   }
 }
 
+function installTileHtml(key, svc) {
+  const name = t(`services.${key}.name`);
+  const description = t(`install.${key}.description`);
+  return `
+    <div class="system-info-card" style="max-width:520px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+        ${svc.found
+          ? `<span class="status-badge active">${t('install.installed_badge')}</span>`
+          : `<button type="button" id="install-btn-${escapeHtml(key)}">${t('install.install_button')}</button>`}
+      </div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+      <div class="action-msg" id="install-msg-${escapeHtml(key)}"></div>
+    </div>
+  `;
+}
+
+function wireInstallTile(key) {
+  const btn = document.getElementById(`install-btn-${key}`);
+  if (!btn) return;
+  btn.onclick = async () => {
+    const msgEl = document.getElementById(`install-msg-${key}`);
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      const svc = await api('POST', `/services/${key}/install`);
+      document.getElementById('content').innerHTML = installTileHtml(key, svc);
+      const successEl = document.getElementById(`install-msg-${key}`);
+      successEl.textContent = t('install.install_success');
+      successEl.className = 'action-msg success';
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
+async function renderInstallDetailTab(key, content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const svc = await api('GET', `/services/${key}`);
+    content.innerHTML = installTileHtml(key, svc);
+    wireInstallTile(key);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function serviceCard(svc) {
   const name = t(`services.${svc.key}.name`);
-  if (!svc.found) {
-    return `
-      <div class="service-card">
-        <div class="service-card-header">
-          <span class="service-name">${escapeHtml(name)}</span>
-          <span class="status-badge unknown">${t('services.not_installed')}</span>
-        </div>
-        <div class="service-detail">${t('services.not_installed_detail')}</div>
-      </div>
-    `;
-  }
   const isActive = svc.activeState === 'active';
   return `
     <div class="service-card" data-nav-tab="${escapeHtml(svc.key)}">
@@ -279,11 +364,12 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    if (!services.length) {
+    const installed = services.filter((s) => s.found);
+    if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;
     }
-    content.innerHTML = `<div class="services-grid">${services.map(serviceCard).join('')}</div>`;
+    content.innerHTML = `<div class="services-grid">${installed.map(serviceCard).join('')}</div>`;
     content.querySelectorAll('[data-nav-tab]').forEach((card) => {
       card.onclick = () => switchTab(card.dataset.navTab);
     });
@@ -476,6 +562,67 @@ function wireFirewallSection() {
   }
 }
 
+const FAIL2BAN_SSH_EXAMPLE = `[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+maxretry = 5
+bantime = 3600
+findtime = 600
+`;
+
+async function renderFail2banSection() {
+  try {
+    const { content } = await api('GET', '/fail2ban/config');
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px;">
+        <div style="font-weight:600;font-size:13px;color:var(--muted);">${t('fail2ban.jail_config_label')}</div>
+        <button type="button" class="secondary" id="fail2ban-insert-example-btn">${t('fail2ban.insert_ssh_example')}</button>
+      </div>
+      <textarea id="fail2ban-jail-textarea" rows="12" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(content)}</textarea>
+      <div class="service-actions" style="margin-top:10px;">
+        <button type="button" id="fail2ban-save-btn">${t('fail2ban.save_button')}</button>
+      </div>
+      <div class="action-msg" id="fail2ban-config-msg"></div>
+    `;
+  } catch (e) {
+    return `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function wireFail2banSection() {
+  const textarea = document.getElementById('fail2ban-jail-textarea');
+  const insertBtn = document.getElementById('fail2ban-insert-example-btn');
+  if (insertBtn && textarea) {
+    insertBtn.onclick = () => {
+      const sep = textarea.value && !textarea.value.endsWith('\n') ? '\n\n' : (textarea.value ? '\n' : '');
+      textarea.value += sep + FAIL2BAN_SSH_EXAMPLE;
+    };
+  }
+
+  const saveBtn = document.getElementById('fail2ban-save-btn');
+  if (saveBtn && textarea) {
+    saveBtn.onclick = async () => {
+      const msgEl = document.getElementById('fail2ban-config-msg');
+      saveBtn.disabled = true;
+      msgEl.textContent = t('fail2ban.saving');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/fail2ban/config', { content: textarea.value });
+        msgEl.textContent = t('fail2ban.save_success');
+        msgEl.className = 'action-msg success';
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+  }
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -498,10 +645,12 @@ function wireServiceActions(key) {
         let html = serviceDetailHtml(svc);
         if (key === 'ssh' && svc.found) html += await renderSshPortSection();
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
+        if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
+        if (key === 'fail2ban' && svc.found) wireFail2banSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -521,10 +670,12 @@ async function renderServiceDetailTab(key, content) {
     let html = serviceDetailHtml(svc);
     if (key === 'ssh' && svc.found) html += await renderSshPortSection();
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
+    if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
+    if (key === 'fail2ban' && svc.found) wireFail2banSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import os from 'os';
 import fs from 'fs';
-import { getServiceDef, getServiceStatus, listServices, runServiceAction, rebootSystem } from '../services/systemServices.js';
+import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, removeFirewallEntry } from '../services/firewall.js';
+import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 
 const router = Router();
 
@@ -139,6 +140,15 @@ router.get('/services/:key', async (req, res) => {
   }
 });
 
+router.post('/services/:key/install', async (req, res) => {
+  try {
+    const status = await installService(req.params.key);
+    res.json(status);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.post('/services/:key/:action', async (req, res) => {
   try {
     const status = await runServiceAction(req.params.key, req.params.action);
@@ -187,6 +197,19 @@ router.post('/firewall/entries', async (req, res) => {
 router.post('/firewall/entries/remove', async (req, res) => {
   try {
     const result = await removeFirewallEntry(req.body?.type, req.body?.value);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/fail2ban/config', (req, res) => {
+  res.json({ content: readJailConfig() });
+});
+
+router.post('/fail2ban/config', async (req, res) => {
+  try {
+    const result = await writeJailConfig(req.body?.content);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
