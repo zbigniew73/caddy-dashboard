@@ -21,6 +21,23 @@ prompt() {
   printf -v "$__var" '%s' "${__input:-$__default}"
 }
 
+is_yes() {
+  case "$1" in
+    t|T|tak|Tak|TAK|y|Y|yes|Yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+gen_password() {
+  local upper lower digit special pass
+  upper="$(LC_ALL=C tr -dc 'A-Z' < /dev/urandom | head -c4)"
+  lower="$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c4)"
+  digit="$(LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c2)"
+  special="$(LC_ALL=C tr -dc '!@#%*()_+=-' < /dev/urandom | head -c2)"
+  pass="$(printf '%s%s%s%s' "$upper" "$lower" "$digit" "$special" | fold -w1 | shuf | tr -d '\n')"
+  printf '%s' "$pass"
+}
+
 if [ "$(id -u)" -ne 0 ]; then
   SELF="${BASH_SOURCE[0]:-}"
   if [ -n "$SELF" ] && [ -f "$SELF" ]; then
@@ -134,6 +151,36 @@ else
 fi
 log "Caddy: $(caddy version)"
 
+CD_ADMIN_USER="cdadmin"
+CD_ADMIN_READY=0
+
+log "Sprawdzam dedykowanego uzytkownika administracyjnego (${CD_ADMIN_USER})..."
+if id "$CD_ADMIN_USER" >/dev/null 2>&1; then
+  log "Uzytkownik systemowy '${CD_ADMIN_USER}' juz istnieje."
+  prompt SETUP_CD_ADMIN "Skonfigurowac '${CD_ADMIN_USER}' jako admina panelu (grupy wheel+shadow, usluga systemd zamiast root)?" "t"
+  if is_yes "$SETUP_CD_ADMIN"; then
+    usermod -aG wheel,shadow "$CD_ADMIN_USER"
+    log "'${CD_ADMIN_USER}' dodany do grup wheel, shadow (haslo bez zmian)."
+    CD_ADMIN_READY=1
+  else
+    log "Pomijam '${CD_ADMIN_USER}' - logowanie do panelu i usluga systemd zostana skonfigurowane jak dotychczas."
+  fi
+else
+  prompt CREATE_CD_ADMIN "Uzytkownik '${CD_ADMIN_USER}' nie istnieje - utworzyc go jako admina panelu (bez katalogu domowego, wheel+shadow)?" "t"
+  if is_yes "$CREATE_CD_ADMIN"; then
+    useradd --no-create-home --shell /sbin/nologin --groups wheel,shadow "$CD_ADMIN_USER" \
+      || die "Nie udalo sie utworzyc uzytkownika ${CD_ADMIN_USER}."
+    CD_ADMIN_PASSWORD="$(gen_password)"
+    echo "${CD_ADMIN_USER}:${CD_ADMIN_PASSWORD}" | chpasswd || die "Nie udalo sie ustawic hasla dla ${CD_ADMIN_USER}."
+    ( umask 077; printf '%s:%s\n' "$CD_ADMIN_USER" "$CD_ADMIN_PASSWORD" > /root/.usercd )
+    log "Utworzono '${CD_ADMIN_USER}' (wheel+shadow, bez katalogu domowego)."
+    log "Haslo zapisane w /root/.usercd (chmod 600, tylko root)."
+    CD_ADMIN_READY=1
+  else
+    log "Pomijam tworzenie '${CD_ADMIN_USER}'."
+  fi
+fi
+
 FIREWALLD_LOAD_STATE="$(systemctl show firewalld.service --no-page -p LoadState 2>/dev/null | cut -d= -f2)"
 if [ "$FIREWALLD_LOAD_STATE" != "loaded" ] || ! command -v firewall-cmd >/dev/null 2>&1; then
   die "firewalld nie jest zainstalowany (LoadState=${FIREWALLD_LOAD_STATE:-brak}), a zakladalismy ze jest fabrycznie. Zainstaluj firewalld recznie (dnf install -y firewalld) i uruchom skrypt ponownie."
@@ -164,7 +211,11 @@ else
   SESSION_SECRET="$(openssl rand -hex 32)"
   sed -i "s#^SESSION_SECRET=.*#SESSION_SECRET=${SESSION_SECRET}#" .env
 
-  DEFAULT_USER="${SUDO_USER:-$(logname 2>/dev/null || echo admin)}"
+  if [ "$CD_ADMIN_READY" -eq 1 ]; then
+    DEFAULT_USER="$CD_ADMIN_USER"
+  else
+    DEFAULT_USER="${SUDO_USER:-$(logname 2>/dev/null || echo admin)}"
+  fi
   prompt AUTH_USER "Login systemowy, ktory ma miec dostep do panelu (musi byc w grupie wheel)" "$DEFAULT_USER"
   sed -i "s#^AUTH_USERS=.*#AUTH_USERS=${AUTH_USER}#" .env
 
@@ -192,7 +243,11 @@ log "Firewall gotowy: $(firewall-cmd --list-all | tr '\n' ' ' | sed 's/  */ /g')
 
 if [ ! -f caddy-dashboard.service ]; then
   log "Przygotowuje jednostke systemd (caddy-dashboard.service)..."
-  DEFAULT_SVC_USER="root"
+  if [ "$CD_ADMIN_READY" -eq 1 ]; then
+    DEFAULT_SVC_USER="$CD_ADMIN_USER"
+  else
+    DEFAULT_SVC_USER="root"
+  fi
   prompt SVC_USER "Konto systemowe, na ktorym ma dzialac usluga (root upraszcza wymog PAM+shadow, patrz README)" "$DEFAULT_SVC_USER"
   sed -e "s#^User=.*#User=${SVC_USER}#" \
       caddy-dashboard.service.example > caddy-dashboard.service
