@@ -1,4 +1,6 @@
-# Szablon jednostki systemd. Skopiuj, podmien sciezki i uzytkownika, potem:
+# Szablon jednostki systemd. Docelowa instalacja (skrypt instalacyjny) trafia
+# do /opt/caddy-dashboard - jesli u Ciebie tak jest, wystarczy podmienic tylko
+# User ponizej. Potem:
 #
 #   sudo cp caddy-dashboard.service /etc/systemd/system/
 #   sudo systemctl daemon-reload
@@ -13,9 +15,9 @@ After=network.target
 [Service]
 Type=simple
 
-# Katalog, do ktorego sklonowales repo.
-WorkingDirectory=/sciezka/do/caddy-dashboard
-EnvironmentFile=/sciezka/do/caddy-dashboard/.env
+# Katalog instalacji (domyslnie /opt/caddy-dashboard - patrz wyzej).
+WorkingDirectory=/opt/caddy-dashboard
+EnvironmentFile=/opt/caddy-dashboard/.env
 
 ExecStart=/usr/bin/node server/index.js
 Restart=on-failure

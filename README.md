@@ -32,7 +32,9 @@ Proces `node` musi być rootem albo członkiem grupy `shadow`, inaczej PAM pozwo
 
 ```bash
 cp caddy-dashboard.service.example caddy-dashboard.service
-# podmien w nim WorkingDirectory, EnvironmentFile i User na swoje wartosci
+# domyslne WorkingDirectory/EnvironmentFile zakladaja instalacje w
+# /opt/caddy-dashboard - podmien je tylko jesli u Ciebie jest inaczej.
+# User zawsze trzeba ustawic na swoje konto.
 sudo cp caddy-dashboard.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now caddy-dashboard
