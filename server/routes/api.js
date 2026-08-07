@@ -20,6 +20,40 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getOsPrettyName() {
+  try {
+    const content = fs.readFileSync('/etc/os-release', 'utf-8');
+    const match = content.match(/^PRETTY_NAME="?([^"\n]*)"?$/m);
+    if (match) return match[1];
+  } catch {
+    // ignore, fall through to os.platform()/os.release()
+  }
+  return `${os.platform()} ${os.release()}`;
+}
+
+function getSwapInfo() {
+  try {
+    const content = fs.readFileSync('/proc/meminfo', 'utf-8');
+    const totalMatch = content.match(/^SwapTotal:\s+(\d+) kB/m);
+    const freeMatch = content.match(/^SwapFree:\s+(\d+) kB/m);
+    if (!totalMatch || !freeMatch) return null;
+
+    const totalBytes = parseInt(totalMatch[1], 10) * 1024;
+    if (totalBytes === 0) return null;
+
+    const freeBytes = parseInt(freeMatch[1], 10) * 1024;
+    const usedBytes = totalBytes - freeBytes;
+    return {
+      totalBytes,
+      freeBytes,
+      usedBytes,
+      usedPercent: Math.round((usedBytes / totalBytes) * 100)
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getCpuUsagePercent() {
   const start = cpuTimesSnapshot();
   await sleep(200);
@@ -57,6 +91,7 @@ router.get('/system', async (req, res) => {
 
   res.json({
     hostname: os.hostname(),
+    osName: getOsPrettyName(),
     platform: os.platform(),
     release: os.release(),
     arch: os.arch(),
@@ -72,6 +107,7 @@ router.get('/system', async (req, res) => {
       usedBytes: usedMem,
       usedPercent: totalMem ? Math.round((usedMem / totalMem) * 100) : 0
     },
+    swap: getSwapInfo(),
     disk
   });
 });

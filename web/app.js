@@ -197,11 +197,13 @@ async function renderTab() {
       const ramDetail = t('system.used_of', { used: formatBytes(info.memory.usedBytes), total: formatBytes(info.memory.totalBytes) });
       const diskLabel = info.disk ? t('system.disk', { path: info.disk.path }) : null;
       const diskDetail = info.disk ? t('system.used_of', { used: formatBytes(info.disk.usedBytes), total: formatBytes(info.disk.totalBytes) }) : null;
+      const swapDetail = info.swap ? t('system.used_of', { used: formatBytes(info.swap.usedBytes), total: formatBytes(info.swap.totalBytes) }) : null;
 
       content.innerHTML = `
         <div class="system-info-card">
           <dl>
             <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
+            <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
             <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
             <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
             <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
@@ -210,6 +212,7 @@ async function renderTab() {
         <div class="system-grid">
           ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
           ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
+          ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
           ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
         </div>
       `;
