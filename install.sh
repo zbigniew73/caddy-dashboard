@@ -17,7 +17,7 @@ prompt() {
   if [ -t 0 ]; then
     read -rp "$__msg [$__default]: " __input
   else
-    read -rp "$__msg [$__default]: " __input 2>/dev/null < /dev/tty || __input=""
+    read -rp "$__msg [$__default]: " __input < /dev/tty || __input=""
   fi
   printf -v "$__var" '%s' "${__input:-$__default}"
 }
@@ -240,7 +240,7 @@ prompt_lang() {
     if [ -t 0 ]; then
       read -rp "Wybierz jezyk instalacji / Choose installation language [pl/en]: " __input || __input="__NOTTY__"
     else
-      read -rp "Wybierz jezyk instalacji / Choose installation language [pl/en]: " __input 2>/dev/null < /dev/tty || __input="__NOTTY__"
+      read -rp "Wybierz jezyk instalacji / Choose installation language [pl/en]: " __input < /dev/tty || __input="__NOTTY__"
     fi
     case "$__input" in
       __NOTTY__) LANG_CHOICE="pl"; return ;;
