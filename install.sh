@@ -12,17 +12,25 @@
 #
 #   bash install.sh
 #
-# Co robi: klonuje/aktualizuje repo w /opt/caddy-dashboard, instaluje
-# Node.js (jesli brak), npm install, tworzy .env (SESSION_SECRET
-# generowany automatycznie, AUTH_USERS/HOST pytane interaktywnie),
-# przygotowuje jednostke systemd (bez automatycznego enable/start).
+# Co robi: aktualizuje system (dnf update), instaluje pakiety podstawowe
+# + Node.js, klonuje/aktualizuje repo w /opt/caddy-dashboard, npm install,
+# tworzy .env (SESSION_SECRET generowany automatycznie, AUTH_USERS/HOST
+# pytane interaktywnie), weryfikuje firewalld i otwiera w nim
+# http/https/ssh + port dashboardu, przygotowuje jednostke systemd (bez
+# automatycznego enable/start - to zostaje reczne, swiadomie).
+#
+# ZALOZENIA o czystym VPS (Alma/Rocky) - skrypt ZAKLADA, ze juz sa:
+# - SSH i firewalld zainstalowane fabrycznie (skrypt tylko weryfikuje,
+#   NIE instaluje firewalld sam - jesli go nie ma, to odstepstwo od
+#   zalozen i skrypt sie zatrzymuje zamiast zgadywac);
+# - SELinux ustawiony na disabled (wymog projektu - patrz ponizej check).
 #
 # CO JESZCZE NIEDOPRACOWANE (szkielet, nie finalna wersja):
 # - instalacja Node.js zaklada dnf module (sprawdzone na RHEL9-owym
 #   modelu pakietow) - do przetestowania na docelowym Alma/Rocky VPS;
-# - nie otwiera portu w firewalld automatycznie (patrz zakladka
-#   FIREWALL w panelu - zarzadzanie portami to osobna, niezrobiona
-#   jeszcze funkcja);
+# - zarzadzanie portami firewalla Z POZIOMU PANELU (zakladka FIREWALL)
+#   to osobna, niezrobiona jeszcze funkcja - ten skrypt tylko JEDNORAZOWO
+#   otwiera porty przy instalacji, nie ma to nic wspolnego z zakladka;
 # - usluga systemd domyslnie proponowana jako User=root (PAM+shadow -
 #   patrz README) - dedykowany user o wezszych uprawnieniach to temat
 #   do przemyslenia pozniej, nie zalatwiony tutaj.
@@ -73,7 +81,21 @@ if [ ! -f /etc/redhat-release ]; then
   echo "        Skrypt jest pisany pod te dystrybucje - kontynuuje, ale bez gwarancji."
 fi
 
-command -v git >/dev/null 2>&1 || { log "Instaluje git..."; dnf install -y git; }
+if command -v getenforce >/dev/null 2>&1; then
+  SELINUX_STATE="$(getenforce)"
+  if [ "$SELINUX_STATE" != "Disabled" ]; then
+    echo "[UWAGA] SELinux jest w trybie '$SELINUX_STATE', a projekt zaklada 'Disabled'."
+    echo "        Enforcing/Permissive moze blokowac PAM przy logowaniu do panelu"
+    echo "        (odczyt /etc/shadow) - ustaw SELINUX=disabled w /etc/selinux/config"
+    echo "        i zrestartuj VPS. Kontynuuje instalacje, ale logowanie moze nie dzialac."
+  fi
+fi
+
+log "Aktualizuje system (dnf update)..."
+dnf update -y
+
+log "Instaluje pakiety podstawowe (git, curl, wget, tar, gzip)..."
+dnf install -y git curl wget tar gzip
 
 if ! command -v node >/dev/null 2>&1; then
   log "Node.js nie znaleziony - instaluje (dnf module nodejs:20)..."
@@ -82,6 +104,15 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 command -v node >/dev/null 2>&1 || die "Node.js nadal niedostepny po probie instalacji."
 log "Node.js: $(node -v)"
+
+# Firewalld ma juz byc zainstalowany fabrycznie na czystym Alma/Rocky VPS -
+# TYLKO weryfikujemy (analogicznie do rejestru uslug w samym panelu dla
+# ssh/cron), nie instalujemy go tutaj.
+FIREWALLD_LOAD_STATE="$(systemctl show firewalld.service --no-page -p LoadState 2>/dev/null | cut -d= -f2)"
+if [ "$FIREWALLD_LOAD_STATE" != "loaded" ] || ! command -v firewall-cmd >/dev/null 2>&1; then
+  die "firewalld nie jest zainstalowany (LoadState=${FIREWALLD_LOAD_STATE:-brak}), a zakladalismy ze jest fabrycznie. Zainstaluj firewalld recznie (dnf install -y firewalld) i uruchom skrypt ponownie."
+fi
+log "firewalld: zainstalowany (jednostka ${FIREWALLD_LOAD_STATE})."
 
 if [ -d "$INSTALL_DIR/.git" ]; then
   log "Repo juz jest w $INSTALL_DIR - aktualizuje (git pull)..."
@@ -118,6 +149,19 @@ else
   echo "     Sprawdz .env recznie przed uruchomieniem (EXPOSURE, ewentualnie ALLOWED_ORIGIN)."
 fi
 
+systemctl is-active --quiet firewalld || { log "firewalld zainstalowany ale nieaktywny - wlaczam..."; systemctl enable --now firewalld; }
+
+DASH_PORT="$(grep '^PORT=' .env | cut -d= -f2)"
+DASH_PORT="${DASH_PORT:-4300}"
+
+log "Otwieram w firewalld: http, https, ssh, port dashboardu (${DASH_PORT}/tcp)..."
+firewall-cmd --permanent --add-service=http
+firewall-cmd --permanent --add-service=https
+firewall-cmd --permanent --add-service=ssh
+firewall-cmd --permanent --add-port="${DASH_PORT}/tcp"
+firewall-cmd --reload
+log "Firewall gotowy: $(firewall-cmd --list-all | tr '\n' ' ' | sed 's/  */ /g')"
+
 if [ ! -f caddy-dashboard.service ]; then
   log "Przygotowuje jednostke systemd (caddy-dashboard.service)..."
   DEFAULT_SVC_USER="root"
@@ -142,10 +186,8 @@ Nastepne kroki (recznie, swiadomie - skrypt niczego tu sam nie wlacza):
        sudo cp $INSTALL_DIR/caddy-dashboard.service /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now caddy-dashboard
-  4. Jesli EXPOSURE=lan/world i firewalld jest aktywny, otworz port
-     panelu recznie (zakladka FIREWALL w panelu na razie tylko
-     pokazuje status uslugi, nie zarzadza portami):
-       sudo firewall-cmd --add-port=\$(grep '^PORT=' .env | cut -d= -f2)/tcp --permanent
-       sudo firewall-cmd --reload
+
+Firewall (http, https, ssh, port dashboardu) juz otwarty automatycznie -
+patrz log wyzej.
 
 EOF
