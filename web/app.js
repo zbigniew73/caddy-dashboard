@@ -154,7 +154,7 @@ async function refreshDynamicNav() {
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
-  INSTALL_DETAIL_TABS = installablePackages.map((s) => s.key);
+  INSTALL_DETAIL_TABS = installablePackages.map((s) => `install:${s.key}`);
 
   const extraContainer = document.getElementById('nav-installed-extra');
   extraContainer.innerHTML = installedExtra.map((s) =>
@@ -166,7 +166,7 @@ async function refreshDynamicNav() {
 
   const installContainer = document.getElementById('nav-install-list');
   installContainer.innerHTML = installablePackages.map((s) =>
-    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
   ).join('');
   installContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
@@ -253,7 +253,7 @@ async function renderTab() {
     return;
   }
   if (INSTALL_DETAIL_TABS.includes(currentTab)) {
-    await renderInstallDetailTab(currentTab, content);
+    await renderInstallDetailTab(currentTab.slice('install:'.length), content);
     return;
   }
   if (currentTab === 'system') {
