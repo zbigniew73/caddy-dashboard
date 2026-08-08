@@ -377,10 +377,12 @@ async function renderSystemTab(content, { silent = false } = {}) {
     content.innerHTML = `
       <div class="system-info-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-          <div class="info-grid">${systemItems.map(infoItem).join('')}</div>
+          <div style="display:flex;gap:40px;">
+            <div class="info-grid" style="grid-template-columns:1fr;">${systemItems.map(infoItem).join('')}</div>
+            <div class="info-grid" style="grid-template-columns:1fr;">${versionItems.map(infoItem).join('')}</div>
+          </div>
           <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
         </div>
-        <div class="info-grid" style="grid-template-columns:repeat(3, 1fr);margin-top:14px;">${versionItems.map(infoItem).join('')}</div>
         <div class="action-msg" id="system-reboot-msg"></div>
       </div>
       <div class="system-grid">
