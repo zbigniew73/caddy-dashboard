@@ -20,6 +20,14 @@ async function api(method, url, body) {
   return data;
 }
 
+const NAV_ICON_DEFAULT = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+const NAV_ICONS = {
+  fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+};
+function navIcon(key) {
+  return NAV_ICONS[key] || NAV_ICON_DEFAULT;
+}
+
 const THEME_ORDER = ['light', 'dark', 'system'];
 const THEME_ICONS = {
   light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -158,7 +166,7 @@ async function refreshDynamicNav() {
 
   const extraContainer = document.getElementById('nav-installed-extra');
   extraContainer.innerHTML = installedExtra.map((s) =>
-    `<button type="button" class="tab" data-tab="${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+    `<button type="button" class="tab" data-tab="${escapeHtml(s.key)}">${navIcon(s.key)}<span>${escapeHtml(t(`services.${s.key}.name`))}</span></button>`
   ).join('');
   extraContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
@@ -166,7 +174,7 @@ async function refreshDynamicNav() {
 
   const installContainer = document.getElementById('nav-install-list');
   installContainer.innerHTML = installablePackages.map((s) =>
-    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${navIcon(s.key)}<span>${escapeHtml(t(`services.${s.key}.name`))}</span></button>`
   ).join('');
   installContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
