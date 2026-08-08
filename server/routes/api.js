@@ -19,6 +19,7 @@ import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../se
 import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
+import { getInstalledStatus as getResticStatus, getLocalRepoVersion as getResticLocalRepoVersion, installRestic } from '../services/restic.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -534,6 +535,27 @@ router.post('/redis/performance', async (req, res) => {
       maxClients: req.body?.maxClients,
       slowlogEnabled: Boolean(req.body?.slowlogEnabled)
     });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/restic/status', async (req, res) => {
+  res.json(await getResticStatus());
+});
+
+router.get('/restic/local-version', async (req, res) => {
+  try {
+    res.json({ version: await getResticLocalRepoVersion() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/restic/install', async (req, res) => {
+  try {
+    const result = await installRestic({ mode: req.body?.mode });
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

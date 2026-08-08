@@ -217,8 +217,19 @@ async function refreshDynamicNav() {
     return;
   }
 
+  // Restic nie ma jednostki systemd (samodzielne CLI), wiec nie jest w
+  // SERVICE_REGISTRY / GET /services - dokladamy go recznie tylko do listy
+  // "Install" (nigdy jako normalna zakladke uslugi, bo nie ma jej co pokazac).
+  let resticEntry = null;
+  try {
+    const resticStatus = await api('GET', '/restic/status');
+    resticEntry = { key: 'restic', found: resticStatus.installed, installable: true };
+  } catch {
+    resticEntry = null;
+  }
+
   const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key));
-  const installablePackages = services.filter((s) => s.installable);
+  const installablePackages = services.filter((s) => s.installable).concat(resticEntry ? [resticEntry] : []);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
   INSTALL_DETAIL_TABS = installablePackages.map((s) => `install:${s.key}`);
@@ -901,9 +912,122 @@ function wireRedisInstallTile() {
   updateButtonState();
 }
 
+function resticInstallTileHtml(status) {
+  const name = t('services.restic.name');
+  const description = t('install.restic.description');
+
+  if (status.installed) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.restic.installed_hint', { version: status.version || '?' })}</p>
+        <div class="action-msg" id="restic-install-msg"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:13px;">
+        <input type="radio" name="restic-mode" value="local" checked style="margin-top:3px;">
+        <span>
+          <strong>${t('install.restic.mode_local')}</strong><br>
+          <span id="restic-local-version" style="color:var(--muted);font-size:12px;">${t('install.restic.checking_version')}</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:16px;">
+        <input type="radio" name="restic-mode" value="official" style="margin-top:3px;">
+        <span>
+          <strong>${t('install.restic.mode_official')}</strong><br>
+          <span style="color:var(--muted);font-size:12px;">${t('install.restic.mode_official_detail')}</span>
+        </span>
+      </label>
+
+      <button type="button" id="restic-install-btn" disabled>${t('install.install_button')}</button>
+      <div class="action-msg" id="restic-install-msg"></div>
+    </div>
+  `;
+}
+
+function wireResticInstallTile() {
+  const btn = document.getElementById('restic-install-btn');
+  if (!btn) return;
+  const localVersionEl = document.getElementById('restic-local-version');
+  const msgEl = document.getElementById('restic-install-msg');
+  let localVersionLoaded = false;
+
+  function selectedMode() {
+    return document.querySelector('input[name="restic-mode"]:checked').value;
+  }
+
+  function updateButtonState() {
+    const mode = selectedMode();
+    btn.disabled = mode === 'local' ? !localVersionLoaded : false;
+  }
+
+  document.querySelectorAll('input[name="restic-mode"]').forEach((r) => {
+    r.onchange = updateButtonState;
+  });
+
+  (async () => {
+    try {
+      const { version } = await api('GET', '/restic/local-version');
+      localVersionEl.textContent = version
+        ? t('install.restic.local_version_found', { version })
+        : t('install.restic.local_version_unknown');
+      localVersionLoaded = true;
+    } catch (e) {
+      localVersionEl.textContent = e.message;
+      localVersionLoaded = false;
+    }
+    updateButtonState();
+  })();
+
+  btn.onclick = async () => {
+    const mode = selectedMode();
+    if (!window.confirm(t('install.restic.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/restic/install', { mode });
+      const status = await api('GET', '/restic/status');
+      document.getElementById('content').innerHTML = resticInstallTileHtml(status);
+      applyTranslations();
+      const successEl = document.getElementById('restic-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+
+  updateButtonState();
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
+    if (key === 'restic') {
+      const status = await api('GET', '/restic/status');
+      content.innerHTML = resticInstallTileHtml(status);
+      applyTranslations();
+      wireResticInstallTile();
+      return;
+    }
     const svc = await api('GET', `/services/${key}`);
     if (key === 'mariadb') {
       content.innerHTML = mariadbInstallTileHtml(svc);
