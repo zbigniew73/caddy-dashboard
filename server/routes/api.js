@@ -154,9 +154,19 @@ async function getCaddySiteCountSafe() {
   }
 }
 
+async function getGoVersionSafe() {
+  const { installed, version } = await getGoStatus();
+  return installed && version ? `v${version}` : null;
+}
+
+async function getResticVersionSafe() {
+  const { installed, version } = await getResticStatus();
+  return installed && version ? `v${version}` : null;
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, caddySiteCount] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, goVersion, resticVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
     getPythonVersion(),
@@ -164,6 +174,8 @@ router.get('/system', async (req, res) => {
     getPostgresqlVersion(),
     getMongodbVersion(),
     getRedisVersion(),
+    getGoVersionSafe(),
+    getResticVersionSafe(),
     getCaddySiteCountSafe()
   ]);
 
@@ -215,7 +227,9 @@ router.get('/system', async (req, res) => {
       mongodb: mongodbVersion,
       redis: redisVersion,
       node: process.version,
-      python: pythonVersion
+      python: pythonVersion,
+      go: goVersion,
+      restic: resticVersion
     },
     usersCount: getAllowedUsers().length,
     caddySiteCount

@@ -408,7 +408,9 @@ async function renderSystemTab(content, { silent = false } = {}) {
     ];
     const runtimeItems = [
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
-      ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
+      ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))],
+      ['system.go_version', escapeHtml(info.versions.go || t('system.not_found'))],
+      ['system.restic_version', escapeHtml(info.versions.restic || t('system.not_found'))]
     ];
 
     content.innerHTML = `

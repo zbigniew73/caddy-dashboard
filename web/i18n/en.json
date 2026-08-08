@@ -243,6 +243,8 @@
   "system.redis_version": "Redis",
   "system.node_version": "Node",
   "system.python_version": "Python",
+  "system.go_version": "Go",
+  "system.restic_version": "Restic",
   "system.not_found": "not found",
   "system.cpu": "CPU",
   "system.cpu_detail": "{model} · {cores} cores",
