@@ -157,6 +157,9 @@ document.getElementById('update-badge').onclick = async () => {
     badge.textContent = t('update.updated_restart', { version: result.newVersion });
     badge.className = 'update-badge stable';
     latestUpdateInfo = { updateAvailable: false };
+    const restartHint = document.getElementById('update-restart-hint');
+    restartHint.textContent = t('update.restart_command');
+    restartHint.style.display = '';
   } catch (e) {
     badge.textContent = t('update.error');
     badge.className = 'update-badge update';

@@ -134,6 +134,7 @@
   "update.checking": "Checking...",
   "update.updating": "Updating...",
   "update.updated_restart": "Updated to v{version} - restart the service",
+  "update.restart_command": "Run: sudo systemctl restart caddy-dashboard",
   "update.error": "Update failed",
   "theme.light": "Light",
   "theme.dark": "Dark",
