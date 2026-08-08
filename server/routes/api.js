@@ -20,6 +20,7 @@ import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceCo
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
 import { getInstalledStatus as getResticStatus, getLocalRepoVersion as getResticLocalRepoVersion, installRestic } from '../services/restic.js';
+import { getInstalledStatus as getGoStatus, getLocalRepoVersion as getGoLocalRepoVersion, installGo } from '../services/go.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -556,6 +557,27 @@ router.get('/restic/local-version', async (req, res) => {
 router.post('/restic/install', async (req, res) => {
   try {
     const result = await installRestic({ mode: req.body?.mode });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/go/status', async (req, res) => {
+  res.json(await getGoStatus());
+});
+
+router.get('/go/local-version', async (req, res) => {
+  try {
+    res.json({ version: await getGoLocalRepoVersion() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/go/install', async (req, res) => {
+  try {
+    const result = await installGo({ mode: req.body?.mode });
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
