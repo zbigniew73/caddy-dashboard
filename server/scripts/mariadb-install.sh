@@ -3,8 +3,9 @@
 # Instaluje MariaDB dwiema sciezkami: "local" (pakiet z domyslnego
 # repozytorium Alma/Rocky) albo "official" <wersja> (oficjalne repo
 # MariaDB.com, wersja 10.11 albo 11.8). Po instalacji generuje losowe
-# 16-znakowe haslo i zapisuje je w /root/.mariadb - haslo NIE jest jeszcze
-# ustawiane w samej bazie, to osobny krok na pozniej.
+# 16-znakowe haslo, ustawia je jako haslo uzytkownika root@localhost w samej
+# bazie (przez unix_socket, dostepne od razu po swiezej instalacji) i dopiero
+# PO potwierdzonym sukcesie zapisuje je w /root/.mariadb.
 
 set -uo pipefail
 
@@ -34,10 +35,16 @@ systemctl enable --now mariadb || err "Pakiet zainstalowany, ale nie udalo sie u
 
 if [ ! -f "$PWFILE" ]; then
   PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
+
+  mariadb -u root <<SQL || err "Wygenerowano haslo, ale nie udalo sie ustawic go jako haslo root w MariaDB."
+ALTER USER 'root'@'localhost' IDENTIFIED BY '${PASSWORD}';
+FLUSH PRIVILEGES;
+SQL
+
   umask 077
   printf '%s\n' "$PASSWORD" > "$PWFILE"
   chown root:root "$PWFILE"
   chmod 600 "$PWFILE"
 fi
 
-echo "OK: MariaDB zainstalowany i uruchomiony. Haslo wygenerowane w ${PWFILE} (tryb: ${MODE}${VERSION:+ $VERSION})."
+echo "OK: MariaDB zainstalowany i uruchomiony. Haslo root ustawione w bazie i zapisane w ${PWFILE} (tryb: ${MODE}${VERSION:+ $VERSION})."
