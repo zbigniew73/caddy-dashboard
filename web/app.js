@@ -383,7 +383,9 @@ async function renderSystemTab(content, { silent = false } = {}) {
       ['system.mariadb_version', escapeHtml(info.versions.mariadb || t('system.not_found'))],
       ['system.postgresql_version', escapeHtml(info.versions.postgresql || t('system.not_found'))],
       ['system.mongodb_version', escapeHtml(info.versions.mongodb || t('system.not_found'))],
-      ['system.redis_version', escapeHtml(info.versions.redis || t('system.not_found'))],
+      ['system.redis_version', escapeHtml(info.versions.redis || t('system.not_found'))]
+    ];
+    const runtimeItems = [
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
       ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
     ];
@@ -402,6 +404,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
           <div style="display:flex;gap:40px;align-items:flex-start;">
             <div class="info-grid" style="grid-template-columns:1fr;">${systemItems.map(infoItem).join('')}</div>
             <div class="info-grid" style="grid-template-columns:1fr;">${versionItems.map(infoItem).join('')}</div>
+            <div class="info-grid" style="grid-template-columns:1fr;">${runtimeItems.map(infoItem).join('')}</div>
           </div>
           <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
         </div>
