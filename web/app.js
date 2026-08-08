@@ -1220,8 +1220,8 @@ async function wrapMariadbExtras(serviceHtml) {
   const perfHtml = await renderMariadbPerformanceSection();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 50%;max-width:50%;">${serviceHtml}</div>
-      <div style="flex:1 1 50%;max-width:50%;">${perfHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
     </div>
   `;
 }
