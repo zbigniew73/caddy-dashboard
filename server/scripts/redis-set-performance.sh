@@ -20,13 +20,17 @@ read -r SLOWLOG_THRESHOLD
 [ -f "$PWFILE" ] || err "Nie znaleziono ${PWFILE} - czy Redis zostal zainstalowany przez ten panel?"
 PASSWORD="$(cat "$PWFILE")"
 
-redis-cli -a "$PASSWORD" --no-auth-warning CONFIG SET maxmemory "${MAXMEMORY_MB}mb" >/dev/null \
+CLI="redis-cli"
+command -v redis-cli >/dev/null 2>&1 || CLI="valkey-cli"
+command -v "$CLI" >/dev/null 2>&1 || err "Nie znaleziono ani redis-cli, ani valkey-cli."
+
+"$CLI" -a "$PASSWORD" --no-auth-warning CONFIG SET maxmemory "${MAXMEMORY_MB}mb" >/dev/null \
   || err "Nie udalo sie ustawic maxmemory."
-redis-cli -a "$PASSWORD" --no-auth-warning CONFIG SET maxclients "$MAXCLIENTS" >/dev/null \
+"$CLI" -a "$PASSWORD" --no-auth-warning CONFIG SET maxclients "$MAXCLIENTS" >/dev/null \
   || err "Nie udalo sie ustawic maxclients."
-redis-cli -a "$PASSWORD" --no-auth-warning CONFIG SET slowlog-log-slower-than "$SLOWLOG_THRESHOLD" >/dev/null \
+"$CLI" -a "$PASSWORD" --no-auth-warning CONFIG SET slowlog-log-slower-than "$SLOWLOG_THRESHOLD" >/dev/null \
   || err "Nie udalo sie ustawic slowlog-log-slower-than."
-redis-cli -a "$PASSWORD" --no-auth-warning CONFIG REWRITE >/dev/null \
+"$CLI" -a "$PASSWORD" --no-auth-warning CONFIG REWRITE >/dev/null \
   || err "Ustawienia zastosowane na zywo, ale trwaly zapis (CONFIG REWRITE) nie powiodl sie."
 
 echo "OK: konfiguracja wydajnosci Redis zastosowana natychmiast (bez restartu) i zapisana trwale."

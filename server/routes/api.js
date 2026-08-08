@@ -132,13 +132,16 @@ async function getMongodbVersion() {
 }
 
 async function getRedisVersion() {
-  try {
-    const { stdout } = await execFileAsync('redis-server', ['--version'], { timeout: 3000 });
-    const match = stdout.match(/v=([\d.]+)/);
-    return match ? `v${match[1]}` : null;
-  } catch {
-    return null;
+  for (const bin of ['redis-server', 'valkey-server']) {
+    try {
+      const { stdout } = await execFileAsync(bin, ['--version'], { timeout: 3000 });
+      const match = stdout.match(/v=([\d.]+)/);
+      if (match) return `v${match[1]}`;
+    } catch {
+      // sprobuj kolejnego binarnego pliku
+    }
   }
+  return null;
 }
 
 async function getCaddySiteCountSafe() {

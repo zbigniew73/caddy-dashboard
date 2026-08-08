@@ -6,6 +6,12 @@
 # utrzymuje rownoleglych repozytoriow per-wersja, wiec nie ma tu wyboru
 # konkretnego numeru).
 #
+# Uwaga: Alma/Rocky 9.5+/10 zastapily pakiet "redis" forkiem "valkey" po
+# zmianie licencji Redis Ltd w 2024 (SSPL, niedopuszczona do RHEL/EPEL) -
+# sciezka "local" probuje "redis", potem fallback na "valkey". Sciezka
+# "official" zawsze instaluje prawdziwy pakiet "redis" z wlasnego
+# repozytorium Redis Ltd, tego problemu nie dotyczy.
+#
 # Po instalacji: generuje losowe 16-znakowe haslo i ustawia je jako
 # requirepass. W Redis to dziala NATYCHMIAST bez restartu (CONFIG SET),
 # trwaly zapis do redis.conf robi CONFIG REWRITE. Haslo zapisuje w
@@ -20,7 +26,9 @@ err() { echo "BLAD: $*" >&2; exit 1; }
 
 case "$MODE" in
   local)
-    dnf install -y redis || err "Instalacja z lokalnego repozytorium nie powiodla sie."
+    if ! dnf install -y redis 2>/dev/null && ! dnf install -y valkey; then
+      err "Instalacja z lokalnego repozytorium nie powiodla sie (probowano pakietow redis i valkey)."
+    fi
     ;;
   official)
     rpm --import https://packages.redis.io/gpg || err "Import klucza GPG Redis nie powiodl sie."
@@ -40,26 +48,39 @@ REPOEOF
     ;;
 esac
 
-systemctl enable --now redis || err "Zainstalowano, ale nie udalo sie uruchomic/wlaczyc uslugi redis."
+SVC_UNIT=""
+for u in redis.service valkey.service; do
+  if systemctl list-unit-files "$u" --no-legend 2>/dev/null | grep -q "$u"; then
+    SVC_UNIT="$u"
+    break
+  fi
+done
+[ -n "$SVC_UNIT" ] || err "Nie znaleziono jednostki systemd redis.service ani valkey.service po instalacji."
+
+systemctl enable --now "$SVC_UNIT" || err "Zainstalowano, ale nie udalo sie uruchomic/wlaczyc uslugi ${SVC_UNIT}."
+
+CLI="redis-cli"
+command -v redis-cli >/dev/null 2>&1 || CLI="valkey-cli"
+command -v "$CLI" >/dev/null 2>&1 || err "Nie znaleziono ani redis-cli, ani valkey-cli po instalacji."
 
 READY=""
 for _ in $(seq 1 30); do
-  if redis-cli ping >/dev/null 2>&1; then
+  if "$CLI" ping >/dev/null 2>&1; then
     READY=1
     break
   fi
   sleep 1
 done
-[ -n "$READY" ] || err "redis nie odpowiada po 30 sekundach od uruchomienia."
+[ -n "$READY" ] || err "${SVC_UNIT} nie odpowiada po 30 sekundach od uruchomienia."
 
 if [ ! -f "$PWFILE" ]; then
   PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
 
-  redis-cli CONFIG SET requirepass "$PASSWORD" >/dev/null \
+  "$CLI" CONFIG SET requirepass "$PASSWORD" >/dev/null \
     || err "Nie udalo sie ustawic hasla (requirepass) w Redis."
-  redis-cli -a "$PASSWORD" --no-auth-warning CONFIG REWRITE >/dev/null \
+  "$CLI" -a "$PASSWORD" --no-auth-warning CONFIG REWRITE >/dev/null \
     || err "Haslo ustawione, ale trwaly zapis (CONFIG REWRITE) nie powiodl sie."
-  redis-cli -a "$PASSWORD" --no-auth-warning ping 2>/dev/null | grep -q PONG \
+  "$CLI" -a "$PASSWORD" --no-auth-warning ping 2>/dev/null | grep -q PONG \
     || err "Haslo ustawione, ale weryfikacja polaczenia z haslem nie powiodla sie."
 
   umask 077
@@ -71,4 +92,4 @@ if [ ! -f "$PWFILE" ]; then
   fi
 fi
 
-echo "OK: Redis zainstalowany i uruchomiony. Haslo (requirepass) ustawione i zapisane w ${PWFILE} (tryb: ${MODE})."
+echo "OK: Redis zainstalowany i uruchomiony (${SVC_UNIT}). Haslo (requirepass) ustawione i zapisane w ${PWFILE} (tryb: ${MODE})."
