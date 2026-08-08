@@ -365,10 +365,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
     const swapDetail = info.swap ? t('system.used_of', { used: formatBytes(info.swap.usedBytes), total: formatBytes(info.swap.totalBytes) }) : null;
 
     const infoItem = ([labelKey, value]) => `
-      <div>
-        <div class="info-label" data-i18n="${labelKey}"></div>
-        <div class="info-value">${value}</div>
-      </div>
+      <div class="info-line"><span class="info-label" data-i18n="${labelKey}"></span> <span class="info-value">${value}</span></div>
     `;
     const systemItems = [
       ['system.hostname', escapeHtml(info.hostname)],

@@ -171,8 +171,9 @@
   .system-info-card dt { color: var(--muted); font-size: 14px; }
   .system-info-card dd { margin: 0; font-family: var(--mono); font-size: 16px; }
 
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; }
-  .info-grid .info-label { color: var(--muted); font-size: 14px; margin-bottom: 2px; }
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+  .info-grid .info-label { color: var(--muted); font-size: 14px; }
+  .info-grid .info-label::after { content: ":"; }
   .info-grid .info-value { font-family: var(--mono); font-size: 16px; }
 
   .firewall-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px; }
