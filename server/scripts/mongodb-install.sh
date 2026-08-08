@@ -83,9 +83,12 @@ if [ ! -f "$PWFILE" ]; then
   fi
 
   umask 077
-  printf '%s\n' "$PASSWORD" > "$PWFILE"
-  chown root:root "$PWFILE"
-  chmod 600 "$PWFILE"
+  if ! printf '%s\n' "$PASSWORD" > "$PWFILE"; then
+    err "Autoryzacja wlaczona i uzytkownik admin ustawiony w bazie (haslo: ${PASSWORD}), ale zapis ${PWFILE} nie powiodl sie - zapisz to haslo recznie."
+  fi
+  if ! chown root:root "$PWFILE" || ! chmod 600 "$PWFILE"; then
+    err "Haslo zapisane w ${PWFILE}, ale nie udalo sie ustawic wlasciciela/uprawnien pliku - sprawdz recznie (powinno byc chown root:root, chmod 600)."
+  fi
 fi
 
 echo "OK: MongoDB ${VERSION} zainstalowany i uruchomiony (autoryzacja wlaczona). Haslo administratora ustawione i zapisane w ${PWFILE}."
