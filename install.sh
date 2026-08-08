@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.6.1"
+APP_VERSION="1.7.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -517,8 +517,9 @@ Cmnd_Alias CDDASH_FIREWALL = /usr/bin/firewall-cmd *
 Cmnd_Alias CDDASH_SSH_PORT = ${INSTALL_DIR}/server/scripts/ssh-set-port.sh *
 Cmnd_Alias CDDASH_REBOOT = /usr/bin/systemctl reboot
 Cmnd_Alias CDDASH_FAIL2BAN = ${INSTALL_DIR}/server/scripts/fail2ban-write-config.sh
+Cmnd_Alias CDDASH_CADDY_PERF = ${INSTALL_DIR}/server/scripts/caddy-set-performance.sh
 
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF
 EOF
   if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
     install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/caddy-dashboard

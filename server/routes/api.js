@@ -7,6 +7,7 @@ import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
+import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig } from '../services/caddyPerformance.js';
 
 const router = Router();
 
@@ -270,6 +271,19 @@ router.post('/caddy/turnstile/mode', (req, res) => {
   try {
     setTurnstileEnabled(Boolean(req.body?.enabled));
     res.json(getTurnstilePublicConfig());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/caddy/performance', (req, res) => {
+  res.json(getCaddyPerformanceStatus());
+});
+
+router.post('/caddy/performance', async (req, res) => {
+  try {
+    const result = await applyPerformanceConfig({ profile: req.body?.profile, expertBlock: req.body?.expertBlock });
+    res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

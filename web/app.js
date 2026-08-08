@@ -867,13 +867,113 @@ function wireTurnstileSection() {
   }
 }
 
-async function wrapCaddyWithTurnstile(serviceHtml) {
+const CADDYPERF_PROFILE_KEYS = ['balanced', 'low_ram', 'high_throughput'];
+let CADDYPERF_PROFILE_BLOCKS = {};
+
+async function renderCaddyPerformanceSection() {
+  let status;
+  try {
+    status = await api('GET', '/caddy/performance');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  CADDYPERF_PROFILE_BLOCKS = status.profileBlocks || {};
+
+  const isExpertActive = status.profile === 'expert';
+  const selectedProfile = status.active && !isExpertActive ? status.profile : 'balanced';
+  const currentLabel = !status.active
+    ? t('caddyperf.status_none')
+    : (isExpertActive ? t('caddyperf.status_expert') : t(`caddyperf.profile_${status.profile}`));
+
+  const profileOption = (key) => `
+    <label style="display:flex;align-items:center;gap:6px;margin-right:16px;font-size:13px;">
+      <input type="radio" name="caddyperf-profile" value="${key}" ${key === selectedProfile ? 'checked' : ''}>
+      ${t(`caddyperf.profile_${key}`)}
+    </label>
+  `;
+
+  const initialTextareaValue = isExpertActive ? status.block : (CADDYPERF_PROFILE_BLOCKS[selectedProfile] || '');
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('caddyperf.title')}</h3>
+      <p style="margin:0 0 10px;color:var(--muted);font-size:13px;">${t('caddyperf.description')}</p>
+      <p style="margin:0 0 14px;color:var(--warning);font-size:12px;">${t('caddyperf.warning')}</p>
+      <div class="action-msg" style="margin-bottom:10px;">${escapeHtml(t('caddyperf.current_label'))}: ${escapeHtml(currentLabel)}</div>
+      <div style="display:flex;flex-wrap:wrap;margin-bottom:12px;">
+        ${CADDYPERF_PROFILE_KEYS.map(profileOption).join('')}
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px;">
+        <input type="checkbox" id="caddyperf-expert-toggle" ${isExpertActive ? 'checked' : ''}>
+        ${t('caddyperf.expert_mode_label')}
+      </label>
+      <textarea id="caddyperf-expert-textarea" rows="10" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;display:${isExpertActive ? 'block' : 'none'};">${escapeHtml(initialTextareaValue)}</textarea>
+      <div class="service-actions" style="margin-top:12px;">
+        <button type="button" id="caddyperf-apply-btn">${t('caddyperf.apply_button')}</button>
+      </div>
+      <div class="action-msg" id="caddyperf-msg"></div>
+    </div>
+  `;
+}
+
+function wireCaddyPerformanceSection() {
+  const applyBtn = document.getElementById('caddyperf-apply-btn');
+  if (!applyBtn) return;
+  const expertToggle = document.getElementById('caddyperf-expert-toggle');
+  const textarea = document.getElementById('caddyperf-expert-textarea');
+  const msgEl = document.getElementById('caddyperf-msg');
+
+  function selectedProfileKey() {
+    const checked = document.querySelector('input[name="caddyperf-profile"]:checked');
+    return checked ? checked.value : 'balanced';
+  }
+
+  expertToggle.onchange = () => {
+    textarea.style.display = expertToggle.checked ? 'block' : 'none';
+    if (expertToggle.checked && !textarea.dataset.userEdited) {
+      textarea.value = CADDYPERF_PROFILE_BLOCKS[selectedProfileKey()] || '';
+    }
+  };
+
+  document.querySelectorAll('input[name="caddyperf-profile"]').forEach((radio) => {
+    radio.onchange = () => {
+      if (expertToggle.checked) {
+        textarea.value = CADDYPERF_PROFILE_BLOCKS[selectedProfileKey()] || '';
+        delete textarea.dataset.userEdited;
+      }
+    };
+  });
+
+  textarea.oninput = () => { textarea.dataset.userEdited = '1'; };
+
+  applyBtn.onclick = async () => {
+    if (!window.confirm(t('caddyperf.confirm_apply'))) return;
+    applyBtn.disabled = true;
+    msgEl.textContent = t('caddyperf.applying');
+    msgEl.className = 'action-msg';
+    try {
+      const body = expertToggle.checked
+        ? { profile: 'expert', expertBlock: textarea.value }
+        : { profile: selectedProfileKey() };
+      await api('POST', '/caddy/performance', body);
+      await renderTab();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      applyBtn.disabled = false;
+    }
+  };
+}
+
+async function wrapCaddyExtras(serviceHtml) {
   const turnstileHtml = await renderTurnstileSection();
+  const perfHtml = await renderCaddyPerformanceSection();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1 1 45%;max-width:45%;">${serviceHtml}</div>
       <div style="flex:1 1 45%;max-width:45%;">${turnstileHtml}</div>
     </div>
+    <div style="margin-top:16px;">${perfHtml}</div>
   `;
 }
 
@@ -900,13 +1000,13 @@ function wireServiceActions(key) {
         if (key === 'ssh' && svc.found) html += await renderSshPortSection();
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
-        if (key === 'caddy' && svc.found) html = await wrapCaddyWithTurnstile(html);
+        if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
         if (key === 'fail2ban' && svc.found) wireFail2banSection();
-        if (key === 'caddy' && svc.found) wireTurnstileSection();
+        if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -927,13 +1027,13 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'ssh' && svc.found) html += await renderSshPortSection();
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
-    if (key === 'caddy' && svc.found) html = await wrapCaddyWithTurnstile(html);
+    if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
-    if (key === 'caddy' && svc.found) wireTurnstileSection();
+    if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
