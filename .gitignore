@@ -3,6 +3,7 @@ node_modules
 caddy-dashboard.service
 *.log
 .DS_Store
+/data
 
 zrobione.md
 do_zrobienia.md

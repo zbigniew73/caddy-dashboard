@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getCurrentSshPort } from './sshConfig.js';
+import { getNote, setNote, deleteNote } from './firewallNotes.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,13 +35,13 @@ async function listFirewallEntries() {
   const services = servicesOut.trim().split(/\s+/).filter(Boolean).map((name) => ({ type: 'service', name }));
   const ports = portsOut.trim().split(/\s+/).filter(Boolean).map((entry) => {
     const [port, protocol] = entry.split('/');
-    return { type: 'port', port, protocol };
+    return { type: 'port', port, protocol, description: getNote(port, protocol) };
   });
 
   return { zone, entries: [...services, ...ports] };
 }
 
-async function addFirewallPort(port, protocol) {
+async function addFirewallPort(port, protocol, description) {
   const portNum = parseInt(port, 10);
   if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
     throw Object.assign(new Error('Nieprawidlowy numer portu (1-65535)'), { status: 400 });
@@ -51,6 +52,20 @@ async function addFirewallPort(port, protocol) {
 
   await firewallCmd(['--permanent', '--add-port', `${portNum}/${protocol}`]);
   await firewallCmd(['--reload']);
+  setNote(portNum, protocol, (description || '').toString().trim());
+  return listFirewallEntries();
+}
+
+async function updateFirewallPortDescription(port, protocol, description) {
+  const portNum = parseInt(port, 10);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    throw Object.assign(new Error('Nieprawidlowy numer portu (1-65535)'), { status: 400 });
+  }
+  if (!['tcp', 'udp'].includes(protocol)) {
+    throw Object.assign(new Error("Protokol musi byc 'tcp' albo 'udp'"), { status: 400 });
+  }
+
+  setNote(portNum, protocol, (description || '').toString().trim());
   return listFirewallEntries();
 }
 
@@ -74,6 +89,7 @@ async function removeFirewallEntry(type, value) {
       );
     }
     await firewallCmd(['--permanent', '--remove-port', value]);
+    deleteNote(port, String(value).split('/')[1]);
   } else {
     throw Object.assign(new Error('Nieznany typ wpisu'), { status: 400 });
   }
@@ -82,4 +98,4 @@ async function removeFirewallEntry(type, value) {
   return listFirewallEntries();
 }
 
-export { listFirewallEntries, addFirewallPort, removeFirewallEntry };
+export { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry };

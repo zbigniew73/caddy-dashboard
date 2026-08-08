@@ -488,14 +488,18 @@ async function renderFirewallSection() {
     const { entries } = await api('GET', '/firewall/entries');
     const rows = entries.map((e) => {
       if (e.type === 'service') {
-        return `<tr><td>${escapeHtml(e.name)}</td><td>${t('firewall.type_service')}</td><td></td></tr>`;
+        return `<tr><td>${escapeHtml(e.name)}</td><td>${t('firewall.type_service')}</td><td></td><td></td></tr>`;
       }
       const value = `${e.port}/${e.protocol}`;
       return `
         <tr>
           <td>${escapeHtml(e.port)}</td>
           <td>${escapeHtml(e.protocol.toUpperCase())}</td>
-          <td><button type="button" class="danger" data-remove-type="port" data-remove-value="${escapeHtml(value)}">${t('firewall.remove')}</button></td>
+          <td>${escapeHtml(e.description || '')}</td>
+          <td>
+            <button type="button" class="secondary" data-edit-type="port" data-edit-value="${escapeHtml(value)}" data-edit-desc="${escapeHtml(e.description || '')}">${t('firewall.edit')}</button>
+            <button type="button" class="danger" data-remove-type="port" data-remove-value="${escapeHtml(value)}">${t('firewall.remove')}</button>
+          </td>
         </tr>
       `;
     }).join('');
@@ -507,6 +511,7 @@ async function renderFirewallSection() {
             <tr>
               <th data-i18n="firewall.col_port"></th>
               <th data-i18n="firewall.col_protocol"></th>
+              <th data-i18n="firewall.col_description"></th>
               <th></th>
             </tr>
           </thead>
@@ -519,6 +524,7 @@ async function renderFirewallSection() {
           <option value="tcp">TCP</option>
           <option value="udp">UDP</option>
         </select>
+        <input type="text" id="fw-new-desc" maxlength="100" placeholder="${t('firewall.new_desc_placeholder')}" style="width:220px;">
         <button type="button" id="fw-add-port-btn">${t('firewall.add_button')}</button>
       </div>
       <div class="action-msg" id="fw-port-msg"></div>
@@ -556,13 +562,36 @@ function wireFirewallSection() {
     };
   });
 
+  document.querySelectorAll('[data-edit-type]').forEach((btn) => {
+    btn.onclick = async () => {
+      const value = btn.dataset.editValue;
+      const [port, protocol] = value.split('/');
+      const current = btn.dataset.editDesc || '';
+      const description = window.prompt(t('firewall.edit_description_prompt', { value }), current);
+      if (description === null) return;
+
+      const msgEl = document.getElementById('fw-port-msg');
+      btn.disabled = true;
+      try {
+        await api('POST', '/firewall/entries/description', { port, protocol, description });
+        await refreshFirewallSection();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
   const addBtn = document.getElementById('fw-add-port-btn');
   if (addBtn) {
     addBtn.onclick = async () => {
       const portInput = document.getElementById('fw-new-port');
       const protocolSelect = document.getElementById('fw-new-protocol');
+      const descInput = document.getElementById('fw-new-desc');
       const port = parseInt(portInput.value, 10);
       const protocol = protocolSelect.value;
+      const description = descInput.value.trim();
       const msgEl = document.getElementById('fw-port-msg');
 
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -576,7 +605,7 @@ function wireFirewallSection() {
       msgEl.textContent = t('firewall.adding');
       msgEl.className = 'action-msg';
       try {
-        await api('POST', '/firewall/entries', { port, protocol });
+        await api('POST', '/firewall/entries', { port, protocol, description });
         await refreshFirewallSection();
       } catch (e) {
         msgEl.textContent = e.message;

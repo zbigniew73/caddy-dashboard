@@ -4,7 +4,7 @@ import fs from 'fs';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
-import { listFirewallEntries, addFirewallPort, removeFirewallEntry } from '../services/firewall.js';
+import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 
 const router = Router();
@@ -187,7 +187,16 @@ router.get('/firewall/entries', async (req, res) => {
 
 router.post('/firewall/entries', async (req, res) => {
   try {
-    const result = await addFirewallPort(req.body?.port, req.body?.protocol);
+    const result = await addFirewallPort(req.body?.port, req.body?.protocol, req.body?.description);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/firewall/entries/description', async (req, res) => {
+  try {
+    const result = await updateFirewallPortDescription(req.body?.port, req.body?.protocol, req.body?.description);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
