@@ -13,6 +13,8 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
+import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql } from '../services/postgresql.js';
+import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -386,6 +388,40 @@ router.post('/mariadb/performance', async (req, res) => {
       innodbBufferPoolMb: req.body?.innodbBufferPoolMb,
       maxConnections: req.body?.maxConnections,
       performanceSchema: Boolean(req.body?.performanceSchema)
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/postgresql/local-version', async (req, res) => {
+  try {
+    res.json({ version: await getPostgresqlLocalRepoVersion() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/postgresql/install', async (req, res) => {
+  try {
+    const result = await installPostgresql({ mode: req.body?.mode, version: req.body?.version });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/postgresql/ram-info', (req, res) => {
+  res.json(getPostgresqlRamRecommendation());
+});
+
+router.post('/postgresql/performance', async (req, res) => {
+  try {
+    const result = await applyPostgresqlPerformanceConfig({
+      sharedBuffersMb: req.body?.sharedBuffersMb,
+      maxConnections: req.body?.maxConnections,
+      trackActivities: Boolean(req.body?.trackActivities)
     });
     res.json(result);
   } catch (e) {

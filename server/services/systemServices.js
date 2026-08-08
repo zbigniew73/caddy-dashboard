@@ -9,7 +9,15 @@ const SERVICE_REGISTRY = [
   { key: 'cron', unitCandidates: ['crond.service'] },
   { key: 'caddy', unitCandidates: ['caddy.service'] },
   { key: 'fail2ban', unitCandidates: ['fail2ban.service'], installable: { packageName: 'fail2ban' } },
-  { key: 'mariadb', unitCandidates: ['mariadb.service', 'mysql.service'], installable: { custom: true } }
+  { key: 'mariadb', unitCandidates: ['mariadb.service', 'mysql.service'], installable: { custom: true } },
+  {
+    key: 'postgresql',
+    unitCandidates: [
+      'postgresql-17.service', 'postgresql-16.service', 'postgresql-15.service',
+      'postgresql-14.service', 'postgresql-13.service', 'postgresql.service'
+    ],
+    installable: { custom: true }
+  }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];

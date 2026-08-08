@@ -42,7 +42,8 @@ async function api(method, url, body) {
 const NAV_ICON_DEFAULT = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 const NAV_ICONS = {
   fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
-  mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
+  mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
+  postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
 };
 function navIcon(key) {
   return NAV_ICONS[key] || NAV_ICON_DEFAULT;
@@ -566,6 +567,123 @@ function wireMariadbInstallTile() {
   updateButtonState();
 }
 
+function postgresqlInstallTileHtml(svc) {
+  const name = t('services.postgresql.name');
+  const description = t('install.postgresql.description');
+
+  if (svc.found) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.postgresql.password_hint')}</p>
+        <div class="action-msg" id="postgresql-install-msg"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:13px;">
+        <input type="radio" name="postgresql-mode" value="local" checked style="margin-top:3px;">
+        <span>
+          <strong>${t('install.postgresql.mode_local')}</strong><br>
+          <span id="postgresql-local-version" style="color:var(--muted);font-size:12px;">${t('install.postgresql.checking_version')}</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:14px;">
+        <input type="radio" name="postgresql-mode" value="official" style="margin-top:3px;">
+        <span>
+          <strong>${t('install.postgresql.mode_official')}</strong><br>
+          <span style="color:var(--muted);font-size:12px;">${t('install.postgresql.mode_official_detail')}</span>
+        </span>
+      </label>
+
+      <div id="postgresql-version-select" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.postgresql.version_label')}</label>
+        <select id="postgresql-version">
+          <option value="17">17</option>
+          <option value="16">16</option>
+        </select>
+      </div>
+
+      <button type="button" id="postgresql-install-btn" disabled>${t('install.install_button')}</button>
+      <div class="action-msg" id="postgresql-install-msg"></div>
+    </div>
+  `;
+}
+
+function wirePostgresqlInstallTile() {
+  const btn = document.getElementById('postgresql-install-btn');
+  if (!btn) return;
+  const versionSelectWrap = document.getElementById('postgresql-version-select');
+  const localVersionEl = document.getElementById('postgresql-local-version');
+  const msgEl = document.getElementById('postgresql-install-msg');
+  let localVersionLoaded = false;
+
+  function selectedMode() {
+    return document.querySelector('input[name="postgresql-mode"]:checked').value;
+  }
+
+  function updateButtonState() {
+    const mode = selectedMode();
+    versionSelectWrap.style.display = mode === 'official' ? 'block' : 'none';
+    btn.disabled = mode === 'local' ? !localVersionLoaded : false;
+  }
+
+  document.querySelectorAll('input[name="postgresql-mode"]').forEach((r) => {
+    r.onchange = updateButtonState;
+  });
+
+  (async () => {
+    try {
+      const { version } = await api('GET', '/postgresql/local-version');
+      localVersionEl.textContent = version
+        ? t('install.postgresql.local_version_found', { version })
+        : t('install.postgresql.local_version_unknown');
+      localVersionLoaded = true;
+    } catch (e) {
+      localVersionEl.textContent = e.message;
+      localVersionLoaded = false;
+    }
+    updateButtonState();
+  })();
+
+  btn.onclick = async () => {
+    const mode = selectedMode();
+    const version = mode === 'official' ? document.getElementById('postgresql-version').value : undefined;
+    if (!window.confirm(t('install.postgresql.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/postgresql/install', { mode, version });
+      const svc = await api('GET', '/services/postgresql');
+      document.getElementById('content').innerHTML = postgresqlInstallTileHtml(svc);
+      applyTranslations();
+      const successEl = document.getElementById('postgresql-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+
+  updateButtonState();
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
@@ -574,6 +692,12 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = mariadbInstallTileHtml(svc);
       applyTranslations();
       wireMariadbInstallTile();
+      return;
+    }
+    if (key === 'postgresql') {
+      content.innerHTML = postgresqlInstallTileHtml(svc);
+      applyTranslations();
+      wirePostgresqlInstallTile();
       return;
     }
     content.innerHTML = installTileHtml(key, svc);
@@ -1226,6 +1350,87 @@ async function wrapMariadbExtras(serviceHtml) {
   `;
 }
 
+async function renderPostgresqlPerformanceSection() {
+  let ramInfo;
+  try {
+    ramInfo = await api('GET', '/postgresql/ram-info');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const ramHint = t('postgresqlperf.ram_hint', {
+    total: ramInfo.totalMb,
+    min: ramInfo.recommendedMinMb,
+    max: ramInfo.recommendedMaxMb
+  });
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('postgresqlperf.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('postgresqlperf.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('postgresqlperf.shared_buffers_label')}</label>
+      <input type="number" id="postgresqlperf-shared-buffers" value="1024" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${escapeHtml(ramHint)}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('postgresqlperf.max_connections_label')}</label>
+      <input type="number" id="postgresqlperf-max-connections" value="100" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('postgresqlperf.max_connections_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="postgresqlperf-track-activities" checked>
+        ${t('postgresqlperf.track_activities_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('postgresqlperf.track_activities_hint')}</div>
+
+      <button type="button" id="postgresqlperf-save-btn">${t('postgresqlperf.save_button')}</button>
+      <div class="action-msg" id="postgresqlperf-msg"></div>
+    </div>
+  `;
+}
+
+function wirePostgresqlPerformanceSection() {
+  const btn = document.getElementById('postgresqlperf-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('postgresqlperf-msg');
+
+  btn.onclick = async () => {
+    const sharedBuffersMb = parseInt(document.getElementById('postgresqlperf-shared-buffers').value, 10);
+    const maxConnections = parseInt(document.getElementById('postgresqlperf-max-connections').value, 10);
+    const trackActivities = document.getElementById('postgresqlperf-track-activities').checked;
+
+    if (!Number.isInteger(sharedBuffersMb) || !Number.isInteger(maxConnections)) {
+      msgEl.textContent = t('postgresqlperf.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('postgresqlperf.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('postgresqlperf.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/postgresql/performance', { sharedBuffersMb, maxConnections, trackActivities });
+      msgEl.textContent = t('postgresqlperf.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+async function wrapPostgresqlExtras(serviceHtml) {
+  const perfHtml = await renderPostgresqlPerformanceSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -1251,6 +1456,7 @@ function wireServiceActions(key) {
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
         if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
         if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
+        if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1258,6 +1464,7 @@ function wireServiceActions(key) {
         if (key === 'fail2ban' && svc.found) wireFail2banSection();
         if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
+        if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -1280,6 +1487,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
     if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
     if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
+    if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1287,6 +1495,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
     if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
     if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
+    if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
