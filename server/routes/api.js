@@ -216,8 +216,8 @@ router.post('/fail2ban/config', async (req, res) => {
   }
 });
 
-router.get('/ssh/port', (req, res) => {
-  res.json({ port: getCurrentSshPort() });
+router.get('/ssh/port', async (req, res) => {
+  res.json({ port: await getCurrentSshPort() });
 });
 
 router.post('/ssh/port', async (req, res) => {

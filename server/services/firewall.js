@@ -55,7 +55,7 @@ async function addFirewallPort(port, protocol) {
 }
 
 async function removeFirewallEntry(type, value) {
-  const sshPort = String(getCurrentSshPort());
+  const sshPort = String(await getCurrentSshPort());
 
   if (type === 'service') {
     if (value === 'ssh') {

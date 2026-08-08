@@ -12,11 +12,16 @@ NEW_PORT="${1:-}"
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
-[[ "$NEW_PORT" =~ ^[0-9]+$ ]] || err "Nieprawidlowy port: '${NEW_PORT}'"
-[ "$NEW_PORT" -ge 1 ] && [ "$NEW_PORT" -le 65535 ] || err "Port poza zakresem 1-65535: ${NEW_PORT}"
-
 CURRENT_PORT="$(grep -E '^Port[[:space:]]+[0-9]+' "$SSHD_CONFIG" 2>/dev/null | tail -1 | awk '{print $2}')"
 CURRENT_PORT="${CURRENT_PORT:-22}"
+
+if [ "$NEW_PORT" = "get" ]; then
+  echo "$CURRENT_PORT"
+  exit 0
+fi
+
+[[ "$NEW_PORT" =~ ^[0-9]+$ ]] || err "Nieprawidlowy port: '${NEW_PORT}'"
+[ "$NEW_PORT" -ge 1 ] && [ "$NEW_PORT" -le 65535 ] || err "Port poza zakresem 1-65535: ${NEW_PORT}"
 
 if [ "$NEW_PORT" = "$CURRENT_PORT" ]; then
   echo "OK: port juz ustawiony na ${NEW_PORT} - nic do zrobienia."

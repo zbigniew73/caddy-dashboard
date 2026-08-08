@@ -1,4 +1,3 @@
-import { readFileSync } from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
@@ -7,11 +6,11 @@ import { fileURLToPath } from 'url';
 const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/ssh-set-port.sh');
 
-function getCurrentSshPort() {
+async function getCurrentSshPort() {
   try {
-    const content = readFileSync('/etc/ssh/sshd_config', 'utf-8');
-    const match = content.match(/^Port\s+(\d+)/m);
-    return match ? parseInt(match[1], 10) : 22;
+    const { stdout } = await execFileAsync('sudo', ['-n', SCRIPT_PATH, 'get'], { timeout: 10000 });
+    const port = parseInt(stdout.trim(), 10);
+    return Number.isInteger(port) ? port : 22;
   } catch {
     return 22;
   }
