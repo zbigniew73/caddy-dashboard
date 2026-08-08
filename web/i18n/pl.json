@@ -5,7 +5,7 @@
   "login.error_wrong_password": "Nieprawidłowy użytkownik lub hasło",
   "login.error_session_expired": "Sesja wygasła - zaloguj się ponownie",
   "header.logout": "Wyloguj",
-  "nav.system": "System Info",
+  "nav.system": "Dashboard",
   "nav.services": "Usługi",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",

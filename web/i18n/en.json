@@ -5,7 +5,7 @@
   "login.error_wrong_password": "Invalid username or password",
   "login.error_session_expired": "Session expired - please log in again",
   "header.logout": "Log out",
-  "nav.system": "System Info",
+  "nav.system": "Dashboard",
   "nav.services": "Services",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",
