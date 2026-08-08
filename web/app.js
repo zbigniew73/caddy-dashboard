@@ -384,6 +384,14 @@ async function renderSystemTab(content, { silent = false } = {}) {
     ];
 
     content.innerHTML = `
+      <div class="system-grid">
+        ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
+        ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
+        ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
+        ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
+        ${countTile(t('system.all_users'), info.usersCount)}
+        ${countTile(t('system.all_sites'), info.caddySiteCount)}
+      </div>
       <div class="system-info-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
           <div style="display:flex;gap:40px;align-items:flex-start;">
@@ -393,14 +401,6 @@ async function renderSystemTab(content, { silent = false } = {}) {
           <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
         </div>
         <div class="action-msg" id="system-reboot-msg"></div>
-      </div>
-      <div class="system-grid">
-        ${meterTile(t('system.cpu'), info.cpu.usagePercent, cpuDetail)}
-        ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
-        ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
-        ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
-        ${countTile(t('system.all_users'), info.usersCount)}
-        ${countTile(t('system.all_sites'), info.caddySiteCount)}
       </div>
     `;
     applyTranslations();
