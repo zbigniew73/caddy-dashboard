@@ -85,7 +85,9 @@ async function getCaddyVersion() {
 async function getPythonVersion() {
   try {
     const { stdout, stderr } = await execFileAsync('python3', ['--version'], { timeout: 3000 });
-    return (stdout || stderr).trim() || null;
+    const raw = (stdout || stderr).trim();
+    const match = raw.match(/[\d.]+/);
+    return match ? `v${match[0]}` : (raw || null);
   } catch {
     return null;
   }
