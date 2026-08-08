@@ -36,6 +36,19 @@ dnf install -y mongodb-org || err "Instalacja pakietu mongodb-org nie powiodla s
 
 systemctl enable --now mongod || err "Zainstalowano, ale nie udalo sie uruchomic/wlaczyc uslugi mongod."
 
+# Pierwsze uruchomienie (swiezy, pusty katalog danych) potrafi trwac dluzej
+# niz zwykly restart - czekamy az mongod faktycznie odpowiada, zanim
+# sprobujemy sie polaczyc mongosh (bez tego: connect ECONNREFUSED).
+READY=""
+for _ in $(seq 1 30); do
+  if mongosh --quiet --eval "db.runCommand({ping:1})" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 1
+done
+[ -n "$READY" ] || err "mongod nie odpowiada na porcie 27017 po 30 sekundach od uruchomienia."
+
 if [ ! -f "$PWFILE" ]; then
   PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
 
