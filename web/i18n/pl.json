@@ -168,6 +168,7 @@
   "system.uptime": "Uptime",
   "system.caddy_version": "Caddy",
   "system.mariadb_version": "MariaDB",
+  "system.postgresql_version": "PostgreSQL",
   "system.node_version": "Node",
   "system.python_version": "Python",
   "system.not_found": "nie znaleziono",

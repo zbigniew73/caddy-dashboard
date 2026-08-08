@@ -379,6 +379,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
     const versionItems = [
       ['system.caddy_version', escapeHtml(info.versions.caddy || t('system.not_found'))],
       ['system.mariadb_version', escapeHtml(info.versions.mariadb || t('system.not_found'))],
+      ['system.postgresql_version', escapeHtml(info.versions.postgresql || t('system.not_found'))],
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
       ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
     ];

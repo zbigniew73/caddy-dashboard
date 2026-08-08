@@ -107,6 +107,16 @@ async function getMariadbVersion() {
   }
 }
 
+async function getPostgresqlVersion() {
+  try {
+    const { stdout } = await execFileAsync('psql', ['--version'], { timeout: 3000 });
+    const match = stdout.match(/([\d.]+)\s*$/);
+    return match ? `v${match[1]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getCaddySiteCountSafe() {
   try {
     return await getSiteCount();
@@ -117,11 +127,12 @@ async function getCaddySiteCountSafe() {
 
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, caddySiteCount] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
     getPythonVersion(),
     getMariadbVersion(),
+    getPostgresqlVersion(),
     getCaddySiteCountSafe()
   ]);
 
@@ -169,6 +180,7 @@ router.get('/system', async (req, res) => {
     versions: {
       caddy: caddyVersion,
       mariadb: mariadbVersion,
+      postgresql: postgresqlVersion,
       node: process.version,
       python: pythonVersion
     },
