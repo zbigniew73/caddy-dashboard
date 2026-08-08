@@ -17,6 +17,8 @@ import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql
 import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
 import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../services/mongodb.js';
 import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
+import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
+import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -129,6 +131,16 @@ async function getMongodbVersion() {
   }
 }
 
+async function getRedisVersion() {
+  try {
+    const { stdout } = await execFileAsync('redis-server', ['--version'], { timeout: 3000 });
+    const match = stdout.match(/v=([\d.]+)/);
+    return match ? `v${match[1]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getCaddySiteCountSafe() {
   try {
     return await getSiteCount();
@@ -139,13 +151,14 @@ async function getCaddySiteCountSafe() {
 
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, caddySiteCount] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
     getPythonVersion(),
     getMariadbVersion(),
     getPostgresqlVersion(),
     getMongodbVersion(),
+    getRedisVersion(),
     getCaddySiteCountSafe()
   ]);
 
@@ -195,6 +208,7 @@ router.get('/system', async (req, res) => {
       mariadb: mariadbVersion,
       postgresql: postgresqlVersion,
       mongodb: mongodbVersion,
+      redis: redisVersion,
       node: process.version,
       python: pythonVersion
     },
@@ -478,6 +492,44 @@ router.post('/mongodb/performance', async (req, res) => {
       cacheSizeGb: req.body?.cacheSizeGb,
       maxConnections: req.body?.maxConnections,
       profilerEnabled: Boolean(req.body?.profilerEnabled)
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/redis/local-version', async (req, res) => {
+  try {
+    res.json({ version: await getRedisLocalRepoVersion() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/redis/install', async (req, res) => {
+  try {
+    const result = await installRedis({ mode: req.body?.mode });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/redis/auth-status', async (req, res) => {
+  res.json(await checkRedisAuthStatus());
+});
+
+router.get('/redis/ram-info', (req, res) => {
+  res.json(getRedisRamRecommendation());
+});
+
+router.post('/redis/performance', async (req, res) => {
+  try {
+    const result = await applyRedisPerformanceConfig({
+      maxmemoryMb: req.body?.maxmemoryMb,
+      maxClients: req.body?.maxClients,
+      slowlogEnabled: Boolean(req.body?.slowlogEnabled)
     });
     res.json(result);
   } catch (e) {

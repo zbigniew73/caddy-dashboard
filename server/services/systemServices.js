@@ -18,7 +18,8 @@ const SERVICE_REGISTRY = [
     ],
     installable: { custom: true }
   },
-  { key: 'mongodb', unitCandidates: ['mongod.service'], installable: { custom: true } }
+  { key: 'mongodb', unitCandidates: ['mongod.service'], installable: { custom: true } },
+  { key: 'redis', unitCandidates: ['redis.service'], installable: { custom: true } }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];

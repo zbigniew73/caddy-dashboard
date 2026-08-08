@@ -44,7 +44,8 @@ const NAV_ICONS = {
   fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
-  mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
+  mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
+  redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>'
 };
 function navIcon(key) {
   return NAV_ICONS[key] || NAV_ICON_DEFAULT;
@@ -382,6 +383,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
       ['system.mariadb_version', escapeHtml(info.versions.mariadb || t('system.not_found'))],
       ['system.postgresql_version', escapeHtml(info.versions.postgresql || t('system.not_found'))],
       ['system.mongodb_version', escapeHtml(info.versions.mongodb || t('system.not_found'))],
+      ['system.redis_version', escapeHtml(info.versions.redis || t('system.not_found'))],
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
       ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
     ];
@@ -772,6 +774,130 @@ function wireMongodbInstallTile() {
   };
 }
 
+function redisModeFormHtml() {
+  return `
+    <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:13px;">
+      <input type="radio" name="redis-mode" value="local" checked style="margin-top:3px;">
+      <span>
+        <strong>${t('install.redis.mode_local')}</strong><br>
+        <span id="redis-local-version" style="color:var(--muted);font-size:12px;">${t('install.redis.checking_version')}</span>
+      </span>
+    </label>
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:16px;">
+      <input type="radio" name="redis-mode" value="official" style="margin-top:3px;">
+      <span>
+        <strong>${t('install.redis.mode_official')}</strong><br>
+        <span style="color:var(--muted);font-size:12px;">${t('install.redis.mode_official_detail')}</span>
+      </span>
+    </label>
+
+    <button type="button" id="redis-install-btn" disabled>${t('install.install_button')}</button>
+    <div class="action-msg" id="redis-install-msg"></div>
+  `;
+}
+
+function redisInstallTileHtml(svc, authStatus) {
+  const name = t('services.redis.name');
+  const description = t('install.redis.description');
+
+  if (svc.found && authStatus && authStatus.authConfigured) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.redis.password_hint')}</p>
+        <div class="action-msg" id="redis-install-msg"></div>
+      </div>
+    `;
+  }
+
+  if (svc.found && authStatus && !authStatus.authConfigured) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge inactive">${t('install.redis.setup_incomplete_badge')}</span>
+        </div>
+        <p style="color:var(--danger);font-size:13px;line-height:1.5;margin:0 0 14px;">${t('install.redis.setup_incomplete_note')}</p>
+        ${redisModeFormHtml()}
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+      ${redisModeFormHtml()}
+    </div>
+  `;
+}
+
+function wireRedisInstallTile() {
+  const btn = document.getElementById('redis-install-btn');
+  if (!btn) return;
+  const localVersionEl = document.getElementById('redis-local-version');
+  const msgEl = document.getElementById('redis-install-msg');
+  let localVersionLoaded = false;
+
+  function selectedMode() {
+    return document.querySelector('input[name="redis-mode"]:checked').value;
+  }
+
+  function updateButtonState() {
+    const mode = selectedMode();
+    btn.disabled = mode === 'local' ? !localVersionLoaded : false;
+  }
+
+  document.querySelectorAll('input[name="redis-mode"]').forEach((r) => {
+    r.onchange = updateButtonState;
+  });
+
+  (async () => {
+    try {
+      const { version } = await api('GET', '/redis/local-version');
+      localVersionEl.textContent = version
+        ? t('install.redis.local_version_found', { version })
+        : t('install.redis.local_version_unknown');
+      localVersionLoaded = true;
+    } catch (e) {
+      localVersionEl.textContent = e.message;
+      localVersionLoaded = false;
+    }
+    updateButtonState();
+  })();
+
+  btn.onclick = async () => {
+    const mode = selectedMode();
+    if (!window.confirm(t('install.redis.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/redis/install', { mode });
+      const svc = await api('GET', '/services/redis');
+      document.getElementById('content').innerHTML = redisInstallTileHtml(svc, { reachable: true, authConfigured: true });
+      applyTranslations();
+      const successEl = document.getElementById('redis-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+
+  updateButtonState();
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
@@ -793,6 +919,13 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = mongodbInstallTileHtml(svc, authStatus);
       applyTranslations();
       wireMongodbInstallTile();
+      return;
+    }
+    if (key === 'redis') {
+      const authStatus = svc.found ? await api('GET', '/redis/auth-status') : null;
+      content.innerHTML = redisInstallTileHtml(svc, authStatus);
+      applyTranslations();
+      wireRedisInstallTile();
       return;
     }
     content.innerHTML = installTileHtml(key, svc);
@@ -1606,6 +1739,87 @@ async function wrapMongodbExtras(serviceHtml) {
   `;
 }
 
+async function renderRedisPerformanceSection() {
+  let ramInfo;
+  try {
+    ramInfo = await api('GET', '/redis/ram-info');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const ramHint = t('redisperf.ram_hint', {
+    total: ramInfo.totalMb,
+    min: ramInfo.recommendedMinMb,
+    max: ramInfo.recommendedMaxMb
+  });
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('redisperf.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('redisperf.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('redisperf.maxmemory_label')}</label>
+      <input type="number" id="redisperf-maxmemory" value="1024" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${escapeHtml(ramHint)}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('redisperf.max_clients_label')}</label>
+      <input type="number" id="redisperf-max-clients" value="10000" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('redisperf.max_clients_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="redisperf-slowlog" checked>
+        ${t('redisperf.slowlog_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('redisperf.slowlog_hint')}</div>
+
+      <button type="button" id="redisperf-save-btn">${t('redisperf.save_button')}</button>
+      <div class="action-msg" id="redisperf-msg"></div>
+    </div>
+  `;
+}
+
+function wireRedisPerformanceSection() {
+  const btn = document.getElementById('redisperf-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('redisperf-msg');
+
+  btn.onclick = async () => {
+    const maxmemoryMb = parseInt(document.getElementById('redisperf-maxmemory').value, 10);
+    const maxClients = parseInt(document.getElementById('redisperf-max-clients').value, 10);
+    const slowlogEnabled = document.getElementById('redisperf-slowlog').checked;
+
+    if (!Number.isInteger(maxmemoryMb) || !Number.isInteger(maxClients)) {
+      msgEl.textContent = t('redisperf.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('redisperf.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('redisperf.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/redis/performance', { maxmemoryMb, maxClients, slowlogEnabled });
+      msgEl.textContent = t('redisperf.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+async function wrapRedisExtras(serviceHtml) {
+  const perfHtml = await renderRedisPerformanceSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -1633,6 +1847,7 @@ function wireServiceActions(key) {
         if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
         if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
         if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
+        if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1642,6 +1857,7 @@ function wireServiceActions(key) {
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
+        if (key === 'redis' && svc.found) wireRedisPerformanceSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -1666,6 +1882,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
     if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
     if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
+    if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1675,6 +1892,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
     if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
     if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
+    if (key === 'redis' && svc.found) wireRedisPerformanceSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
