@@ -11,6 +11,7 @@ import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
+import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -340,6 +341,23 @@ router.post('/caddy/performance', async (req, res) => {
 router.get('/caddy/caddyfile', async (req, res) => {
   try {
     res.json({ content: await readCaddyfile() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mariadb/local-version', async (req, res) => {
+  try {
+    res.json({ version: await getLocalRepoVersion() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mariadb/install', async (req, res) => {
+  try {
+    const result = await installMariadb({ mode: req.body?.mode, version: req.body?.version });
+    res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

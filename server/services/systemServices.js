@@ -8,7 +8,8 @@ const SERVICE_REGISTRY = [
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
   { key: 'cron', unitCandidates: ['crond.service'] },
   { key: 'caddy', unitCandidates: ['caddy.service'] },
-  { key: 'fail2ban', unitCandidates: ['fail2ban.service'], installable: { packageName: 'fail2ban' } }
+  { key: 'fail2ban', unitCandidates: ['fail2ban.service'], installable: { packageName: 'fail2ban' } },
+  { key: 'mariadb', unitCandidates: ['mariadb.service', 'mysql.service'], installable: { custom: true } }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];
@@ -94,8 +95,8 @@ async function runServiceAction(key, action) {
 
 async function installService(key) {
   const def = getServiceDef(key);
-  if (!def || !def.installable) {
-    throw Object.assign(new Error('Ten wpis nie jest instalowalny'), { status: 400 });
+  if (!def || !def.installable || !def.installable.packageName) {
+    throw Object.assign(new Error('Ten wpis nie jest instalowalny tym mechanizmem'), { status: 400 });
   }
 
   try {

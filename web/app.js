@@ -447,10 +447,133 @@ function wireInstallTile(key) {
   };
 }
 
+function mariadbInstallTileHtml(svc) {
+  const name = t('services.mariadb.name');
+  const description = t('install.mariadb.description');
+
+  if (svc.found) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.mariadb.password_hint')}</p>
+        <div class="action-msg" id="mariadb-install-msg"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;font-size:13px;">
+        <input type="radio" name="mariadb-mode" value="local" checked style="margin-top:3px;">
+        <span>
+          <strong>${t('install.mariadb.mode_local')}</strong><br>
+          <span id="mariadb-local-version" style="color:var(--muted);font-size:12px;">${t('install.mariadb.checking_version')}</span>
+        </span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:14px;">
+        <input type="radio" name="mariadb-mode" value="official" style="margin-top:3px;">
+        <span>
+          <strong>${t('install.mariadb.mode_official')}</strong><br>
+          <span style="color:var(--muted);font-size:12px;">${t('install.mariadb.mode_official_detail')}</span>
+        </span>
+      </label>
+
+      <div id="mariadb-version-select" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.mariadb.version_label')}</label>
+        <select id="mariadb-version">
+          <option value="11.8">11.8</option>
+          <option value="10.11">10.11</option>
+        </select>
+      </div>
+
+      <button type="button" id="mariadb-install-btn" disabled>${t('install.install_button')}</button>
+      <div class="action-msg" id="mariadb-install-msg"></div>
+    </div>
+  `;
+}
+
+function wireMariadbInstallTile() {
+  const btn = document.getElementById('mariadb-install-btn');
+  if (!btn) return;
+  const versionSelectWrap = document.getElementById('mariadb-version-select');
+  const localVersionEl = document.getElementById('mariadb-local-version');
+  const msgEl = document.getElementById('mariadb-install-msg');
+  let localVersionLoaded = false;
+
+  function selectedMode() {
+    return document.querySelector('input[name="mariadb-mode"]:checked').value;
+  }
+
+  function updateButtonState() {
+    const mode = selectedMode();
+    versionSelectWrap.style.display = mode === 'official' ? 'block' : 'none';
+    btn.disabled = mode === 'local' ? !localVersionLoaded : false;
+  }
+
+  document.querySelectorAll('input[name="mariadb-mode"]').forEach((r) => {
+    r.onchange = updateButtonState;
+  });
+
+  (async () => {
+    try {
+      const { version } = await api('GET', '/mariadb/local-version');
+      localVersionEl.textContent = version
+        ? t('install.mariadb.local_version_found', { version })
+        : t('install.mariadb.local_version_unknown');
+      localVersionLoaded = true;
+    } catch (e) {
+      localVersionEl.textContent = e.message;
+      localVersionLoaded = false;
+    }
+    updateButtonState();
+  })();
+
+  btn.onclick = async () => {
+    const mode = selectedMode();
+    const version = mode === 'official' ? document.getElementById('mariadb-version').value : undefined;
+    if (!window.confirm(t('install.mariadb.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mariadb/install', { mode, version });
+      const svc = await api('GET', '/services/mariadb');
+      document.getElementById('content').innerHTML = mariadbInstallTileHtml(svc);
+      applyTranslations();
+      const successEl = document.getElementById('mariadb-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+
+  updateButtonState();
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const svc = await api('GET', `/services/${key}`);
+    if (key === 'mariadb') {
+      content.innerHTML = mariadbInstallTileHtml(svc);
+      applyTranslations();
+      wireMariadbInstallTile();
+      return;
+    }
     content.innerHTML = installTileHtml(key, svc);
     wireInstallTile(key);
   } catch (e) {
