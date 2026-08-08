@@ -1,6 +1,6 @@
 # Szablon: reverse proxy do uslugi wystawianej w internecie.
 # Podmien "przyklad.domena.pl" na swoja domene (musi wskazywac na ten serwer,
-# rekord A/AAAA w DNS) i "127.0.0.1:8080" na adres:port lokalnej uslugi.
+# rekord A/AAAA w DNS) i "127.0.0.1:4300" na adres:port lokalnej uslugi.
 # Caddy automatycznie zalatwia certyfikat TLS (Let's Encrypt) dla tej domeny.
 #
 # Blok ":80, :443" ponizej to fallback z domyslnego install.sh - zostaw go,
@@ -8,7 +8,7 @@
 # odpowiedz zamiast bledu polaczenia.
 
 przyklad.domena.pl {
-	reverse_proxy 127.0.0.1:8080
+	reverse_proxy 127.0.0.1:4300
 
 	encode gzip zstd
 
@@ -19,7 +19,27 @@ przyklad.domena.pl {
 		Referrer-Policy "no-referrer-when-downgrade"
 	}
 }
-
+# phpmyadmin
+#pma.twojadomena.pl {
+#        reverse_proxy 127.0.0.1:4310
+#    }
+#http://127.0.0.1:4310 {
+#    header -X-Powered-By
+#    root * /opt/caddy-dashboard/phpmyadmin
+#    php_fastcgi unix//opt/caddy-dashboard/run/phpmyadmin.sock
+#    file_server
+#}
+# phppgadmin
+#pga.twojadomena.pl {
+#        reverse_proxy 127.0.0.1:4310
+#    }
+#http://127.0.0.1:4320 {
+#    header -X-Powered-By
+#    root * /opt/caddy-dashboard/phppgadmin
+#    php_fastcgi unix//opt/caddy-dashboard/run/phppgadmin.sock
+#    file_server
+#}
+#
 :80, :443 {
 	respond "Caddy Dashboard - No site configured for this domain" 404
 }

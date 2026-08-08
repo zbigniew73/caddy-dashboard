@@ -7,8 +7,8 @@
 <script src="theme-init.js"></script>
 <style>
   :root {
-    --bg: #f5f4f0;
-    --panel: #ffffff;
+    --bg: #ffffff;
+    --panel: #f0f0f0;
     --border: #dcdad3;
     --text: #1c1d1f;
     --muted: #6b7078;
@@ -262,8 +262,7 @@
     justify-content: flex-end;
     flex-shrink: 0;
   }
-  .app-footer a { color: var(--muted); font-size: 12px; text-decoration: none; }
-  .app-footer a:hover { color: var(--accent); }
+  .app-footer .footer-clock { color: var(--muted); font-size: 12px; font-family: var(--mono); }
 </style>
 </head>
 <body>
@@ -316,7 +315,7 @@
     <div class="content" id="content"></div>
   </main>
   <footer class="app-footer">
-    <a href="https://automation-ai.eu/" target="_blank" rel="noopener noreferrer">automation-ai.eu</a>
+    <span class="footer-clock" id="footer-clock"></span>
   </footer>
 </div>
 

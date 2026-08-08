@@ -364,6 +364,11 @@ async function renderSystemTab(content, { silent = false } = {}) {
           </dl>
           <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
         </div>
+        <dl style="grid-template-columns:auto 1fr auto 1fr auto 1fr;margin-top:10px;">
+          <dt data-i18n="system.caddy_version"></dt><dd>${escapeHtml(info.versions.caddy || t('system.not_found'))}</dd>
+          <dt data-i18n="system.node_version"></dt><dd>${escapeHtml(info.versions.node || t('system.not_found'))}</dd>
+          <dt data-i18n="system.python_version"></dt><dd>${escapeHtml(info.versions.python || t('system.not_found'))}</dd>
+        </dl>
         <div class="action-msg" id="system-reboot-msg"></div>
       </div>
       <div class="system-grid">
@@ -1079,3 +1084,13 @@ function escapeHtml(str) {
     showLogin();
   }
 })();
+
+function updateFooterClock() {
+  const el = document.getElementById('footer-clock');
+  if (!el) return;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  el.textContent = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+}
+updateFooterClock();
+setInterval(updateFooterClock, 1000);

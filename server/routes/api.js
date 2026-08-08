@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import os from 'os';
 import fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
@@ -10,6 +12,7 @@ import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileK
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile } from '../services/caddyPerformance.js';
 
 const router = Router();
+const execFileAsync = promisify(execFile);
 
 function cpuTimesSnapshot() {
   let idle = 0;
@@ -69,9 +72,31 @@ async function getCpuUsagePercent() {
   return Math.round((1 - idleDelta / totalDelta) * 100);
 }
 
+async function getCaddyVersion() {
+  try {
+    const { stdout } = await execFileAsync('caddy', ['version'], { timeout: 3000 });
+    return stdout.trim().split(/\s+/)[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+async function getPythonVersion() {
+  try {
+    const { stdout, stderr } = await execFileAsync('python3', ['--version'], { timeout: 3000 });
+    return (stdout || stderr).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const usagePercent = await getCpuUsagePercent();
+  const [usagePercent, caddyVersion, pythonVersion] = await Promise.all([
+    getCpuUsagePercent(),
+    getCaddyVersion(),
+    getPythonVersion()
+  ]);
 
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
@@ -113,7 +138,12 @@ router.get('/system', async (req, res) => {
       usedPercent: totalMem ? Math.round((usedMem / totalMem) * 100) : 0
     },
     swap: getSwapInfo(),
-    disk
+    disk,
+    versions: {
+      caddy: caddyVersion,
+      node: process.version,
+      python: pythonVersion
+    }
   });
 });
 
