@@ -4,6 +4,25 @@ let SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS];
 let INSTALL_DETAIL_TABS = [];
 let currentTab = 'system';
 
+let TURNSTILE_STATE = { enabled: false, siteKey: '' };
+let loginTurnstileToken = null;
+let loginTurnstileWidgetId = null;
+
+function loadTurnstileScript() {
+  if (window.turnstile) return Promise.resolve();
+  if (window.__turnstileLoadPromise) return window.__turnstileLoadPromise;
+  window.__turnstileLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Nie udalo sie zaladowac Cloudflare Turnstile'));
+    document.head.appendChild(script);
+  });
+  return window.__turnstileLoadPromise;
+}
+
 async function api(method, url, body) {
   const res = await fetch(API + url, {
     method,
@@ -66,6 +85,29 @@ function showLogin(msg) {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-error').textContent = msg || '';
+  renderLoginTurnstile();
+}
+
+async function renderLoginTurnstile() {
+  const container = document.getElementById('turnstile-container');
+  if (!TURNSTILE_STATE.enabled || !TURNSTILE_STATE.siteKey) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+  loginTurnstileToken = null;
+  try {
+    await loadTurnstileScript();
+    container.innerHTML = '';
+    loginTurnstileWidgetId = window.turnstile.render(container, {
+      sitekey: TURNSTILE_STATE.siteKey,
+      theme: 'auto',
+      callback: (token) => { loginTurnstileToken = token; },
+      'error-callback': () => { loginTurnstileToken = null; }
+    });
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+  }
 }
 
 function showApp(username) {
@@ -125,11 +167,21 @@ document.getElementById('update-badge').onclick = async () => {
 document.getElementById('login-btn').onclick = async () => {
   const username = document.getElementById('username-input').value;
   const password = document.getElementById('password-input').value;
+
+  if (TURNSTILE_STATE.enabled && !loginTurnstileToken) {
+    document.getElementById('login-error').textContent = t('login.turnstile_required');
+    return;
+  }
+
   try {
-    const result = await api('POST', '/auth/login', { username, password });
+    const body = { username, password };
+    if (TURNSTILE_STATE.enabled) body.turnstileToken = loginTurnstileToken;
+    const result = await api('POST', '/auth/login', body);
     showApp(result.username);
   } catch (e) {
     document.getElementById('login-error').textContent = t('login.error_wrong_password');
+    if (window.turnstile && loginTurnstileWidgetId !== null) window.turnstile.reset(loginTurnstileWidgetId);
+    loginTurnstileToken = null;
   }
 };
 document.getElementById('username-input').addEventListener('keydown', (e) => {
@@ -685,6 +737,146 @@ function wireFail2banSection() {
   }
 }
 
+let turnstileAdminWidgetId = null;
+
+async function renderTurnstileSection() {
+  let cfg;
+  try {
+    cfg = await api('GET', '/caddy/turnstile');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const statusText = cfg.configured
+    ? (cfg.enabled ? t('turnstile.status_enabled') : t('turnstile.status_disabled'))
+    : t('turnstile.status_not_configured');
+  const statusClass = cfg.enabled ? 'success' : '';
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('turnstile.title')}</h3>
+      <p style="margin:0 0 14px;color:var(--muted);font-size:13px;">${t('turnstile.description')}</p>
+      <div class="action-msg ${statusClass}" style="margin-bottom:10px;">${escapeHtml(statusText)}</div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.site_key_label')}</label>
+      <input type="text" id="turnstile-site-key" value="${escapeHtml(cfg.siteKey || '')}" style="width:100%;margin-bottom:10px;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.secret_key_label')}</label>
+      <input type="password" id="turnstile-secret-key" placeholder="${cfg.configured ? escapeHtml(t('turnstile.secret_key_saved_placeholder')) : ''}" style="width:100%;">
+      <div id="turnstile-widget-container" style="margin:14px 0;display:none;"></div>
+      <div class="service-actions">
+        <button type="button" id="turnstile-verify-btn">${t('turnstile.verify_button')}</button>
+        <button type="button" id="turnstile-apply-btn" style="display:none;">${t('turnstile.apply_button')}</button>
+        ${cfg.configured ? `<button type="button" class="secondary" id="turnstile-toggle-btn" data-enable="${cfg.enabled ? '0' : '1'}">${cfg.enabled ? t('turnstile.disable_button') : t('turnstile.enable_button')}</button>` : ''}
+      </div>
+      <div class="action-msg" id="turnstile-msg"></div>
+    </div>
+  `;
+}
+
+function wireTurnstileSection() {
+  const verifyBtn = document.getElementById('turnstile-verify-btn');
+  const applyBtn = document.getElementById('turnstile-apply-btn');
+  const toggleBtn = document.getElementById('turnstile-toggle-btn');
+  const msgEl = document.getElementById('turnstile-msg');
+  const widgetContainer = document.getElementById('turnstile-widget-container');
+  if (!verifyBtn) return;
+
+  verifyBtn.onclick = async () => {
+    const siteKey = document.getElementById('turnstile-site-key').value.trim();
+    const secretKey = document.getElementById('turnstile-secret-key').value.trim();
+    if (!siteKey || !secretKey) {
+      msgEl.textContent = t('turnstile.missing_keys');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+
+    msgEl.textContent = t('turnstile.loading_widget');
+    msgEl.className = 'action-msg';
+    applyBtn.style.display = 'none';
+    verifyBtn.disabled = true;
+
+    try {
+      await loadTurnstileScript();
+      widgetContainer.style.display = 'block';
+      widgetContainer.innerHTML = '';
+      if (turnstileAdminWidgetId !== null) {
+        try { window.turnstile.remove(turnstileAdminWidgetId); } catch { /* widget already gone */ }
+      }
+      turnstileAdminWidgetId = window.turnstile.render(widgetContainer, {
+        sitekey: siteKey,
+        theme: 'auto',
+        callback: async (token) => {
+          try {
+            const result = await api('POST', '/caddy/turnstile/verify', { siteKey, secretKey, token });
+            if (result.success) {
+              msgEl.textContent = t('turnstile.verify_ok');
+              msgEl.className = 'action-msg success';
+              applyBtn.style.display = '';
+              applyBtn.dataset.siteKey = siteKey;
+              applyBtn.dataset.secretKey = secretKey;
+            } else {
+              msgEl.textContent = t('turnstile.verify_failed', { errors: (result['error-codes'] || []).join(', ') || '-' });
+              msgEl.className = 'action-msg error';
+            }
+          } catch (e) {
+            msgEl.textContent = e.message;
+            msgEl.className = 'action-msg error';
+          } finally {
+            verifyBtn.disabled = false;
+          }
+        },
+        'error-callback': () => {
+          msgEl.textContent = t('turnstile.widget_error');
+          msgEl.className = 'action-msg error';
+          verifyBtn.disabled = false;
+        }
+      });
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      verifyBtn.disabled = false;
+    }
+  };
+
+  if (applyBtn) {
+    applyBtn.onclick = async () => {
+      if (!window.confirm(t('turnstile.confirm_apply'))) return;
+      applyBtn.disabled = true;
+      try {
+        await api('POST', '/caddy/turnstile/apply', { siteKey: applyBtn.dataset.siteKey, secretKey: applyBtn.dataset.secretKey });
+        await renderTab();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        applyBtn.disabled = false;
+      }
+    };
+  }
+
+  if (toggleBtn) {
+    toggleBtn.onclick = async () => {
+      const enabling = toggleBtn.dataset.enable === '1';
+      if (!window.confirm(enabling ? t('turnstile.confirm_enable') : t('turnstile.confirm_disable'))) return;
+      toggleBtn.disabled = true;
+      try {
+        await api('POST', '/caddy/turnstile/mode', { enabled: enabling });
+        await renderTab();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        toggleBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function wrapCaddyWithTurnstile(serviceHtml) {
+  const turnstileHtml = await renderTurnstileSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 45%;max-width:45%;">${serviceHtml}</div>
+      <div style="flex:1 1 45%;max-width:45%;">${turnstileHtml}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -708,11 +900,13 @@ function wireServiceActions(key) {
         if (key === 'ssh' && svc.found) html += await renderSshPortSection();
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
+        if (key === 'caddy' && svc.found) html = await wrapCaddyWithTurnstile(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
         if (key === 'fail2ban' && svc.found) wireFail2banSection();
+        if (key === 'caddy' && svc.found) wireTurnstileSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -733,11 +927,13 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'ssh' && svc.found) html += await renderSshPortSection();
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
+    if (key === 'caddy' && svc.found) html = await wrapCaddyWithTurnstile(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
+    if (key === 'caddy' && svc.found) wireTurnstileSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
@@ -757,6 +953,7 @@ function escapeHtml(str) {
       document.getElementById('app-version-login').textContent = versionLabel;
       document.getElementById('app-version-header').textContent = versionLabel;
     }
+    TURNSTILE_STATE = status.turnstile || { enabled: false, siteKey: '' };
     if (status.username) {
       showApp(status.username);
     } else {

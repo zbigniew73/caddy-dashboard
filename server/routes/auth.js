@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE
 } from '../services/auth.js';
 import { APP_VERSION } from '../version.js';
+import { getPublicConfig as getTurnstilePublicConfig, isEnabled as isTurnstileEnabled, getSecretKey, verifyWithCloudflare } from '../services/turnstile.js';
 
 const router = Router();
 
@@ -39,7 +40,7 @@ function isRateLimited(ip) {
 
 router.post('/login', async (req, res) => {
   const startedAt = Date.now();
-  const { username, password } = req.body || {};
+  const { username, password, turnstileToken } = req.body || {};
 
   if (getAllowedUsers().length === 0) {
     return res.status(503).json({ error: 'Logowanie wylaczone - AUTH_USERS nie jest ustawiony' });
@@ -47,6 +48,18 @@ router.post('/login', async (req, res) => {
 
   if (isRateLimited(req.ip)) {
     return res.status(429).json({ error: 'Zbyt wiele prob logowania - sprobuj ponownie za kilka minut' });
+  }
+
+  if (isTurnstileEnabled()) {
+    if (!turnstileToken) {
+      await padFailure(startedAt);
+      return res.status(400).json({ error: 'Wymagana weryfikacja Turnstile' });
+    }
+    const cfResult = await verifyWithCloudflare(getSecretKey(), turnstileToken, req.ip).catch(() => ({ success: false }));
+    if (!cfResult.success) {
+      await padFailure(startedAt);
+      return res.status(401).json({ error: 'Weryfikacja Turnstile nie powiodla sie - sprobuj ponownie' });
+    }
   }
 
   const ok = await authenticateSystemUser(username, password);
@@ -68,7 +81,13 @@ router.get('/status', (req, res) => {
   const authRequired = getAllowedUsers().length > 0;
   const token = req.cookies?.[SESSION_COOKIE];
   const payload = token ? verifySessionToken(token) : null;
-  res.json({ authRequired, username: payload?.username || null, version: APP_VERSION });
+  const turnstile = getTurnstilePublicConfig();
+  res.json({
+    authRequired,
+    username: payload?.username || null,
+    version: APP_VERSION,
+    turnstile: { enabled: turnstile.enabled, siteKey: turnstile.enabled ? turnstile.siteKey : '' }
+  });
 });
 
 export default router;

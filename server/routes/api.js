@@ -6,6 +6,7 @@ import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
+import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
 
 const router = Router();
 
@@ -233,6 +234,42 @@ router.post('/ssh/port', async (req, res) => {
   try {
     const result = await setSshPort(req.body?.port);
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/caddy/turnstile', (req, res) => {
+  res.json(getTurnstilePublicConfig());
+});
+
+router.post('/caddy/turnstile/verify', async (req, res) => {
+  try {
+    const { siteKey, secretKey, token } = req.body || {};
+    if (!siteKey || !secretKey || !token) {
+      return res.status(400).json({ error: 'Brak site key, secret key albo tokenu z widgetu' });
+    }
+    const result = await verifyWithCloudflare(secretKey, token, req.ip);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/caddy/turnstile/apply', (req, res) => {
+  try {
+    saveTurnstileKeys(req.body?.siteKey, req.body?.secretKey);
+    setTurnstileEnabled(true);
+    res.json(getTurnstilePublicConfig());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/caddy/turnstile/mode', (req, res) => {
+  try {
+    setTurnstileEnabled(Boolean(req.body?.enabled));
+    res.json(getTurnstilePublicConfig());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
