@@ -106,6 +106,8 @@
   "caddyperf.apply_button": "Zastosuj",
   "caddyperf.applying": "Sprawdzam i zapisuję konfigurację...",
   "caddyperf.confirm_apply": "Zapisać nowe ustawienia wydajności Caddy? Konfiguracja zostanie zweryfikowana (caddy fmt + validate) przed zapisem, a Caddy przeładowany dopiero po pozytywnej weryfikacji.",
+
+  "caddyfile.title": "Aktualna konfiguracja Caddyfile",
   "system.loading": "Wczytywanie...",
   "system.hostname": "Hostname",
   "system.os_name": "System operacyjny",

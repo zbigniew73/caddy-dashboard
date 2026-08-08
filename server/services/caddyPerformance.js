@@ -1,10 +1,10 @@
-import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
+import { spawn, execFile } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/caddy-set-performance.sh');
-const CADDYFILE = '/etc/caddy/Caddyfile';
 const MARK_START = '# BEGIN caddy-dashboard-performance';
 const MARK_END = '# END caddy-dashboard-performance';
 const MAX_EXPERT_LENGTH = 20000;
@@ -19,6 +19,12 @@ function profileBlock(key) {
   const p = PROFILES[key];
   if (!p) return null;
   return `{
+	admin localhost:2019
+	grace_period 20s
+	# Default to error-only logging in production to minimize I/O overhead.
+	log {
+		level ERROR
+	}
 	servers {
 		timeouts {
 			read_body   ${p.read_body}
@@ -31,22 +37,37 @@ function profileBlock(key) {
 }`;
 }
 
-function readCurrentBlock() {
-  let content;
+async function sudoScript(args) {
   try {
-    content = readFileSync(CADDYFILE, 'utf-8');
-  } catch {
-    return null;
+    const { stdout } = await execFileAsync('sudo', ['-n', SCRIPT_PATH, ...args], { timeout: 10000 });
+    return stdout;
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla skryptu ustawien wydajnosci Caddy - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
   }
+}
+
+function readCaddyfile() {
+  return sudoScript(['get']);
+}
+
+function extractBlock(content) {
   const startIdx = content.indexOf(MARK_START);
   const endIdx = content.indexOf(MARK_END);
   if (startIdx === -1 || endIdx === -1 || endIdx < startIdx) return null;
   return content.slice(startIdx + MARK_START.length, endIdx).trim();
 }
 
-function getStatus() {
+async function getStatus() {
   const profileBlocks = Object.fromEntries(Object.keys(PROFILES).map((key) => [key, profileBlock(key)]));
-  const block = readCurrentBlock();
+  const content = await readCaddyfile();
+  const block = extractBlock(content);
   if (!block) return { active: false, profile: null, block: null, profileBlocks };
   for (const key of Object.keys(PROFILES)) {
     if (profileBlocks[key].trim() === block) {
@@ -91,7 +112,9 @@ function applyPerformanceConfig({ profile, expertBlock }) {
     child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
     child.on('close', (code) => {
       if (code === 0) {
-        resolve({ success: true, message: stdout.trim(), ...getStatus() });
+        getStatus()
+          .then((status) => resolve({ success: true, message: stdout.trim(), ...status }))
+          .catch(() => resolve({ success: true, message: stdout.trim() }));
         return;
       }
       if (/password is required/i.test(stderr)) {
@@ -108,4 +131,4 @@ function applyPerformanceConfig({ profile, expertBlock }) {
   });
 }
 
-export { PROFILES, profileBlock, getStatus, applyPerformanceConfig };
+export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile };

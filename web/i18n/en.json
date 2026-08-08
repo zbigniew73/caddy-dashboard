@@ -106,6 +106,8 @@
   "caddyperf.apply_button": "Apply",
   "caddyperf.applying": "Checking and saving the configuration...",
   "caddyperf.confirm_apply": "Save the new Caddy performance settings? The config will be verified (caddy fmt + validate) before writing, and Caddy only reloaded after it passes.",
+
+  "caddyfile.title": "Current Caddyfile configuration",
   "system.loading": "Loading...",
   "system.hostname": "Hostname",
   "system.os_name": "Operating system",

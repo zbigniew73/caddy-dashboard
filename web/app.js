@@ -965,15 +965,31 @@ function wireCaddyPerformanceSection() {
   };
 }
 
+async function renderCaddyfileViewerSection() {
+  try {
+    const { content } = await api('GET', '/caddy/caddyfile');
+    return `
+      <div class="system-info-card">
+        <h3 style="margin:0 0 10px;font-size:15px;">${t('caddyfile.title')}</h3>
+        <textarea readonly rows="16" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(content)}</textarea>
+      </div>
+    `;
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
 async function wrapCaddyExtras(serviceHtml) {
   const turnstileHtml = await renderTurnstileSection();
   const perfHtml = await renderCaddyPerformanceSection();
+  const caddyfileHtml = await renderCaddyfileViewerSection();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1 1 45%;max-width:45%;">${serviceHtml}</div>
       <div style="flex:1 1 45%;max-width:45%;">${turnstileHtml}</div>
     </div>
     <div style="margin-top:16px;">${perfHtml}</div>
+    <div style="margin-top:16px;">${caddyfileHtml}</div>
   `;
 }
 

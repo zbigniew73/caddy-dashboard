@@ -18,6 +18,13 @@ ERR_LOG="$(mktemp)"
 cleanup() { rm -f "$TMP" "$ERR_LOG"; }
 trap cleanup EXIT
 
+if [ "${1:-}" = "get" ]; then
+  if [ -f "$CADDYFILE" ]; then
+    cat "$CADDYFILE"
+  fi
+  exit 0
+fi
+
 NEW_BLOCK="$(cat)"
 
 if [ -z "$NEW_BLOCK" ]; then
