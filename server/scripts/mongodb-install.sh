@@ -8,13 +8,17 @@
 # Po instalacji: generuje losowe 16-znakowe haslo, tworzy uzytkownika
 # administracyjnego "admin" w bazie admin (dopoki autoryzacja jeszcze
 # wylaczona - domyslny stan swiezej instalacji), WLACZA autoryzacje w
-# mongod.conf i restartuje usluge z nia. Haslo zapisuje w /root/.mongodb
+# mongod.conf i restartuje usluge z nia. Haslo zapisuje w /root/.adminmongodb
 # dopiero PO potwierdzonym sukcesie wszystkich krokow.
+#
+# Uwaga: NIE /root/.mongodb - mongosh sam automatycznie tworzy katalog
+# ~/.mongodb/ (historia komend, telemetria), wiec ta nazwa koliduje z
+# katalogiem i zapis pliku pod ta sciezka po cichu sie nie udaje.
 
 set -uo pipefail
 
 VERSION="${1:-}"
-PWFILE="/root/.mongodb"
+PWFILE="/root/.adminmongodb"
 CONF="/etc/mongod.conf"
 
 err() { echo "BLAD: $*" >&2; exit 1; }
