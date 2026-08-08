@@ -27,4 +27,25 @@ async function installMongodb({ version }) {
   }
 }
 
-export { VERSIONS, installMongodb };
+async function checkAuthStatus() {
+  try {
+    await execFileAsync(
+      'mongosh',
+      ['--quiet', '--eval', 'JSON.stringify(db.adminCommand({listDatabases:1}))'],
+      { timeout: 5000 }
+    );
+    // Polaczenie bez poswiadczen powiodlo sie -> autoryzacja NIE jest wymuszona -> konfiguracja niedokonczona.
+    return { reachable: true, authConfigured: false };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString();
+    if (/ECONNREFUSED|MongoNetworkError|ENOENT/i.test(stderr) || e.code === 'ENOENT') {
+      return { reachable: false, authConfigured: false };
+    }
+    if (/requires authentication|not authorized|Unauthorized/i.test(stderr)) {
+      return { reachable: true, authConfigured: true };
+    }
+    return { reachable: true, authConfigured: false };
+  }
+}
+
+export { VERSIONS, installMongodb, checkAuthStatus };

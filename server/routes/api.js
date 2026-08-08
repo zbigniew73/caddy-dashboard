@@ -15,7 +15,7 @@ import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql } from '../services/postgresql.js';
 import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
-import { installMongodb } from '../services/mongodb.js';
+import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../services/mongodb.js';
 import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
 
 const router = Router();
@@ -462,6 +462,10 @@ router.post('/mongodb/install', async (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+router.get('/mongodb/auth-status', async (req, res) => {
+  res.json(await checkMongodbAuthStatus());
 });
 
 router.get('/mongodb/ram-info', (req, res) => {

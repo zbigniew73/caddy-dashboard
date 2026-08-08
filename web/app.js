@@ -687,11 +687,24 @@ function wirePostgresqlInstallTile() {
   updateButtonState();
 }
 
-function mongodbInstallTileHtml(svc) {
+function mongodbVersionFormHtml() {
+  return `
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.mongodb.version_label')}</label>
+    <select id="mongodb-version" style="width:100%;margin-bottom:16px;">
+      <option value="8.0">8.0</option>
+      <option value="7.0">7.0</option>
+    </select>
+
+    <button type="button" id="mongodb-install-btn">${t('install.install_button')}</button>
+    <div class="action-msg" id="mongodb-install-msg"></div>
+  `;
+}
+
+function mongodbInstallTileHtml(svc, authStatus) {
   const name = t('services.mongodb.name');
   const description = t('install.mongodb.description');
 
-  if (svc.found) {
+  if (svc.found && authStatus && authStatus.authConfigured) {
     return `
       <div class="system-info-card" style="max-width:560px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
@@ -705,20 +718,25 @@ function mongodbInstallTileHtml(svc) {
     `;
   }
 
+  if (svc.found && authStatus && !authStatus.authConfigured) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge inactive">${t('install.mongodb.setup_incomplete_badge')}</span>
+        </div>
+        <p style="color:var(--danger);font-size:13px;line-height:1.5;margin:0 0 14px;">${t('install.mongodb.setup_incomplete_note')}</p>
+        ${mongodbVersionFormHtml()}
+      </div>
+    `;
+  }
+
   return `
     <div class="system-info-card" style="max-width:560px;">
       <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
       <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">${t('install.mongodb.no_local_repo_note')}</p>
-
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.mongodb.version_label')}</label>
-      <select id="mongodb-version" style="width:100%;margin-bottom:16px;">
-        <option value="8.0">8.0</option>
-        <option value="7.0">7.0</option>
-      </select>
-
-      <button type="button" id="mongodb-install-btn">${t('install.install_button')}</button>
-      <div class="action-msg" id="mongodb-install-msg"></div>
+      ${mongodbVersionFormHtml()}
     </div>
   `;
 }
@@ -738,7 +756,7 @@ function wireMongodbInstallTile() {
     try {
       await api('POST', '/mongodb/install', { version });
       const svc = await api('GET', '/services/mongodb');
-      document.getElementById('content').innerHTML = mongodbInstallTileHtml(svc);
+      document.getElementById('content').innerHTML = mongodbInstallTileHtml(svc, { reachable: true, authConfigured: true });
       applyTranslations();
       const successEl = document.getElementById('mongodb-install-msg');
       if (successEl) {
@@ -771,7 +789,8 @@ async function renderInstallDetailTab(key, content) {
       return;
     }
     if (key === 'mongodb') {
-      content.innerHTML = mongodbInstallTileHtml(svc);
+      const authStatus = svc.found ? await api('GET', '/mongodb/auth-status') : null;
+      content.innerHTML = mongodbInstallTileHtml(svc, authStatus);
       applyTranslations();
       wireMongodbInstallTile();
       return;

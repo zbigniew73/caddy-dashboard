@@ -121,6 +121,8 @@
 
   "install.mongodb.description": "MongoDB is a document-oriented (NoSQL) database. Alma/Rocky don't have MongoDB in the default repositories (SSPL license), so installation is only available from the official MongoDB Inc. repository. After installing, a random 16-character password is generated, set as the database admin password, and authorization is enabled - the password is saved to /root/.mongodb.",
   "install.mongodb.no_local_repo_note": "No local Alma/Rocky repository version - MongoDB isn't available there.",
+  "install.mongodb.setup_incomplete_badge": "Setup incomplete",
+  "install.mongodb.setup_incomplete_note": "The MongoDB package is installed, but password/authorization setup was not completed (e.g. an earlier run was interrupted) - the database is currently reachable WITHOUT a password. Pick a version and run it again to finish setup.",
   "install.mongodb.password_hint": "The generated password (16 characters) is the MongoDB admin password (user \"admin\"), saved to /root/.mongodb on the server - read it over SSH.",
   "install.mongodb.version_label": "MongoDB version",
   "install.mongodb.confirm_install": "Install MongoDB? This may take a few minutes.",

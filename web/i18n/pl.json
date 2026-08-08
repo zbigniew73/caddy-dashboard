@@ -121,6 +121,8 @@
 
   "install.mongodb.description": "MongoDB to nierelacyjna (dokumentowa) baza danych. AlmaLinux/Rocky nie mają MongoDB w domyślnych repozytoriach (licencja SSPL), więc instalacja odbywa się wyłącznie z oficjalnego repozytorium MongoDB Inc. Po instalacji zostanie wygenerowane losowe 16-znakowe hasło, ustawione jako hasło administratora bazy i włączona autoryzacja - hasło zapisane w /root/.mongodb.",
   "install.mongodb.no_local_repo_note": "Brak wersji z lokalnego repozytorium Alma/Rocky - MongoDB nie jest tam dostępna.",
+  "install.mongodb.setup_incomplete_badge": "Konfiguracja niedokończona",
+  "install.mongodb.setup_incomplete_note": "Pakiet MongoDB jest zainstalowany, ale konfiguracja hasła/autoryzacji nie została dokończona (np. przez przerwane wcześniejsze uruchomienie) - baza jest obecnie dostępna BEZ hasła. Wybierz wersję i uruchom ponownie, żeby dokończyć konfigurację.",
   "install.mongodb.password_hint": "Wygenerowane hasło (16 znaków) jest hasłem administratora MongoDB (użytkownik \"admin\"), zapisanym w /root/.mongodb na serwerze - odczytaj je przez SSH.",
   "install.mongodb.version_label": "Wersja MongoDB",
   "install.mongodb.confirm_install": "Zainstalować MongoDB? To może potrwać kilka minut.",
