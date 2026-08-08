@@ -15,6 +15,8 @@ import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql } from '../services/postgresql.js';
 import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
+import { installMongodb } from '../services/mongodb.js';
+import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -117,6 +119,16 @@ async function getPostgresqlVersion() {
   }
 }
 
+async function getMongodbVersion() {
+  try {
+    const { stdout } = await execFileAsync('mongod', ['--version'], { timeout: 3000 });
+    const match = stdout.match(/db version v?([\d.]+)/i);
+    return match ? `v${match[1]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getCaddySiteCountSafe() {
   try {
     return await getSiteCount();
@@ -127,12 +139,13 @@ async function getCaddySiteCountSafe() {
 
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, caddySiteCount] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
     getPythonVersion(),
     getMariadbVersion(),
     getPostgresqlVersion(),
+    getMongodbVersion(),
     getCaddySiteCountSafe()
   ]);
 
@@ -181,6 +194,7 @@ router.get('/system', async (req, res) => {
       caddy: caddyVersion,
       mariadb: mariadbVersion,
       postgresql: postgresqlVersion,
+      mongodb: mongodbVersion,
       node: process.version,
       python: pythonVersion
     },
@@ -434,6 +448,32 @@ router.post('/postgresql/performance', async (req, res) => {
       sharedBuffersMb: req.body?.sharedBuffersMb,
       maxConnections: req.body?.maxConnections,
       trackActivities: Boolean(req.body?.trackActivities)
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mongodb/install', async (req, res) => {
+  try {
+    const result = await installMongodb({ version: req.body?.version });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mongodb/ram-info', (req, res) => {
+  res.json(getMongodbRamRecommendation());
+});
+
+router.post('/mongodb/performance', async (req, res) => {
+  try {
+    const result = await applyMongodbPerformanceConfig({
+      cacheSizeGb: req.body?.cacheSizeGb,
+      maxConnections: req.body?.maxConnections,
+      profilerEnabled: Boolean(req.body?.profilerEnabled)
     });
     res.json(result);
   } catch (e) {

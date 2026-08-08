@@ -43,7 +43,8 @@ const NAV_ICON_DEFAULT = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" 
 const NAV_ICONS = {
   fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
-  postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
+  postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
+  mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
 };
 function navIcon(key) {
   return NAV_ICONS[key] || NAV_ICON_DEFAULT;
@@ -380,6 +381,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
       ['system.caddy_version', escapeHtml(info.versions.caddy || t('system.not_found'))],
       ['system.mariadb_version', escapeHtml(info.versions.mariadb || t('system.not_found'))],
       ['system.postgresql_version', escapeHtml(info.versions.postgresql || t('system.not_found'))],
+      ['system.mongodb_version', escapeHtml(info.versions.mongodb || t('system.not_found'))],
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
       ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
     ];
@@ -685,6 +687,73 @@ function wirePostgresqlInstallTile() {
   updateButtonState();
 }
 
+function mongodbInstallTileHtml(svc) {
+  const name = t('services.mongodb.name');
+  const description = t('install.mongodb.description');
+
+  if (svc.found) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.mongodb.password_hint')}</p>
+        <div class="action-msg" id="mongodb-install-msg"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+      <p style="color:var(--muted);font-size:12px;margin:0 0 14px;">${t('install.mongodb.no_local_repo_note')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.mongodb.version_label')}</label>
+      <select id="mongodb-version" style="width:100%;margin-bottom:16px;">
+        <option value="8.0">8.0</option>
+        <option value="7.0">7.0</option>
+      </select>
+
+      <button type="button" id="mongodb-install-btn">${t('install.install_button')}</button>
+      <div class="action-msg" id="mongodb-install-msg"></div>
+    </div>
+  `;
+}
+
+function wireMongodbInstallTile() {
+  const btn = document.getElementById('mongodb-install-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mongodb-install-msg');
+
+  btn.onclick = async () => {
+    const version = document.getElementById('mongodb-version').value;
+    if (!window.confirm(t('install.mongodb.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mongodb/install', { version });
+      const svc = await api('GET', '/services/mongodb');
+      document.getElementById('content').innerHTML = mongodbInstallTileHtml(svc);
+      applyTranslations();
+      const successEl = document.getElementById('mongodb-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
@@ -699,6 +768,12 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = postgresqlInstallTileHtml(svc);
       applyTranslations();
       wirePostgresqlInstallTile();
+      return;
+    }
+    if (key === 'mongodb') {
+      content.innerHTML = mongodbInstallTileHtml(svc);
+      applyTranslations();
+      wireMongodbInstallTile();
       return;
     }
     content.innerHTML = installTileHtml(key, svc);
@@ -1432,6 +1507,86 @@ async function wrapPostgresqlExtras(serviceHtml) {
   `;
 }
 
+async function renderMongodbPerformanceSection() {
+  let ramInfo;
+  try {
+    ramInfo = await api('GET', '/mongodb/ram-info');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const ramHint = t('mongodbperf.ram_hint', {
+    total: ramInfo.totalMb,
+    recommended: ramInfo.recommendedGb
+  });
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mongodbperf.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mongodbperf.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mongodbperf.cache_size_label')}</label>
+      <input type="number" id="mongodbperf-cache-size" value="${ramInfo.recommendedGb}" min="0.25" step="0.25" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${escapeHtml(ramHint)}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mongodbperf.max_connections_label')}</label>
+      <input type="number" id="mongodbperf-max-connections" value="500" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('mongodbperf.max_connections_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="mongodbperf-profiler">
+        ${t('mongodbperf.profiler_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('mongodbperf.profiler_hint')}</div>
+
+      <button type="button" id="mongodbperf-save-btn">${t('mongodbperf.save_button')}</button>
+      <div class="action-msg" id="mongodbperf-msg"></div>
+    </div>
+  `;
+}
+
+function wireMongodbPerformanceSection() {
+  const btn = document.getElementById('mongodbperf-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mongodbperf-msg');
+
+  btn.onclick = async () => {
+    const cacheSizeGb = parseFloat(document.getElementById('mongodbperf-cache-size').value);
+    const maxConnections = parseInt(document.getElementById('mongodbperf-max-connections').value, 10);
+    const profilerEnabled = document.getElementById('mongodbperf-profiler').checked;
+
+    if (!Number.isFinite(cacheSizeGb) || !Number.isInteger(maxConnections)) {
+      msgEl.textContent = t('mongodbperf.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mongodbperf.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('mongodbperf.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mongodb/performance', { cacheSizeGb, maxConnections, profilerEnabled });
+      msgEl.textContent = t('mongodbperf.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+async function wrapMongodbExtras(serviceHtml) {
+  const perfHtml = await renderMongodbPerformanceSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -1458,6 +1613,7 @@ function wireServiceActions(key) {
         if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
         if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
         if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
+        if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1466,6 +1622,7 @@ function wireServiceActions(key) {
         if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
+        if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -1489,6 +1646,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
     if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
     if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
+    if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1497,6 +1655,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
     if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
     if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
+    if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

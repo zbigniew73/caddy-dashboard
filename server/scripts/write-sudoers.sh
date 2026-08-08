@@ -26,8 +26,10 @@ Cmnd_Alias CDDASH_MARIADB_INSTALL = ${INSTALL_DIR}/server/scripts/mariadb-instal
 Cmnd_Alias CDDASH_MARIADB_PERF = ${INSTALL_DIR}/server/scripts/mariadb-set-performance.sh
 Cmnd_Alias CDDASH_POSTGRESQL_INSTALL = ${INSTALL_DIR}/server/scripts/postgresql-install.sh local, ${INSTALL_DIR}/server/scripts/postgresql-install.sh official 16, ${INSTALL_DIR}/server/scripts/postgresql-install.sh official 17
 Cmnd_Alias CDDASH_POSTGRESQL_PERF = ${INSTALL_DIR}/server/scripts/postgresql-set-performance.sh
+Cmnd_Alias CDDASH_MONGODB_INSTALL = ${INSTALL_DIR}/server/scripts/mongodb-install.sh 7.0, ${INSTALL_DIR}/server/scripts/mongodb-install.sh 8.0
+Cmnd_Alias CDDASH_MONGODB_PERF = ${INSTALL_DIR}/server/scripts/mongodb-set-performance.sh
 
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF, CDDASH_MONGODB_INSTALL, CDDASH_MONGODB_PERF
 EOF
 
 if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then

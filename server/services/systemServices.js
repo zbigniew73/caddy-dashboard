@@ -17,7 +17,8 @@ const SERVICE_REGISTRY = [
       'postgresql-14.service', 'postgresql-13.service', 'postgresql.service'
     ],
     installable: { custom: true }
-  }
+  },
+  { key: 'mongodb', unitCandidates: ['mongod.service'], installable: { custom: true } }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];
