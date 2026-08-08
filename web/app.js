@@ -174,7 +174,7 @@ async function refreshDynamicNav() {
 
   const installContainer = document.getElementById('nav-install-list');
   installContainer.innerHTML = installablePackages.map((s) =>
-    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${navIcon(s.key)}<span>${escapeHtml(t(`services.${s.key}.name`))}</span></button>`
+    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
   ).join('');
   installContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
