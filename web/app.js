@@ -352,23 +352,29 @@ async function renderSystemTab(content, { silent = false } = {}) {
     const diskDetail = info.disk ? t('system.used_of', { used: formatBytes(info.disk.usedBytes), total: formatBytes(info.disk.totalBytes) }) : null;
     const swapDetail = info.swap ? t('system.used_of', { used: formatBytes(info.swap.usedBytes), total: formatBytes(info.swap.totalBytes) }) : null;
 
+    const infoItems = [
+      ['system.hostname', escapeHtml(info.hostname)],
+      ['system.os_name', escapeHtml(info.osName)],
+      ['system.platform', `${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}`],
+      ['system.kernel', escapeHtml(info.release)],
+      ['system.uptime', formatUptime(info.uptimeSeconds)],
+      ['system.caddy_version', escapeHtml(info.versions.caddy || t('system.not_found'))],
+      ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
+      ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
+    ];
+    const infoGridHtml = infoItems.map(([labelKey, value]) => `
+      <div>
+        <div class="info-label" data-i18n="${labelKey}"></div>
+        <div class="info-value">${value}</div>
+      </div>
+    `).join('');
+
     content.innerHTML = `
       <div class="system-info-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-          <dl>
-            <dt data-i18n="system.hostname"></dt><dd>${escapeHtml(info.hostname)}</dd>
-            <dt data-i18n="system.os_name"></dt><dd>${escapeHtml(info.osName)}</dd>
-            <dt data-i18n="system.platform"></dt><dd>${escapeHtml(info.platform)} / ${escapeHtml(info.arch)}</dd>
-            <dt data-i18n="system.kernel"></dt><dd>${escapeHtml(info.release)}</dd>
-            <dt data-i18n="system.uptime"></dt><dd>${formatUptime(info.uptimeSeconds)}</dd>
-          </dl>
+          <div class="info-grid">${infoGridHtml}</div>
           <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
         </div>
-        <dl style="grid-template-columns:auto 1fr auto 1fr auto 1fr;margin-top:10px;">
-          <dt data-i18n="system.caddy_version"></dt><dd>${escapeHtml(info.versions.caddy || t('system.not_found'))}</dd>
-          <dt data-i18n="system.node_version"></dt><dd>${escapeHtml(info.versions.node || t('system.not_found'))}</dd>
-          <dt data-i18n="system.python_version"></dt><dd>${escapeHtml(info.versions.python || t('system.not_found'))}</dd>
-        </dl>
         <div class="action-msg" id="system-reboot-msg"></div>
       </div>
       <div class="system-grid">
@@ -903,7 +909,7 @@ async function renderCaddyPerformanceSection() {
     <div class="system-info-card">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('caddyperf.title')}</h3>
       <p style="margin:0 0 10px;color:var(--muted);font-size:13px;">${t('caddyperf.description')}</p>
-      <p style="margin:0 0 14px;color:var(--warning);font-size:12px;">${t('caddyperf.warning')}</p>
+      <p style="margin:0 0 14px;color:var(--danger);font-size:12px;">${t('caddyperf.warning')}</p>
       <div class="action-msg" style="margin-bottom:10px;">${escapeHtml(t('caddyperf.current_label'))}: ${escapeHtml(currentLabel)}</div>
       <div style="display:flex;flex-wrap:wrap;margin-bottom:12px;">
         ${CADDYPERF_PROFILE_KEYS.map(profileOption).join('')}
