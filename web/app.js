@@ -377,7 +377,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
     content.innerHTML = `
       <div class="system-info-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-          <div style="display:flex;gap:40px;">
+          <div style="display:flex;gap:40px;align-items:flex-start;">
             <div class="info-grid" style="grid-template-columns:1fr;">${systemItems.map(infoItem).join('')}</div>
             <div class="info-grid" style="grid-template-columns:1fr;">${versionItems.map(infoItem).join('')}</div>
           </div>
