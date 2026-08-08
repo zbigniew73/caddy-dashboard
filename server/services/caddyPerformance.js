@@ -10,9 +10,9 @@ const MARK_END = '# END caddy-dashboard-performance';
 const MAX_EXPERT_LENGTH = 20000;
 
 const PROFILES = {
-  balanced: { read_body: '30s', read_header: '10s', write: '30s', idle: '120s', max_header_bytes: 1048576 },
-  low_ram: { read_body: '15s', read_header: '5s', write: '15s', idle: '30s', max_header_bytes: 262144 },
-  high_throughput: { read_body: '60s', read_header: '15s', write: '60s', idle: '300s', max_header_bytes: 2097152 }
+  balanced: { read_body: '30s', read_header: '10s', write: '30s', idle: '120s' },
+  low_ram: { read_body: '15s', read_header: '5s', write: '15s', idle: '30s' },
+  high_throughput: { read_body: '60s', read_header: '15s', write: '60s', idle: '300s' }
 };
 
 function profileBlock(key) {
@@ -32,7 +32,6 @@ function profileBlock(key) {
 			write       ${p.write}
 			idle        ${p.idle}
 		}
-		max_header_bytes ${p.max_header_bytes}
 	}
 }`;
 }
