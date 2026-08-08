@@ -66,7 +66,7 @@
   "install.install_button": "Zainstaluj",
   "install.installed_badge": "Zainstalowane",
   "install.installing": "Instaluję...",
-  "install.install_success": "Zainstalowano. Znajdziesz to teraz w menu pod CADDY.",
+  "install.install_success": "Zainstalowano. Znajdziesz to teraz w menu głównym.",
   "install.fail2ban.description": "Fail2ban skanuje logi systemowe (np. SSH) i automatycznie blokuje adresy IP po zbyt wielu nieudanych próbach logowania. Chroni przed atakami brute-force bez ręcznej interwencji. Po instalacji będzie można dodać własne reguły (jaile) w zakładce Fail2ban.",
   "install.mariadb.description": "MariaDB to serwer bazy danych. Wybierz źródło instalacji: pakiet z domyślnego repozytorium Alma/Rocky (starsza, ale sprawdzona wersja) albo oficjalne repozytorium MariaDB.com (nowsza wersja do wyboru). Po instalacji zostanie wygenerowane losowe 16-znakowe hasło i ustawione jako hasło root w bazie, zapisane w /root/.mariadb.",
   "install.mariadb.password_hint": "Wygenerowane hasło (16 znaków) jest głównym hasłem użytkownika root w MariaDB, zapisanym w /root/.mariadb na serwerze - odczytaj je przez SSH.",
