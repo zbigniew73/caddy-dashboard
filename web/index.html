@@ -164,7 +164,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 20px;
-    max-width: 66.6%;
+    max-width: 98%;
     margin-bottom: 16px;
   }
   .system-info-card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; }
@@ -180,7 +180,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
-    max-width: 66.6%;
+    max-width: 98%;
   }
   .stat-tile {
     background: var(--panel);
@@ -203,7 +203,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 16px;
-    max-width: 66.6%;
+    max-width: 98%;
   }
   .service-card {
     background: var(--panel);
@@ -300,12 +300,13 @@
   </header>
   <main>
     <nav>
+      <div class="nav-section-label" data-i18n="nav.main_section"></div>
       <button class="tab active" data-tab="system"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg><span data-i18n="nav.system"></span></button>
-      <button class="tab" data-tab="services" data-i18n="nav.services"></button>
-      <button class="tab" data-tab="ssh" data-i18n="nav.ssh"></button>
-      <button class="tab" data-tab="firewall" data-i18n="nav.firewall"></button>
-      <button class="tab" data-tab="cron" data-i18n="nav.cron"></button>
-      <button class="tab" data-tab="caddy" data-i18n="nav.caddy"></button>
+      <button class="tab" data-tab="services"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg><span data-i18n="nav.services"></span></button>
+      <button class="tab" data-tab="ssh"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg><span data-i18n="nav.ssh"></span></button>
+      <button class="tab" data-tab="firewall"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3z"/></svg><span data-i18n="nav.firewall"></span></button>
+      <button class="tab" data-tab="cron"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg><span data-i18n="nav.cron"></span></button>
+      <button class="tab" data-tab="caddy"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span data-i18n="nav.caddy"></span></button>
       <div id="nav-installed-extra"></div>
       <div class="nav-separator" id="nav-install-separator" style="display:none;"></div>
       <div class="nav-section-label" id="nav-install-label" data-i18n="nav.install_section" style="display:none;"></div>
