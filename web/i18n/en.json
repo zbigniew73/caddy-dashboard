@@ -127,6 +127,8 @@
   "system.rebooting": "Sending reboot command...",
   "system.reboot_initiated": "Reboot initiated - the server should come back online shortly.",
   "system.disk": "Disk ({path})",
+  "system.all_users": "All Users",
+  "system.all_sites": "All Sites",
   "system.used_of": "{used} of {total}",
   "update.stable": "Stable",
   "update.update_to": "Update → v{version}",

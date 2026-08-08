@@ -127,6 +127,8 @@
   "system.rebooting": "Wysyłam polecenie restartu...",
   "system.reboot_initiated": "Restart zainicjowany - serwer powinien wrócić online za chwilę.",
   "system.disk": "Dysk ({path})",
+  "system.all_users": "Wszyscy Użytkownicy",
+  "system.all_sites": "Wszystkie Strony",
   "system.used_of": "{used} z {total}",
   "update.stable": "Stable",
   "update.update_to": "Update → v{version}",

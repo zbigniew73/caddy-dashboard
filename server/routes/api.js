@@ -9,7 +9,8 @@ import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
-import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile } from '../services/caddyPerformance.js';
+import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
+import { getAllowedUsers } from '../services/auth.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -90,12 +91,21 @@ async function getPythonVersion() {
   }
 }
 
+async function getCaddySiteCountSafe() {
+  try {
+    return await getSiteCount();
+  } catch {
+    return null;
+  }
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
-    getPythonVersion()
+    getPythonVersion(),
+    getCaddySiteCountSafe()
   ]);
 
   const totalMem = os.totalmem();
@@ -143,7 +153,9 @@ router.get('/system', async (req, res) => {
       caddy: caddyVersion,
       node: process.version,
       python: pythonVersion
-    }
+    },
+    usersCount: getAllowedUsers().length,
+    caddySiteCount
   });
 });
 

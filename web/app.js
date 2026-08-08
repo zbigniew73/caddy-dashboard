@@ -283,6 +283,15 @@ function meterTile(label, percent, detail) {
   `;
 }
 
+function countTile(label, value) {
+  return `
+    <div class="stat-tile">
+      <div class="stat-label">${escapeHtml(label)}</div>
+      <div class="stat-value">${value === null || value === undefined ? '-' : value}</div>
+    </div>
+  `;
+}
+
 function wireSystemRebootButton() {
   const btn = document.getElementById('system-reboot-btn');
   if (!btn) return;
@@ -335,7 +344,7 @@ function startSystemAutoRefresh() {
     if (currentTab === 'system') {
       renderSystemTab(document.getElementById('content'), { silent: true });
     }
-  }, 60000);
+  }, 5000);
 }
 
 function stopSystemAutoRefresh() {
@@ -390,6 +399,8 @@ async function renderSystemTab(content, { silent = false } = {}) {
         ${meterTile(t('system.ram'), info.memory.usedPercent, ramDetail)}
         ${info.swap ? meterTile(t('system.swap'), info.swap.usedPercent, swapDetail) : ''}
         ${info.disk ? meterTile(diskLabel, info.disk.usedPercent, diskDetail) : ''}
+        ${countTile(t('system.all_users'), info.usersCount)}
+        ${countTile(t('system.all_sites'), info.caddySiteCount)}
       </div>
     `;
     applyTranslations();

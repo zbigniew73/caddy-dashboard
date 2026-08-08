@@ -64,6 +64,28 @@ function extractBlock(content) {
   return content.slice(startIdx + MARK_START.length, endIdx).trim();
 }
 
+function countSiteBlocks(content) {
+  let depth = 0;
+  let siteCount = 0;
+  for (const raw of content.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const openCount = (line.match(/{/g) || []).length;
+    const closeCount = (line.match(/}/g) || []).length;
+    if (depth === 0 && openCount > 0) {
+      const beforeBrace = line.split('{')[0].trim();
+      if (beforeBrace) siteCount++;
+    }
+    depth += openCount - closeCount;
+  }
+  return siteCount;
+}
+
+async function getSiteCount() {
+  const content = await readCaddyfile();
+  return countSiteBlocks(content);
+}
+
 async function getStatus() {
   const profileBlocks = Object.fromEntries(Object.keys(PROFILES).map((key) => [key, profileBlock(key)]));
   const content = await readCaddyfile();
@@ -131,4 +153,4 @@ function applyPerformanceConfig({ profile, expertBlock }) {
   });
 }
 
-export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile };
+export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile, getSiteCount };
