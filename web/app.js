@@ -41,7 +41,8 @@ async function api(method, url, body) {
 
 const NAV_ICON_DEFAULT = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 const NAV_ICONS = {
-  fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+  fail2ban: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
 };
 function navIcon(key) {
   return NAV_ICONS[key] || NAV_ICON_DEFAULT;
@@ -376,6 +377,7 @@ async function renderSystemTab(content, { silent = false } = {}) {
     ];
     const versionItems = [
       ['system.caddy_version', escapeHtml(info.versions.caddy || t('system.not_found'))],
+      ['system.mariadb_version', escapeHtml(info.versions.mariadb || t('system.not_found'))],
       ['system.node_version', escapeHtml(info.versions.node || t('system.not_found'))],
       ['system.python_version', escapeHtml(info.versions.python || t('system.not_found'))]
     ];

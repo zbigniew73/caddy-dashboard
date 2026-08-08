@@ -126,6 +126,7 @@
   "system.kernel": "Kernel version",
   "system.uptime": "Uptime",
   "system.caddy_version": "Caddy",
+  "system.mariadb_version": "MariaDB",
   "system.node_version": "Node",
   "system.python_version": "Python",
   "system.not_found": "not found",
