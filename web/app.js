@@ -1145,6 +1145,87 @@ async function wrapCaddyExtras(serviceHtml) {
   `;
 }
 
+async function renderMariadbPerformanceSection() {
+  let ramInfo;
+  try {
+    ramInfo = await api('GET', '/mariadb/ram-info');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const ramHint = t('mariadbperf.ram_hint', {
+    total: ramInfo.totalMb,
+    min: ramInfo.recommendedMinMb,
+    max: ramInfo.recommendedMaxMb
+  });
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mariadbperf.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mariadbperf.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mariadbperf.buffer_pool_label')}</label>
+      <input type="number" id="mariadbperf-buffer-pool" value="4096" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${escapeHtml(ramHint)}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mariadbperf.max_connections_label')}</label>
+      <input type="number" id="mariadbperf-max-connections" value="151" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('mariadbperf.max_connections_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="mariadbperf-perf-schema" checked>
+        ${t('mariadbperf.perf_schema_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('mariadbperf.perf_schema_hint')}</div>
+
+      <button type="button" id="mariadbperf-save-btn">${t('mariadbperf.save_button')}</button>
+      <div class="action-msg" id="mariadbperf-msg"></div>
+    </div>
+  `;
+}
+
+function wireMariadbPerformanceSection() {
+  const btn = document.getElementById('mariadbperf-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mariadbperf-msg');
+
+  btn.onclick = async () => {
+    const innodbBufferPoolMb = parseInt(document.getElementById('mariadbperf-buffer-pool').value, 10);
+    const maxConnections = parseInt(document.getElementById('mariadbperf-max-connections').value, 10);
+    const performanceSchema = document.getElementById('mariadbperf-perf-schema').checked;
+
+    if (!Number.isInteger(innodbBufferPoolMb) || !Number.isInteger(maxConnections)) {
+      msgEl.textContent = t('mariadbperf.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mariadbperf.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('mariadbperf.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mariadb/performance', { innodbBufferPoolMb, maxConnections, performanceSchema });
+      msgEl.textContent = t('mariadbperf.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+async function wrapMariadbExtras(serviceHtml) {
+  const perfHtml = await renderMariadbPerformanceSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 50%;max-width:50%;">${serviceHtml}</div>
+      <div style="flex:1 1 50%;max-width:50%;">${perfHtml}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -1169,12 +1250,14 @@ function wireServiceActions(key) {
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
         if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
+        if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
         if (key === 'fail2ban' && svc.found) wireFail2banSection();
         if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
+        if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -1196,12 +1279,14 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
     if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
+    if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
     if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
+    if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

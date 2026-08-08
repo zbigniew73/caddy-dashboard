@@ -12,6 +12,7 @@ import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileK
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
+import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -369,6 +370,23 @@ router.get('/mariadb/local-version', async (req, res) => {
 router.post('/mariadb/install', async (req, res) => {
   try {
     const result = await installMariadb({ mode: req.body?.mode, version: req.body?.version });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mariadb/ram-info', (req, res) => {
+  res.json(getRamRecommendation());
+});
+
+router.post('/mariadb/performance', async (req, res) => {
+  try {
+    const result = await applyMariadbPerformanceConfig({
+      innodbBufferPoolMb: req.body?.innodbBufferPoolMb,
+      maxConnections: req.body?.maxConnections,
+      performanceSchema: Boolean(req.body?.performanceSchema)
+    });
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
