@@ -1,4 +1,4 @@
-# Caddy Dashboard v1.9.1
+# Caddy Dashboard v1.9.2
 
 Nowe podejście do panelu zarządzania usługami na serwerze AlmaLinux/Rocky Linux 9/10, oparte na [Caddy](https://caddyserver.com/) jako reverse proxy.
 
@@ -30,6 +30,22 @@ dedykowanego uzytkownika `cdadmin` (patrz sekcja ponizej), robi
 generowany automatycznie), otwiera w firewalld http/https/ssh i port
 dashboardu, oraz przygotowuje `caddy-dashboard.service`. Autostart (systemd)
 zostawia do recznego wykonania - na koncu wypisuje dokladne komendy.
+
+### Nowa funkcja panelu daje "Brak uprawnien sudo bez hasla dla ..."
+
+Kazda nowa funkcja panelu, ktora potrzebuje uprawnien sudo (np. instalacja
+MariaDB, ustawienia wydajnosci Caddy), wymaga nowej reguly w
+`/etc/sudoers.d/caddy-dashboard`. Sam przycisk Update w panelu (git pull +
+npm install) tego NIE dodaje. Zamiast ponownego uruchamiania calego
+`install.sh` (dnf, sprawdzanie wersji Node, Caddy itd.), wystarczy szybka
+aktualizacja samych uprawnien:
+
+```bash
+cd /opt/caddy-dashboard && sudo ./refresh-sudoers.sh
+```
+
+Dziala w ulamek sekundy, bezpiecznie nadpisuje wylacznie
+`/etc/sudoers.d/caddy-dashboard` (walidacja `visudo -c` przed zapisem).
 
 ### Recznie (dowolna dystrybucja, np. do developmentu)
 

@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.9.1"
+APP_VERSION="1.9.2"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -509,25 +509,9 @@ if [ -n "${SVC_USER:-}" ] && [ "$SVC_USER" != "root" ]; then
   chown -R "$SVC_USER":"$SVC_USER" "$INSTALL_DIR"
 
   log "$(t sudoers_configuring "$SVC_USER")"
-  SUDOERS_TMP="$(mktemp)"
-  cat > "$SUDOERS_TMP" <<EOF
-Cmnd_Alias CDDASH_SYSTEMCTL = /usr/bin/systemctl start *.service, /usr/bin/systemctl stop *.service, /usr/bin/systemctl restart *.service, /usr/bin/systemctl reload *.service, /usr/bin/systemctl enable *.service, /usr/bin/systemctl disable *.service
-Cmnd_Alias CDDASH_DNF = /usr/bin/dnf install -y *, /usr/bin/dnf remove -y *
-Cmnd_Alias CDDASH_FIREWALL = /usr/bin/firewall-cmd *
-Cmnd_Alias CDDASH_SSH_PORT = ${INSTALL_DIR}/server/scripts/ssh-set-port.sh *
-Cmnd_Alias CDDASH_REBOOT = /usr/bin/systemctl reboot
-Cmnd_Alias CDDASH_FAIL2BAN = ${INSTALL_DIR}/server/scripts/fail2ban-write-config.sh
-Cmnd_Alias CDDASH_CADDY_PERF = ${INSTALL_DIR}/server/scripts/caddy-set-performance.sh, ${INSTALL_DIR}/server/scripts/caddy-set-performance.sh get
-Cmnd_Alias CDDASH_MARIADB_INSTALL = ${INSTALL_DIR}/server/scripts/mariadb-install.sh local, ${INSTALL_DIR}/server/scripts/mariadb-install.sh official 10.11, ${INSTALL_DIR}/server/scripts/mariadb-install.sh official 11.8
-
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL
-EOF
-  if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
-    install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/caddy-dashboard
-    rm -f "$SUDOERS_TMP"
+  if INSTALL_DIR="$INSTALL_DIR" SVC_USER="$SVC_USER" "${INSTALL_DIR}/server/scripts/write-sudoers.sh"; then
     log "$(t sudoers_configured)"
   else
-    rm -f "$SUDOERS_TMP"
     die "$(t err_sudoers_invalid)"
   fi
 fi
