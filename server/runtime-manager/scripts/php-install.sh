@@ -32,9 +32,11 @@ dnf install -y \
     "${PKG}-php-zip" \
     "${PKG}-php-mysqlnd" \
     "${PKG}-php-pgsql" \
+    "${PKG}-php-pdo" \
     "${PKG}-php-soap" \
     "${PKG}-php-process" \
     "${PKG}-php-pecl-redis" \
+    "${PKG}-php-exif" \
   || err "Instalacja rozszerzen ${PKG} nie powiodla sie."
 
 SERVICE="${PKG}-php-fpm"
