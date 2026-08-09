@@ -1984,10 +1984,11 @@ async function renderPhpSettingsSection(id) {
       <input type="number" id="phpsettings-max-file-uploads-${id}" value="${maxFileUploads}" min="1" style="width:100%;margin-bottom:4px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.max_file_uploads_hint', '50')}</div>
 
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
-        <input type="checkbox" id="phpsettings-expose-php-${id}"${exposePhp ? ' checked' : ''}>
-        ${t('phpsettings.expose_php_label')}
-      </label>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.expose_php_label')}</label>
+      <select id="phpsettings-expose-php-${id}" style="width:100%;margin-bottom:4px;">
+        <option value="off"${!exposePhp ? ' selected' : ''}>Off</option>
+        <option value="on"${exposePhp ? ' selected' : ''}>On</option>
+      </select>
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.expose_php_hint', 'Off')}</div>
 
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
@@ -2009,7 +2010,7 @@ function wirePhpSettingsSection(id) {
     const maxInputTime = parseInt(document.getElementById(`phpsettings-max-input-time-${id}`).value, 10);
     const maxInputVars = parseInt(document.getElementById(`phpsettings-max-input-vars-${id}`).value, 10);
     const maxFileUploads = parseInt(document.getElementById(`phpsettings-max-file-uploads-${id}`).value, 10);
-    const exposePhp = document.getElementById(`phpsettings-expose-php-${id}`).checked;
+    const exposePhp = document.getElementById(`phpsettings-expose-php-${id}`).value === 'on';
 
     if (!timezone || ![memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads].every(Number.isInteger)) {
       msgEl.textContent = t('phpsettings.invalid_values');
