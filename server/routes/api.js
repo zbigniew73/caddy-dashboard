@@ -13,6 +13,8 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
+import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
+import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
 import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql } from '../services/postgresql.js';
 import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
 import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../services/mongodb.js';
@@ -480,6 +482,30 @@ router.post('/mariadb/performance', async (req, res) => {
   }
 });
 
+router.get('/mariadb/test-db', async (req, res) => {
+  try {
+    res.json(await getMariadbTestDbStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mariadb/test-db/create', async (req, res) => {
+  try {
+    res.json(await createMariadbTestDb());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mariadb/test-db/drop', async (req, res) => {
+  try {
+    res.json(await dropMariadbTestDb());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.get('/postgresql/local-version', async (req, res) => {
   try {
     res.json({ version: await getPostgresqlLocalRepoVersion() });
@@ -509,6 +535,30 @@ router.post('/postgresql/performance', async (req, res) => {
       trackActivities: Boolean(req.body?.trackActivities)
     });
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/postgresql/test-db', async (req, res) => {
+  try {
+    res.json(await getPostgresqlTestDbStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/postgresql/test-db/create', async (req, res) => {
+  try {
+    res.json(await createPostgresqlTestDb());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/postgresql/test-db/drop', async (req, res) => {
+  try {
+    res.json(await dropPostgresqlTestDb());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

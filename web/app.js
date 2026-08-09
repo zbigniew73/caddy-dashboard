@@ -1735,11 +1735,90 @@ function wireMariadbPerformanceSection() {
   };
 }
 
+async function renderMariadbTestDbSection() {
+  let status;
+  try {
+    status = await api('GET', '/mariadb/test-db');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
+        <h3 style="margin:0;font-size:15px;">${t('testdb.title')}</h3>
+        <span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('testdb.exists') : t('testdb.missing')}</span>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('testdb.description')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+      </dl>
+      <button type="button" id="mariadb-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
+      <button type="button" class="danger" id="mariadb-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>
+      <div class="action-msg" id="mariadb-testdb-msg"></div>
+    </div>
+  `;
+}
+
+function wireMariadbTestDbSection() {
+  const createBtn = document.getElementById('mariadb-testdb-create-btn');
+  const dropBtn = document.getElementById('mariadb-testdb-drop-btn');
+  if (!createBtn || !dropBtn) return;
+  const msgEl = document.getElementById('mariadb-testdb-msg');
+
+  async function refresh() {
+    const html = await renderMariadbTestDbSection();
+    const container = createBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = html;
+      applyTranslations();
+      wireMariadbTestDbSection();
+    }
+  }
+
+  createBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_create'))) return;
+    createBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mariadb/test-db/create');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      createBtn.disabled = false;
+    }
+  };
+
+  dropBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_drop'))) return;
+    dropBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mariadb/test-db/drop');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      dropBtn.disabled = false;
+    }
+  };
+}
+
 async function wrapMariadbExtras(serviceHtml) {
-  const perfHtml = await renderMariadbPerformanceSection();
+  const [perfHtml, testDbHtml] = await Promise.all([
+    renderMariadbPerformanceSection(),
+    renderMariadbTestDbSection()
+  ]);
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+        ${serviceHtml}
+        ${testDbHtml}
+      </div>
       <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
     </div>
   `;
@@ -1816,11 +1895,90 @@ function wirePostgresqlPerformanceSection() {
   };
 }
 
+async function renderPostgresqlTestDbSection() {
+  let status;
+  try {
+    status = await api('GET', '/postgresql/test-db');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
+        <h3 style="margin:0;font-size:15px;">${t('testdb.title')}</h3>
+        <span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('testdb.exists') : t('testdb.missing')}</span>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('testdb.description')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+      </dl>
+      <button type="button" id="postgresql-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
+      <button type="button" class="danger" id="postgresql-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>
+      <div class="action-msg" id="postgresql-testdb-msg"></div>
+    </div>
+  `;
+}
+
+function wirePostgresqlTestDbSection() {
+  const createBtn = document.getElementById('postgresql-testdb-create-btn');
+  const dropBtn = document.getElementById('postgresql-testdb-drop-btn');
+  if (!createBtn || !dropBtn) return;
+  const msgEl = document.getElementById('postgresql-testdb-msg');
+
+  async function refresh() {
+    const html = await renderPostgresqlTestDbSection();
+    const container = createBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = html;
+      applyTranslations();
+      wirePostgresqlTestDbSection();
+    }
+  }
+
+  createBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_create'))) return;
+    createBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/postgresql/test-db/create');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      createBtn.disabled = false;
+    }
+  };
+
+  dropBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_drop'))) return;
+    dropBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/postgresql/test-db/drop');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      dropBtn.disabled = false;
+    }
+  };
+}
+
 async function wrapPostgresqlExtras(serviceHtml) {
-  const perfHtml = await renderPostgresqlPerformanceSection();
+  const [perfHtml, testDbHtml] = await Promise.all([
+    renderPostgresqlPerformanceSection(),
+    renderPostgresqlTestDbSection()
+  ]);
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+        ${serviceHtml}
+        ${testDbHtml}
+      </div>
       <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
     </div>
   `;
@@ -2480,8 +2638,8 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'firewall' && svc.found) wireFirewallSection();
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
     if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
-    if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
-    if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
+    if (key === 'mariadb' && svc.found) { wireMariadbPerformanceSection(); wireMariadbTestDbSection(); }
+    if (key === 'postgresql' && svc.found) { wirePostgresqlPerformanceSection(); wirePostgresqlTestDbSection(); }
     if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
     if (key === 'redis' && svc.found) wireRedisPerformanceSection();
     if (phpMatch && svc.found) {

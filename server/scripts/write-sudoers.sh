@@ -29,8 +29,10 @@ Cmnd_Alias CDDASH_FAIL2BAN = ${INSTALL_DIR}/server/scripts/fail2ban-write-config
 Cmnd_Alias CDDASH_CADDY_PERF = ${INSTALL_DIR}/server/scripts/caddy-set-performance.sh, ${INSTALL_DIR}/server/scripts/caddy-set-performance.sh get
 Cmnd_Alias CDDASH_MARIADB_INSTALL = ${INSTALL_DIR}/server/scripts/mariadb-install.sh local, ${INSTALL_DIR}/server/scripts/mariadb-install.sh official 10.11, ${INSTALL_DIR}/server/scripts/mariadb-install.sh official 11.8
 Cmnd_Alias CDDASH_MARIADB_PERF = ${INSTALL_DIR}/server/scripts/mariadb-set-performance.sh
+Cmnd_Alias CDDASH_MARIADB_TESTDB = ${INSTALL_DIR}/server/scripts/mariadb-test-db.sh create, ${INSTALL_DIR}/server/scripts/mariadb-test-db.sh drop, ${INSTALL_DIR}/server/scripts/mariadb-test-db.sh status
 Cmnd_Alias CDDASH_POSTGRESQL_INSTALL = ${INSTALL_DIR}/server/scripts/postgresql-install.sh local, ${INSTALL_DIR}/server/scripts/postgresql-install.sh official 16, ${INSTALL_DIR}/server/scripts/postgresql-install.sh official 17
 Cmnd_Alias CDDASH_POSTGRESQL_PERF = ${INSTALL_DIR}/server/scripts/postgresql-set-performance.sh
+Cmnd_Alias CDDASH_POSTGRESQL_TESTDB = ${INSTALL_DIR}/server/scripts/postgresql-test-db.sh create, ${INSTALL_DIR}/server/scripts/postgresql-test-db.sh drop, ${INSTALL_DIR}/server/scripts/postgresql-test-db.sh status
 Cmnd_Alias CDDASH_MONGODB_INSTALL = ${INSTALL_DIR}/server/scripts/mongodb-install.sh 7.0, ${INSTALL_DIR}/server/scripts/mongodb-install.sh 8.0
 Cmnd_Alias CDDASH_MONGODB_PERF = ${INSTALL_DIR}/server/scripts/mongodb-set-performance.sh
 Cmnd_Alias CDDASH_REDIS_INSTALL = ${INSTALL_DIR}/server/scripts/redis-install.sh local, ${INSTALL_DIR}/server/scripts/redis-install.sh official
@@ -46,7 +48,7 @@ Cmnd_Alias CDDASH_FRANKENPHP_REPO = ${INSTALL_DIR}/server/runtime-manager/script
 Cmnd_Alias CDDASH_FRANKENPHP_LIST = ${INSTALL_DIR}/server/runtime-manager/scripts/frankenphp-list-versions.sh
 Cmnd_Alias CDDASH_FRANKENPHP_INSTALL = ${INSTALL_DIR}/server/runtime-manager/scripts/frankenphp-install.sh [0-9].[0-9]
 
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF, CDDASH_MONGODB_INSTALL, CDDASH_MONGODB_PERF, CDDASH_REDIS_INSTALL, CDDASH_REDIS_PERF, CDDASH_PHP_REPOS, CDDASH_PHP_LIST, CDDASH_PHP_INSTALL, CDDASH_PHP_SETTINGS, CDDASH_PHP_OPCACHE, CDDASH_PHP_MODULE, CDDASH_PHP_MODULE_LIST, CDDASH_FRANKENPHP_REPO, CDDASH_FRANKENPHP_LIST, CDDASH_FRANKENPHP_INSTALL
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_MARIADB_TESTDB, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF, CDDASH_POSTGRESQL_TESTDB, CDDASH_MONGODB_INSTALL, CDDASH_MONGODB_PERF, CDDASH_REDIS_INSTALL, CDDASH_REDIS_PERF, CDDASH_PHP_REPOS, CDDASH_PHP_LIST, CDDASH_PHP_INSTALL, CDDASH_PHP_SETTINGS, CDDASH_PHP_OPCACHE, CDDASH_PHP_MODULE, CDDASH_PHP_MODULE_LIST, CDDASH_FRANKENPHP_REPO, CDDASH_FRANKENPHP_LIST, CDDASH_FRANKENPHP_INSTALL
 EOF
 
 if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then
