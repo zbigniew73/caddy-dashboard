@@ -2171,7 +2171,7 @@ function wordpressBadgeHtml(moduleKey) {
     return `<span title="${escapeHtml(t('phpmodules.wordpress_required_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--danger);color:var(--danger);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_required')}</span>`;
   }
   if (WORDPRESS_RECOMMENDED_MODULES.has(moduleKey)) {
-    return `<span title="${escapeHtml(t('phpmodules.wordpress_recommended_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--border);color:var(--muted);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_recommended')}</span>`;
+    return `<span title="${escapeHtml(t('phpmodules.wordpress_recommended_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--accent);color:var(--accent);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_recommended')}</span>`;
   }
   return '';
 }
@@ -2203,7 +2203,7 @@ async function renderPhpModulesSection(id) {
     <div class="system-info-card">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('phpmodules.title')}</h3>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpmodules.description')}</p>
-      <table class="firewall-table">
+      <table class="firewall-table php-modules-table">
         <thead>
           <tr>
             <th>${t('phpmodules.column_module')}</th>
