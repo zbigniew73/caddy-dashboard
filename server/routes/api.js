@@ -22,7 +22,8 @@ import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConf
 import { getInstalledStatus as getResticStatus } from '../services/restic.js';
 import {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
-  getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule
+  getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
+  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp
 } from '../services/runtimeManagerClient.js';
 
 const router = Router();
@@ -666,6 +667,31 @@ router.get('/php/:id/modules', async (req, res) => {
 router.post('/php/:id/modules/:module/:action', async (req, res) => {
   try {
     const result = await togglePhpModule(req.params.id, req.params.module, req.params.action);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/frankenphp/available', async (req, res) => {
+  try {
+    res.json({ versions: await getAvailableFrankenphp() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/frankenphp', async (req, res) => {
+  try {
+    res.json(await getFrankenphpStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/frankenphp/:version/install', async (req, res) => {
+  try {
+    const result = await installFrankenphp(req.params.version);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

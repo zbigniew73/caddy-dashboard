@@ -102,7 +102,21 @@ async function togglePhpModule(id, moduleKey, action) {
   return request('POST', `/php/${encodeURIComponent(id)}/modules/${encodeURIComponent(moduleKey)}/${encodeURIComponent(action)}`);
 }
 
+async function getAvailableFrankenphp() {
+  const { versions } = await request('GET', '/frankenphp/available');
+  return versions;
+}
+
+async function getFrankenphpStatus() {
+  return request('GET', '/frankenphp');
+}
+
+async function installFrankenphp(version) {
+  return request('POST', `/frankenphp/${encodeURIComponent(version)}/install`);
+}
+
 export {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
-  getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule
+  getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
+  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp
 };

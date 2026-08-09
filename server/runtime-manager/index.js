@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import phpRoutes from './routes/php.js';
+import frankenphpRoutes from './routes/frankenphp.js';
 
 // Ten proces to Runtime Manager - osobna usluga systemd
 // (caddy-dashboard-runtime.service) obok glownego panelu
@@ -37,6 +38,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/php', phpRoutes);
+app.use('/frankenphp', frankenphpRoutes);
 
 app.use((err, req, res, next) => {
   console.error('[BLAD]', err);

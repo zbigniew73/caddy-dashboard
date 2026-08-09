@@ -20,7 +20,15 @@ const SERVICE_REGISTRY = [
     installable: { custom: true }
   },
   { key: 'mongodb', unitCandidates: ['mongod.service'], installable: { custom: true } },
-  { key: 'redis', unitCandidates: ['redis.service', 'valkey.service'], installable: { custom: true } }
+  { key: 'redis', unitCandidates: ['redis.service', 'valkey.service'], installable: { custom: true } },
+  // FrankenPHP (+ PHP ZTS) - osobny runtime PHP obok Remi PHP-FPM
+  // (server/runtime-manager/), instalowany przez Runtime Manager, nie
+  // dnf install bezposrednio - stad "custom", tak samo jak MariaDB.
+  // W przeciwienstwie do php84/phpXX (patrz PHP_FPM_KEY_PATTERN nizej) to
+  // JEDNA usluga, nie per-wersja - FrankenPHP sam w sobie jest jednym
+  // procesem/binarka, wersja ZTS PHP jest wyborem PRZY instalacji, nie
+  // osobnym runtime per wersja.
+  { key: 'frankenphp', unitCandidates: ['frankenphp.service'], installable: { custom: true } }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];

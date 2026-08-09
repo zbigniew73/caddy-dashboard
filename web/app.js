@@ -45,7 +45,8 @@ const NAV_ICONS = {
   mariadb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
-  redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>'
+  redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
+  frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>'
 };
 const PHP_ICON = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>';
 function navIcon(key) {
@@ -456,6 +457,83 @@ function wireInstallTile(key) {
       const successEl = document.getElementById(`install-msg-${key}`);
       successEl.textContent = t('install.install_success');
       successEl.className = 'action-msg success';
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
+function frankenphpInstallTileHtml(status, avail) {
+  const name = t('services.frankenphp.name');
+  const description = t('install.frankenphp.description');
+
+  if (status.installed) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;font-family:monospace;">${escapeHtml(status.version || '')}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.frankenphp.installed_hint')}</p>
+      </div>
+    `;
+  }
+
+  const versions = avail?.versions || [];
+  const selectable = versions.filter((v) => !v.enabled);
+  const firstSelectableVersion = selectable[0]?.version;
+
+  const versionList = versions.length
+    ? versions.map((v) => `
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;">
+          <input type="radio" name="frankenphp-version" value="${escapeHtml(v.version)}" ${v.version === firstSelectableVersion ? 'checked' : ''}>
+          <span>PHP ${escapeHtml(v.version)} ZTS${v.enabled ? ` <span class="status-badge active">${t('install.frankenphp.enabled_badge')}</span>` : ''}</span>
+        </label>
+      `).join('')
+    : `<p style="color:var(--muted);font-size:13px;">${t('install.frankenphp.no_versions')}</p>`;
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+
+      <div style="margin-bottom:14px;">${versionList}</div>
+
+      ${versions.length ? `<button type="button" id="frankenphp-install-btn">${t('install.install_button')}</button>` : ''}
+      <div class="action-msg" id="frankenphp-install-msg"></div>
+    </div>
+  `;
+}
+
+function wireFrankenphpInstallTile() {
+  const btn = document.getElementById('frankenphp-install-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('frankenphp-install-msg');
+
+  btn.onclick = async () => {
+    const selected = document.querySelector('input[name="frankenphp-version"]:checked');
+    if (!selected) return;
+    const version = selected.value;
+    if (!window.confirm(t('install.frankenphp.confirm_install', { version }))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', `/frankenphp/${version}/install`);
+      const status = await api('GET', '/frankenphp');
+      document.getElementById('content').innerHTML = frankenphpInstallTileHtml(status, null);
+      applyTranslations();
+      const successEl = document.getElementById('frankenphp-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
       await refreshDynamicNav();
     } catch (e) {
       msgEl.textContent = e.message;
@@ -980,6 +1058,14 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = phpInstallTileHtml(data);
       applyTranslations();
       wirePhpInstallTile();
+      return;
+    }
+    if (key === 'frankenphp') {
+      const status = await api('GET', '/frankenphp');
+      const avail = status.installed ? null : await api('GET', '/frankenphp/available');
+      content.innerHTML = frankenphpInstallTileHtml(status, avail);
+      applyTranslations();
+      wireFrankenphpInstallTile();
       return;
     }
     const svc = await api('GET', `/services/${key}`);
