@@ -192,6 +192,8 @@
   "phpsettings.max_file_uploads_label": "Maks. liczba plików w jednym uploadzie",
   "phpsettings.max_file_uploads_hint": "Ile plików można wysłać jednocześnie w jednym żądaniu (np. galeria zdjęć naraz)",
   "phpsettings.suggested_value": "Proponowane: {value}.",
+  "phpsettings.expose_php_label": "Pokazuj wersję PHP w nagłówkach (expose_php)",
+  "phpsettings.expose_php_hint": "Ujawnianie wersji PHP ułatwia atakującym dobór exploitów pod konkretną wersję - zalecane wyłączone.",
 
   "phpopcache.title": "OPcache",
   "phpopcache.description": "Cache skompilowanego bajtkodu PHP - kluczowe dla wydajności. Zmiany przeładują PHP-FPM.",
@@ -223,6 +225,8 @@
   "phpmodules.success": "Zapisano, PHP-FPM przeładowany.",
   "phpmodules.confirm_add": "Dodać moduł {module}?",
   "phpmodules.confirm_remove": "Usunąć moduł {module}? Aplikacje korzystające z tego rozszerzenia mogą przestać działać.",
+  "phpmodules.wordpress_required": "Wymagane przez WordPress",
+  "phpmodules.wordpress_required_title": "Oficjalna dokumentacja WordPress oznacza ten moduł jako wymagany albo mocno zalecany do prawidłowego działania (make.wordpress.org/hosting/handbook/server-environment/)",
   "phpsettings.save_button": "Zapisz i przeładuj PHP-FPM",
   "phpsettings.saving": "Zapisuję i przeładowuję PHP-FPM...",
   "phpsettings.save_success": "Zapisano, PHP-FPM przeładowany.",

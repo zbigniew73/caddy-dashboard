@@ -77,9 +77,9 @@ async function getPhpSettings(id) {
   return request('GET', `/php/${encodeURIComponent(id)}/settings`);
 }
 
-async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads }) {
+async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads, exposePhp }) {
   return request('POST', `/php/${encodeURIComponent(id)}/settings`, {
-    timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads
+    timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads, exposePhp
   });
 }
 

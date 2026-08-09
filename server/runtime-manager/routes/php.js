@@ -153,7 +153,7 @@ function requireIntInRange(value, min, max, label) {
 
 const PHP_INI_SETTINGS_KEYS = [
   'date.timezone', 'memory_limit', 'upload_max_filesize', 'post_max_size',
-  'max_execution_time', 'max_input_time', 'max_input_vars', 'max_file_uploads'
+  'max_execution_time', 'max_input_time', 'max_input_vars', 'max_file_uploads', 'expose_php'
 ];
 const PHP_INI_OPCACHE_KEYS = [
   'opcache.memory_consumption', 'opcache.interned_strings_buffer',
@@ -205,7 +205,8 @@ router.get('/:id/settings', async (req, res) => {
       maxExecutionTime: parseInt(values['max_execution_time'], 10) || null,
       maxInputTime: parseInt(values['max_input_time'], 10) || null,
       maxInputVars: parseInt(values['max_input_vars'], 10) || null,
-      maxFileUploads: parseInt(values['max_file_uploads'], 10) || null
+      maxFileUploads: parseInt(values['max_file_uploads'], 10) || null,
+      exposePhp: iniBool(values['expose_php'])
     });
   } catch (e) {
     res.status(500).json({ error: `Nie udalo sie odczytac biezacej konfiguracji PHP ${versionLabel(id)}.` });
@@ -253,14 +254,16 @@ router.post('/:id/settings', async (req, res) => {
   } catch (e) {
     return res.status(e.status || 400).json({ error: e.message });
   }
+  const exposePhp = body.exposePhp ? 'On' : 'Off';
 
-  // expose_php/default_charset/realpath_cache_* to swiadome, stale
-  // wartosci (bezpieczenstwo + wydajnosc) - nie sa polami w formularzu,
-  // zawsze dopisywane razem z ustawieniami, ktore admin faktycznie
-  // wybiera. Zestaw pol i wartosci zgodny z przykladem "Globalne PHP
-  // 8.5" z pierwotnego planu Runtime Managera.
+  // default_charset/realpath_cache_* to swiadome, stale wartosci
+  // (wydajnosc) - nie sa polami w formularzu, zawsze dopisywane razem z
+  // ustawieniami, ktore admin faktycznie wybiera. Zestaw pol i wartosci
+  // zgodny z przykladem "Globalne PHP 8.5" z pierwotnego planu Runtime
+  // Managera - expose_php byl tam tez stala (Off), ale user poprosil o
+  // realny przelacznik zamiast zaszytej wartosci.
   const iniContent = `[PHP]
-expose_php = Off
+expose_php = ${exposePhp}
 default_charset = "UTF-8"
 date.timezone = "${timezone}"
 memory_limit = ${memoryLimit}M

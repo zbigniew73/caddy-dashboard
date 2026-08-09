@@ -1942,6 +1942,7 @@ async function renderPhpSettingsSection(id) {
   const maxInputTime = current.maxInputTime ?? 60;
   const maxInputVars = current.maxInputVars ?? 5000;
   const maxFileUploads = current.maxFileUploads ?? 50;
+  const exposePhp = current.exposePhp ?? false;
 
   return `
     <div class="system-info-card">
@@ -1976,6 +1977,12 @@ async function renderPhpSettingsSection(id) {
       <input type="number" id="phpsettings-max-file-uploads-${id}" value="${maxFileUploads}" min="1" style="width:100%;margin-bottom:4px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.max_file_uploads_hint', '50')}</div>
 
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="phpsettings-expose-php-${id}"${exposePhp ? ' checked' : ''}>
+        ${t('phpsettings.expose_php_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.expose_php_hint', 'Off')}</div>
+
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
       <div class="action-msg" id="phpsettings-msg-${id}"></div>
     </div>
@@ -1995,6 +2002,7 @@ function wirePhpSettingsSection(id) {
     const maxInputTime = parseInt(document.getElementById(`phpsettings-max-input-time-${id}`).value, 10);
     const maxInputVars = parseInt(document.getElementById(`phpsettings-max-input-vars-${id}`).value, 10);
     const maxFileUploads = parseInt(document.getElementById(`phpsettings-max-file-uploads-${id}`).value, 10);
+    const exposePhp = document.getElementById(`phpsettings-expose-php-${id}`).checked;
 
     if (!timezone || ![memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads].every(Number.isInteger)) {
       msgEl.textContent = t('phpsettings.invalid_values');
@@ -2008,7 +2016,7 @@ function wirePhpSettingsSection(id) {
     msgEl.className = 'action-msg';
     try {
       await api('POST', `/php/${id}/settings`, {
-        timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads
+        timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads, exposePhp
       });
       msgEl.textContent = t('phpsettings.save_success');
       msgEl.className = 'action-msg success';
@@ -2121,6 +2129,19 @@ function humanizePhpModuleKey(key) {
   return key.replace(/^pecl-/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Moduly, ktore oficjalna dokumentacja WordPressa
+// (make.wordpress.org/hosting/handbook/server-environment/) oznacza jako
+// REQUIRED albo HIGHLY RECOMMENDED (nie "optional"/"fallback"/cache-owe
+// jak opcache/redis, ktore sa "wystarczy jedno z wielu") - stan
+// zweryfikowany na zywo z tej strony, nie zgadywany.
+const WORDPRESS_REQUIRED_MODULES = new Set([
+  'json', 'mysqli', 'mysqlnd',
+  'curl', 'dom', 'exif', 'fileinfo', 'hash',
+  'igbinary', 'pecl-igbinary',
+  'imagick', 'pecl-imagick',
+  'intl', 'mbstring', 'openssl', 'xml', 'zip'
+]);
+
 async function renderPhpModulesSection(id) {
   let modules;
   try {
@@ -2131,12 +2152,15 @@ async function renderPhpModulesSection(id) {
 
   const rows = modules.map((m) => {
     const label = humanizePhpModuleKey(m.key);
+    const wpBadge = WORDPRESS_REQUIRED_MODULES.has(m.key)
+      ? `<span title="${escapeHtml(t('phpmodules.wordpress_required_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--border);color:var(--muted);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_required')}</span>`
+      : '';
     const actionButton = m.enabled
       ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
       : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`;
     return `
       <tr>
-        <td>${escapeHtml(label)}</td>
+        <td>${escapeHtml(label)}${wpBadge}</td>
         <td><span class="status-badge ${m.enabled ? 'active' : 'inactive'}">${m.enabled ? t('phpmodules.enabled') : t('phpmodules.disabled')}</span></td>
         <td>${actionButton}</td>
       </tr>

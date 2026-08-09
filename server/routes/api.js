@@ -623,7 +623,8 @@ router.post('/php/:id/settings', async (req, res) => {
       maxExecutionTime: req.body?.maxExecutionTime,
       maxInputTime: req.body?.maxInputTime,
       maxInputVars: req.body?.maxInputVars,
-      maxFileUploads: req.body?.maxFileUploads
+      maxFileUploads: req.body?.maxFileUploads,
+      exposePhp: req.body?.exposePhp
     });
     res.json(result);
   } catch (e) {
