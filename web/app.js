@@ -2147,11 +2147,12 @@ function humanizePhpModuleKey(key) {
 // Dwa osobne poziomy z oficjalnej dokumentacji WordPressa
 // (make.wordpress.org/hosting/handbook/server-environment/), zweryfikowane
 // na zywo z tej strony, nie zgadywane. Celowo NIE laczymy ich w jeden
-// badge - strona sama rozroznia REQUIRED od HIGHLY RECOMMENDED, wiec
-// panel tez to pokazuje osobno. Pomijamy kategorie "Recommended (cache) -
+// badge - strona sama rozroznia 4 kategorie modulow, wiec panel pokazuje
+// je wszystkie osobno i jawnie (na wyrazne zyczenie - nic nie ma byc
+// pomijane): REQUIRED, HIGHLY RECOMMENDED, "Recommended (cache) -
 // wystarczy jedno z wielu" (opcache/redis/apcu/memcached) i "Optional/
-// fallback" (sodium, iconv, zip... - o ile nie sa juz w ktorejs z list
-// powyzej), bo to nie jest "trzeba miec".
+// fallback" (sodium, iconv, bcmath, filter, shmop, simplexml, xmlreader,
+// zlib, timezonedb, ssh2, ftp, sockets).
 // Kilka wariantow nazw pakietow na kazdy modul, bo dokladny sufiks
 // zalezy od konkretnego builda Remi (potwierdzone na zywym serwerze
 // 2026-08-09: ta instalacja ma np. "pecl-zip" nie "zip", i
@@ -2165,6 +2166,26 @@ const WORDPRESS_RECOMMENDED_MODULES = new Set([
   'intl', 'mbstring', 'openssl', 'xml',
   'zip', 'pecl-zip'
 ]);
+const WORDPRESS_CACHING_MODULES = new Set([
+  'opcache',
+  'redis', 'pecl-redis', 'pecl-redis5', 'pecl-redis6',
+  'apcu', 'pecl-apcu',
+  'memcached', 'pecl-memcached'
+]);
+const WORDPRESS_OPTIONAL_MODULES = new Set([
+  'sodium',
+  'iconv',
+  'bc', 'bcmath',
+  'filter',
+  'shmop',
+  'simplexml',
+  'xmlreader',
+  'zlib',
+  'timezonedb', 'pecl-timezonedb',
+  'ssh2', 'pecl-ssh2',
+  'ftp',
+  'sockets'
+]);
 
 function wordpressBadgeHtml(moduleKey) {
   if (WORDPRESS_REQUIRED_MODULES.has(moduleKey)) {
@@ -2172,6 +2193,12 @@ function wordpressBadgeHtml(moduleKey) {
   }
   if (WORDPRESS_RECOMMENDED_MODULES.has(moduleKey)) {
     return `<span title="${escapeHtml(t('phpmodules.wordpress_recommended_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--accent);color:var(--accent);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_recommended')}</span>`;
+  }
+  if (WORDPRESS_CACHING_MODULES.has(moduleKey)) {
+    return `<span title="${escapeHtml(t('phpmodules.wordpress_caching_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--warning, #d19a1c);color:var(--warning, #d19a1c);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_caching')}</span>`;
+  }
+  if (WORDPRESS_OPTIONAL_MODULES.has(moduleKey)) {
+    return `<span title="${escapeHtml(t('phpmodules.wordpress_optional_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--muted);color:var(--muted);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_optional')}</span>`;
   }
   return '';
 }
