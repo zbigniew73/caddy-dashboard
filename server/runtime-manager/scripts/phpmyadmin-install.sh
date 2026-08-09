@@ -70,6 +70,16 @@ echo "$PMA_VERSION" > "${DOCROOT}/.cddash-version"
 
 OWNER="$(stat -c '%U:%G' /opt/caddy-dashboard)"
 
+# Socket musi byc czytelny/zapisywalny dla usera pod ktorym dziala Caddy
+# (to on laczy sie z tym socketem jako reverse proxy klient), nie dla
+# cdadmin - potwierdzone na zywym serwerze (2026-08-09): domyslne
+# listen.group=cdadmin dawalo Caddy "dial unix ...: connect: permission
+# denied" (Caddy dziala jako osobny systemowy user "caddy", nie nalezy do
+# grupy cdadmin). Grupa ustalana z realnego stanu systemu (id -gn caddy),
+# nie zaszyta jako zgadywany string.
+CADDY_GROUP="$(id -gn caddy 2>/dev/null)"
+[ -n "$CADDY_GROUP" ] || err "Nie udalo sie ustalic grupy systemowej usera 'caddy' (id -gn caddy) - czy Caddy jest zainstalowany?"
+
 BLOWFISH_SECRET="$(openssl rand -base64 32 | tr -d '\n')"
 cat > "${DOCROOT}/config.inc.php" <<PHPCONF
 <?php
@@ -108,7 +118,8 @@ user = ${OWNER%%:*}
 group = ${OWNER##*:}
 listen = ${SOCKET_PATH}
 listen.owner = ${OWNER%%:*}
-listen.group = ${OWNER##*:}
+listen.group = ${CADDY_GROUP}
+listen.mode = 0660
 pm = ondemand
 pm.max_children = 5
 pm.process_idle_timeout = 30s
