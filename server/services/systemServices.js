@@ -34,8 +34,20 @@ function parseProps(stdout) {
   return props;
 }
 
+// PHP-FPM (server/runtime-manager/) instaluje sie per-wersja, dynamicznie
+// (php82/php83/php84/php85...), wiec nie ma stalych wpisow w
+// SERVICE_REGISTRY - klucz "phpXX" rozpoznajemy wzorcem i budujemy def "w
+// locie". Start/stop/restart samej juz zainstalowanej uslugi idzie zwyklym
+// systemctl (istniejaca regula sudoers CDDASH_SYSTEMCTL obejmuje kazdy
+// *.service) - nie potrzeba tu Runtime Managera ani nowych uprawnien.
+const PHP_FPM_KEY_PATTERN = /^php(\d{2})$/;
+
 function getServiceDef(key) {
-  return SERVICE_REGISTRY.find((s) => s.key === key) || null;
+  const staticDef = SERVICE_REGISTRY.find((s) => s.key === key);
+  if (staticDef) return staticDef;
+  const match = PHP_FPM_KEY_PATTERN.exec(key);
+  if (match) return { key, unitCandidates: [`php${match[1]}-php-fpm.service`] };
+  return null;
 }
 
 async function resolveUnit(candidates) {

@@ -65,6 +65,7 @@
   "services.postgresql.name": "POSTGRESQL",
   "services.mongodb.name": "MONGODB",
   "services.redis.name": "REDIS",
+  "services.php-fpm.name": "PHP-FPM",
   "install.install_button": "Install",
   "install.installed_badge": "Installed",
   "install.installing": "Installing...",
@@ -167,6 +168,10 @@
   "redisperf.save_success": "Saved and applied immediately, no Redis restart needed.",
   "redisperf.invalid_values": "Enter valid numeric values.",
   "redisperf.confirm_save": "Save the new performance settings? They'll be applied immediately, without restarting the Redis service.",
+
+  "install.php-fpm.description": "PHP-FPM via Remi, multiple versions side by side (each its own systemd service, e.g. php85-php-fpm). Pick one version to install - once installed it appears as its own manageable service below; you can come back here later to add more versions.",
+  "install.php-fpm.no_versions": "No PHP versions available - check that the Remi repository is reachable.",
+  "install.php-fpm.confirm_install": "Install PHP {version}?",
 
   "fail2ban.jail_config_label": "Configuration (/etc/fail2ban/jail.local)",
   "fail2ban.insert_ssh_example": "Insert SSH example",

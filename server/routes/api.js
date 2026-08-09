@@ -159,6 +159,35 @@ async function getResticVersionSafe() {
   return installed && version ? `v${version}` : null;
 }
 
+// Wpisy PHP-FPM dolaczane do listy uslug (/api/services): jeden na kazda
+// juz zainstalowana wersje (klucz "phpXX" jest dynamiczny, wiec nazwa
+// przychodzi z serwera - "name" - zamiast z i18n jak reszta uslug) plus
+// jeden staly wpis "php-fpm" reprezentujacy kafelek instalacji w sekcji
+// Install (found=true gdy chociaz jedna wersja jest juz zainstalowana -
+// wtedy znika "install-pending" w nawigacji, ale NIE ma to trafic do
+// Glownego jako osobna zakladka, patrz web/app.js).
+async function phpServiceEntries() {
+  let versions;
+  try {
+    versions = await getAvailablePhp();
+  } catch {
+    return [];
+  }
+  const installedEntries = await Promise.all(
+    versions.filter((v) => v.installed).map(async (v) => {
+      const key = `php${v.id}`;
+      const status = await getServiceStatus(getServiceDef(key));
+      return { ...status, name: `PHP ${v.version}`, installable: false };
+    })
+  );
+  const installTileEntry = {
+    key: 'php-fpm',
+    found: versions.some((v) => v.installed),
+    installable: true
+  };
+  return [...installedEntries, installTileEntry];
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
   const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, resticVersion, caddySiteCount] = await Promise.all([
@@ -237,7 +266,7 @@ router.post('/system/reboot', (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await listServices();
-    res.json({ services });
+    res.json({ services: [...services, ...(await phpServiceEntries())] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

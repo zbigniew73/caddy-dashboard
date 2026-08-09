@@ -217,7 +217,11 @@ async function refreshDynamicNav() {
     return;
   }
 
-  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key));
+  // "php-fpm" to tylko wpis kafelka instalacji (wielokrotny wybor wersji) -
+  // nigdy zakladka w GLOWNE, tam trafiaja pojedyncze zainstalowane wersje
+  // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
+  // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm');
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
@@ -225,7 +229,7 @@ async function refreshDynamicNav() {
 
   const extraContainer = document.getElementById('nav-installed-extra');
   extraContainer.innerHTML = installedExtra.map((s) =>
-    `<button type="button" class="tab" data-tab="${escapeHtml(s.key)}">${navIcon(s.key)}<span>${escapeHtml(t(`services.${s.key}.name`))}</span></button>`
+    `<button type="button" class="tab" data-tab="${escapeHtml(s.key)}">${navIcon(s.key)}<span>${escapeHtml(s.name || t(`services.${s.key}.name`))}</span></button>`
   ).join('');
   extraContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
@@ -233,7 +237,7 @@ async function refreshDynamicNav() {
 
   const installContainer = document.getElementById('nav-install-list');
   installContainer.innerHTML = installablePackages.map((s) =>
-    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${escapeHtml(t(`services.${s.key}.name`))}</button>`
+    `<button type="button" class="tab${s.found ? '' : ' install-pending'}" data-tab="install:${escapeHtml(s.key)}">${escapeHtml(s.name || t(`services.${s.key}.name`))}</button>`
   ).join('');
   installContainer.querySelectorAll('button').forEach((btn) => {
     btn.onclick = () => switchTab(btn.dataset.tab);
@@ -902,9 +906,80 @@ function wireRedisInstallTile() {
   updateButtonState();
 }
 
+function phpInstallTileHtml(data) {
+  const name = t('services.php-fpm.name');
+  const description = t('install.php-fpm.description');
+  const versions = data.versions || [];
+  const selectable = versions.filter((v) => !v.installed);
+  const firstSelectableId = selectable[0]?.id;
+
+  const versionList = versions.length
+    ? versions.map((v) => `
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;${v.installed ? 'opacity:0.6;' : ''}">
+          <input type="radio" name="php-version" value="${escapeHtml(v.id)}" ${v.installed ? 'disabled' : ''} ${!v.installed && v.id === firstSelectableId ? 'checked' : ''}>
+          <span>PHP ${escapeHtml(v.version)}${v.installed ? ` <span class="status-badge active">${t('install.installed_badge')}</span>` : ''}</span>
+        </label>
+      `).join('')
+    : `<p style="color:var(--muted);font-size:13px;">${t('install.php-fpm.no_versions')}</p>`;
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+
+      <div style="margin-bottom:14px;">${versionList}</div>
+
+      ${selectable.length ? `<button type="button" id="php-install-btn">${t('install.install_button')}</button>` : ''}
+      <div class="action-msg" id="php-install-msg"></div>
+    </div>
+  `;
+}
+
+function wirePhpInstallTile() {
+  const btn = document.getElementById('php-install-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('php-install-msg');
+
+  btn.onclick = async () => {
+    const selected = document.querySelector('input[name="php-version"]:checked');
+    if (!selected) return;
+    const id = selected.value;
+    const versionLabel = `${id[0]}.${id.slice(1)}`;
+    if (!window.confirm(t('install.php-fpm.confirm_install', { version: versionLabel }))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', `/php/${id}/install`);
+      const data = await api('GET', '/php/available');
+      document.getElementById('content').innerHTML = phpInstallTileHtml(data);
+      applyTranslations();
+      wirePhpInstallTile();
+      const successEl = document.getElementById('php-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 async function renderInstallDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
+    if (key === 'php-fpm') {
+      const data = await api('GET', '/php/available');
+      content.innerHTML = phpInstallTileHtml(data);
+      applyTranslations();
+      wirePhpInstallTile();
+      return;
+    }
     const svc = await api('GET', `/services/${key}`);
     if (key === 'mariadb') {
       content.innerHTML = mariadbInstallTileHtml(svc);
@@ -940,7 +1015,7 @@ async function renderInstallDetailTab(key, content) {
 }
 
 function serviceCard(svc) {
-  const name = t(`services.${svc.key}.name`);
+  const name = svc.name || t(`services.${svc.key}.name`);
   const isActive = svc.activeState === 'active';
   return `
     <div class="service-card" data-nav-tab="${escapeHtml(svc.key)}">
@@ -957,7 +1032,7 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    const installed = services.filter((s) => s.found);
+    const installed = services.filter((s) => s.found && s.key !== 'php-fpm');
     if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;
