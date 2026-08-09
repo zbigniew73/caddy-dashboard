@@ -10,6 +10,32 @@ const SETUP_REPOS_SCRIPT = path.join(SCRIPTS_DIR, 'remi-setup-repos.sh');
 const LIST_SCRIPT = path.join(SCRIPTS_DIR, 'remi-list-available.sh');
 const INSTALL_SCRIPT = path.join(SCRIPTS_DIR, 'php-install.sh');
 const SETTINGS_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-settings.sh');
+const OPCACHE_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-opcache.sh');
+const MODULE_TOGGLE_SCRIPT = path.join(SCRIPTS_DIR, 'php-toggle-module.sh');
+
+// Whitelista modulow PHP mozliwych do wlaczenia/wylaczenia z panelu -
+// celowo NIE dowolny pakiet dnf (patrz plan Runtime Managera, punkt 12:
+// "whitelista modulow, a nie pozwalac klientowi instalowac dowolne
+// rozszerzenia"). `pkg` to sufiks po "phpXX-php-".
+const MODULE_WHITELIST = [
+  { key: 'opcache', pkg: 'opcache' },
+  { key: 'pdo', pkg: 'pdo' },
+  { key: 'mysqli', pkg: 'mysqlnd' },
+  { key: 'pgsql', pkg: 'pgsql' },
+  { key: 'mbstring', pkg: 'mbstring' },
+  { key: 'xml', pkg: 'xml' },
+  { key: 'curl', pkg: 'curl' },
+  { key: 'gd', pkg: 'gd' },
+  { key: 'imagick', pkg: 'pecl-imagick' },
+  { key: 'intl', pkg: 'intl' },
+  { key: 'zip', pkg: 'zip' },
+  { key: 'bcmath', pkg: 'bcmath' },
+  { key: 'sodium', pkg: 'sodium' },
+  { key: 'exif', pkg: 'exif' },
+  { key: 'soap', pkg: 'soap' },
+  { key: 'redis', pkg: 'pecl-redis' },
+  { key: 'process', pkg: 'process' }
+];
 
 // Bezpieczny zestaw znakow dla nazwy strefy czasowej IANA (litery, cyfry,
 // _ - / +) - trafia do php.ini wewnatrz cudzyslowu, wiec musi wykluczac
@@ -99,10 +125,12 @@ router.post('/:id/install', async (req, res) => {
 
 // Zapis ustawien uzywa `spawn` (nie execFile) zeby przekazac tresc ini
 // przez stdin, tak samo jak server/services/mariadbPerformance.js robi to
-// dla /etc/my.cnf.d/caddy-dashboard-tuning.cnf.
-function writeSettingsViaSudo(id, iniContent) {
+// dla /etc/my.cnf.d/caddy-dashboard-tuning.cnf. Wspolna dla ustawien
+// podstawowych i OPcache - rozne skrypty/pliki docelowe, ta sama logika
+// wywolania.
+function writeIniViaSudo(scriptPath, id, iniContent, sudoErrorLabel) {
   return new Promise((resolve, reject) => {
-    const child = spawn('sudo', ['-n', SETTINGS_SCRIPT, id]);
+    const child = spawn('sudo', ['-n', scriptPath, id]);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });
@@ -115,7 +143,7 @@ function writeSettingsViaSudo(id, iniContent) {
       }
       if (/password is required/i.test(stderr)) {
         reject(Object.assign(
-          new Error('Brak uprawnien sudo bez hasla dla ustawien PHP - sprawdz /etc/sudoers.d/caddy-dashboard'),
+          new Error(`Brak uprawnien sudo bez hasla dla ${sudoErrorLabel} - sprawdz /etc/sudoers.d/caddy-dashboard`),
           { status: 403 }
         ));
         return;
@@ -182,10 +210,100 @@ realpath_cache_ttl = 600
 `;
 
   try {
-    const result = await writeSettingsViaSudo(id, iniContent);
+    const result = await writeIniViaSudo(SETTINGS_SCRIPT, id, iniContent, 'ustawien PHP');
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message || `Zapisanie ustawien PHP ${versionLabel(id)} nie powiodlo sie.` });
+  }
+});
+
+router.post('/:id/opcache', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+
+  const body = req.body || {};
+  let memoryConsumption, internedStringsBuffer, maxAcceleratedFiles, revalidateFreq;
+  try {
+    memoryConsumption = requireIntInRange(body.memoryConsumptionMb, 16, 4096, 'opcache.memory_consumption (MB)');
+    internedStringsBuffer = requireIntInRange(body.internedStringsBufferMb, 4, 256, 'opcache.interned_strings_buffer (MB)');
+    maxAcceleratedFiles = requireIntInRange(body.maxAcceleratedFiles, 1000, 1000000, 'opcache.max_accelerated_files');
+    revalidateFreq = requireIntInRange(body.revalidateFreqSec, 0, 3600, 'opcache.revalidate_freq (s)');
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
+  const validateTimestamps = body.validateTimestamps ? 1 : 0;
+
+  // enable/enable_cli/save_comments/fast_shutdown to stale wartosci
+  // (dokladnie jak w przykladzie "OPcache" z pierwotnego planu) - jedynie
+  // rozmiary/limity i validate_timestamps sa realnie czeste do zmiany.
+  const iniContent = `[opcache]
+opcache.enable = 1
+opcache.enable_cli = 0
+opcache.memory_consumption = ${memoryConsumption}
+opcache.interned_strings_buffer = ${internedStringsBuffer}
+opcache.max_accelerated_files = ${maxAcceleratedFiles}
+opcache.revalidate_freq = ${revalidateFreq}
+opcache.validate_timestamps = ${validateTimestamps}
+opcache.save_comments = 1
+opcache.fast_shutdown = 1
+`;
+
+  try {
+    const result = await writeIniViaSudo(OPCACHE_SCRIPT, id, iniContent, 'ustawien OPcache');
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || `Zapisanie ustawien OPcache PHP ${versionLabel(id)} nie powiodlo sie.` });
+  }
+});
+
+router.get('/:id/modules', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+
+  // Sam odczyt statusu pakietu (rpm -q) nie wymaga roota - w
+  // przeciwienstwie do install/remove ponizej, wiec bez sudo/skryptu.
+  try {
+    const modules = await Promise.all(MODULE_WHITELIST.map(async ({ key, pkg }) => {
+      try {
+        await execFileAsync('rpm', ['-q', `php${id}-php-${pkg}`]);
+        return { key, package: `php${id}-php-${pkg}`, enabled: true };
+      } catch {
+        return { key, package: `php${id}-php-${pkg}`, enabled: false };
+      }
+    }));
+    res.json({ modules });
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Nie udalo sie odczytac listy modulow PHP.' });
+  }
+});
+
+router.post('/:id/modules/:module/:action', async (req, res) => {
+  const { id, module, action } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+  const entry = MODULE_WHITELIST.find((m) => m.key === module);
+  if (!entry) {
+    return res.status(400).json({ error: `Modul '${module}' nie jest na liscie dozwolonych modulow.` });
+  }
+  if (action !== 'install' && action !== 'remove') {
+    return res.status(400).json({ error: `Nieznana akcja: '${action}'.` });
+  }
+
+  try {
+    const { stdout } = await runViaSudo(
+      MODULE_TOGGLE_SCRIPT,
+      [id, entry.pkg, action],
+      120000,
+      `modulu PHP ${entry.key}`
+    );
+    res.json({ success: true, message: stdout.trim() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || `Zmiana modulu ${entry.key} nie powiodla sie.` });
   }
 });
 

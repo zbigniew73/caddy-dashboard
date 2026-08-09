@@ -79,4 +79,22 @@ async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb, maxE
   });
 }
 
-export { getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings };
+async function applyPhpOpcache(id, { memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, validateTimestamps }) {
+  return request('POST', `/php/${encodeURIComponent(id)}/opcache`, {
+    memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, validateTimestamps
+  });
+}
+
+async function getPhpModules(id) {
+  const { modules } = await request('GET', `/php/${encodeURIComponent(id)}/modules`);
+  return modules;
+}
+
+async function togglePhpModule(id, moduleKey, action) {
+  return request('POST', `/php/${encodeURIComponent(id)}/modules/${encodeURIComponent(moduleKey)}/${encodeURIComponent(action)}`);
+}
+
+export {
+  getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings,
+  applyPhpOpcache, getPhpModules, togglePhpModule
+};

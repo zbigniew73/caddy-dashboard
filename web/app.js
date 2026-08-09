@@ -2002,13 +2002,174 @@ function wirePhpSettingsSection(id) {
   };
 }
 
-function wrapPhpExtras(serviceHtml, id) {
+function renderPhpOpcacheSection(id) {
   return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('phpopcache.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpopcache.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.memory_label')}</label>
+      <input type="number" id="phpopcache-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.interned_strings_label')}</label>
+      <input type="number" id="phpopcache-interned-${id}" value="32" min="4" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.max_files_label')}</label>
+      <input type="number" id="phpopcache-max-files-${id}" value="50000" min="1000" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.revalidate_freq_label')}</label>
+      <input type="number" id="phpopcache-revalidate-${id}" value="2" min="0" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpopcache.revalidate_freq_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="phpopcache-validate-timestamps-${id}" checked>
+        ${t('phpopcache.validate_timestamps_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpopcache.validate_timestamps_hint')}</div>
+
+      <button type="button" id="phpopcache-save-btn-${id}">${t('phpopcache.save_button')}</button>
+      <div class="action-msg" id="phpopcache-msg-${id}"></div>
+    </div>
+  `;
+}
+
+function wirePhpOpcacheSection(id) {
+  const btn = document.getElementById(`phpopcache-save-btn-${id}`);
+  if (!btn) return;
+  const msgEl = document.getElementById(`phpopcache-msg-${id}`);
+
+  btn.onclick = async () => {
+    const memoryConsumptionMb = parseInt(document.getElementById(`phpopcache-memory-${id}`).value, 10);
+    const internedStringsBufferMb = parseInt(document.getElementById(`phpopcache-interned-${id}`).value, 10);
+    const maxAcceleratedFiles = parseInt(document.getElementById(`phpopcache-max-files-${id}`).value, 10);
+    const revalidateFreqSec = parseInt(document.getElementById(`phpopcache-revalidate-${id}`).value, 10);
+    const validateTimestamps = document.getElementById(`phpopcache-validate-timestamps-${id}`).checked;
+
+    if (![memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec].every(Number.isInteger)) {
+      msgEl.textContent = t('phpopcache.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('phpopcache.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('phpopcache.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', `/php/${id}/opcache`, {
+        memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, validateTimestamps
+      });
+      msgEl.textContent = t('phpopcache.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+const PHP_MODULE_LABELS = {
+  opcache: 'OPcache', pdo: 'PDO', mysqli: 'MySQL (mysqli)', pgsql: 'PostgreSQL',
+  mbstring: 'Mbstring', xml: 'XML', curl: 'cURL', gd: 'GD', imagick: 'Imagick',
+  intl: 'Intl', zip: 'ZIP', bcmath: 'BCMath', sodium: 'Sodium', exif: 'EXIF',
+  soap: 'SOAP', redis: 'Redis', process: 'Process (pcntl/posix)'
+};
+
+async function renderPhpModulesSection(id) {
+  let modules;
+  try {
+    modules = (await api('GET', `/php/${id}/modules`)).modules;
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+
+  const rows = modules.map((m) => {
+    const label = PHP_MODULE_LABELS[m.key] || m.key;
+    const actionButton = m.enabled
+      ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
+      : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`;
+    return `
+      <tr>
+        <td>${escapeHtml(label)}</td>
+        <td><span class="status-badge ${m.enabled ? 'active' : 'inactive'}">${m.enabled ? t('phpmodules.enabled') : t('phpmodules.disabled')}</span></td>
+        <td>${actionButton}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('phpmodules.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpmodules.description')}</p>
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('phpmodules.column_module')}</th>
+            <th>${t('phpmodules.column_status')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="phpmodules-tbody-${id}">${rows}</tbody>
+      </table>
+      <div class="action-msg" id="phpmodules-msg-${id}"></div>
+    </div>
+  `;
+}
+
+function wirePhpModulesSection(id) {
+  const tbody = document.getElementById(`phpmodules-tbody-${id}`);
+  if (!tbody) return;
+  const msgEl = document.getElementById(`phpmodules-msg-${id}`);
+
+  tbody.querySelectorAll('button[data-module]').forEach((btn) => {
+    btn.onclick = async () => {
+      const moduleKey = btn.dataset.module;
+      const action = btn.dataset.moduleAction;
+      const label = PHP_MODULE_LABELS[moduleKey] || moduleKey;
+      const confirmMsg = action === 'install'
+        ? t('phpmodules.confirm_add', { module: label })
+        : t('phpmodules.confirm_remove', { module: label });
+      if (!window.confirm(confirmMsg)) return;
+
+      tbody.querySelectorAll('button[data-module]').forEach((b) => { b.disabled = true; });
+      msgEl.textContent = t('phpmodules.working');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', `/php/${id}/modules/${moduleKey}/${action}`);
+        const sectionHtml = await renderPhpModulesSection(id);
+        const card = tbody.closest('.system-info-card');
+        card.outerHTML = sectionHtml;
+        wirePhpModulesSection(id);
+        const successEl = document.getElementById(`phpmodules-msg-${id}`);
+        if (successEl) {
+          successEl.textContent = t('phpmodules.success');
+          successEl.className = 'action-msg success';
+        }
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        tbody.querySelectorAll('button[data-module]').forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
+}
+
+async function wrapPhpExtras(serviceHtml, id) {
+  const row1 = `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
       <div style="flex:1 1 0;min-width:320px;">${renderPhpSettingsSection(id)}</div>
     </div>
   `;
+  const row2 = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
+      <div style="flex:1 1 0;min-width:320px;max-width:calc(50% - 8px);">${renderPhpOpcacheSection(id)}</div>
+    </div>
+  `;
+  const row3 = `<div style="margin-top:16px;">${await renderPhpModulesSection(id)}</div>`;
+  return row1 + row2 + row3;
 }
 
 function confirmMessageFor(key, action) {
@@ -2040,7 +2201,7 @@ function wireServiceActions(key) {
         if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
         if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
         if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
-        if (phpMatch && svc.found) html = wrapPhpExtras(html, phpMatch[1]);
+        if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -2051,7 +2212,11 @@ function wireServiceActions(key) {
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
         if (key === 'redis' && svc.found) wireRedisPerformanceSection();
-        if (phpMatch && svc.found) wirePhpSettingsSection(phpMatch[1]);
+        if (phpMatch && svc.found) {
+          wirePhpSettingsSection(phpMatch[1]);
+          wirePhpOpcacheSection(phpMatch[1]);
+          wirePhpModulesSection(phpMatch[1]);
+        }
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -2078,7 +2243,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
     if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
     if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
-    if (phpMatch && svc.found) html = wrapPhpExtras(html, phpMatch[1]);
+    if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -2089,7 +2254,11 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
     if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
     if (key === 'redis' && svc.found) wireRedisPerformanceSection();
-    if (phpMatch && svc.found) wirePhpSettingsSection(phpMatch[1]);
+    if (phpMatch && svc.found) {
+      wirePhpSettingsSection(phpMatch[1]);
+      wirePhpOpcacheSection(phpMatch[1]);
+      wirePhpModulesSection(phpMatch[1]);
+    }
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

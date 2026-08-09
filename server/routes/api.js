@@ -20,7 +20,10 @@ import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceCo
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
 import { getInstalledStatus as getResticStatus } from '../services/restic.js';
-import { getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings } from '../services/runtimeManagerClient.js';
+import {
+  getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings,
+  applyPhpOpcache, getPhpModules, togglePhpModule
+} from '../services/runtimeManagerClient.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -614,6 +617,38 @@ router.post('/php/:id/settings', async (req, res) => {
       maxInputVars: req.body?.maxInputVars,
       maxFileUploads: req.body?.maxFileUploads
     });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/php/:id/opcache', async (req, res) => {
+  try {
+    const result = await applyPhpOpcache(req.params.id, {
+      memoryConsumptionMb: req.body?.memoryConsumptionMb,
+      internedStringsBufferMb: req.body?.internedStringsBufferMb,
+      maxAcceleratedFiles: req.body?.maxAcceleratedFiles,
+      revalidateFreqSec: req.body?.revalidateFreqSec,
+      validateTimestamps: req.body?.validateTimestamps
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/php/:id/modules', async (req, res) => {
+  try {
+    res.json({ modules: await getPhpModules(req.params.id) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/php/:id/modules/:module/:action', async (req, res) => {
+  try {
+    const result = await togglePhpModule(req.params.id, req.params.module, req.params.action);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
