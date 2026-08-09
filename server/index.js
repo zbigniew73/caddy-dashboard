@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import pmaGateRoutes from './routes/pmaGate.js';
+import admGateRoutes from './routes/admGate.js';
 import { requireAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
 import { APP_VERSION } from './version.js';
 
@@ -124,6 +125,7 @@ app.use((req, res, next) => {
 // logowal) - celowo POZA /api (ktory jest w calosci za requireAuth
 // powyzej), patrz server/routes/pmaGate.js.
 app.use('/pma-gate', pmaGateRoutes);
+app.use('/adm-gate', admGateRoutes);
 
 app.use(express.static(path.join(__dirname, '../web')));
 app.get('*', (req, res) => {

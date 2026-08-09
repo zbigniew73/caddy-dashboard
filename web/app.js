@@ -69,6 +69,7 @@ function applyTheme(theme) {
   renderThemeSwitches();
   renderTurnstilePreviews();
   renderPhpmyadminGatePreview();
+  renderAdminerGatePreview();
 }
 
 function renderThemeSwitches() {
@@ -843,6 +844,104 @@ function wireAdminerInstallTile() {
       }
     };
   }
+}
+
+function adminerGateCaddyBlock(status) {
+  return `adm.twojadomena.pl {
+	handle /adm-gate/* {
+		reverse_proxy 127.0.0.1:4300
+	}
+	handle {
+		forward_auth 127.0.0.1:4300 {
+			uri /adm-gate/check
+		}
+		header -X-Powered-By
+		root * ${status.docroot}
+		php_fastcgi unix/${status.socketPath}
+		file_server
+	}
+}`;
+}
+
+async function renderAdminerGateSection(admStatus) {
+  let gate;
+  try {
+    gate = await api('GET', '/adminer-gate');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${t('adminer.gate_title')}</div>
+          <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('adminer.gate_enabled') : t('adminer.gate_disabled')}</span>
+        </div>
+        <div id="adminer-gate-preview-box" style="flex:0 0 auto;border:1px solid var(--border);border-radius:8px;padding:8px;pointer-events:none;">
+          <div id="adminer-gate-preview"></div>
+        </div>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('adminer.gate_description')}</p>
+      ${!gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('adminer.gate_requires_turnstile')}</div>` : ''}
+      <ol style="margin:0 0 16px;padding-left:20px;font-size:13px;line-height:1.8;">
+        <li>${t('adminer.gate_step1')}</li>
+        <li>${t('adminer.gate_step2')}</li>
+        <li>${t('adminer.gate_step3')}</li>
+      </ol>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('adminer.gate_caddy_hint')}</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(adminerGateCaddyBlock(admStatus))}</pre>
+      <button type="button" id="adminer-gate-enable-btn" ${gate.enabled || !gate.turnstileConfigured ? 'disabled' : ''}>${t('adminer.gate_enable_button')}</button>
+      <button type="button" class="danger" id="adminer-gate-disable-btn" ${gate.enabled ? '' : 'disabled'}>${t('adminer.gate_disable_button')}</button>
+      <div class="action-msg" id="adminer-gate-msg"></div>
+    </div>
+  `;
+}
+
+function wireAdminerGateSection(admStatus) {
+  renderAdminerGatePreview();
+  const enableBtn = document.getElementById('adminer-gate-enable-btn');
+  const disableBtn = document.getElementById('adminer-gate-disable-btn');
+  if (!enableBtn || !disableBtn) return;
+  const msgEl = document.getElementById('adminer-gate-msg');
+
+  async function refresh() {
+    const container = enableBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = await renderAdminerGateSection(admStatus);
+      applyTranslations();
+      wireAdminerGateSection(admStatus);
+    }
+  }
+
+  enableBtn.onclick = async () => {
+    if (!window.confirm(t('adminer.gate_confirm_enable'))) return;
+    enableBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/adminer-gate', { enabled: true });
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      enableBtn.disabled = false;
+    }
+  };
+
+  disableBtn.onclick = async () => {
+    if (!window.confirm(t('adminer.gate_confirm_disable'))) return;
+    disableBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/adminer-gate', { enabled: false });
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      disableBtn.disabled = false;
+    }
+  };
 }
 
 function mariadbInstallTileHtml(svc) {
@@ -1829,6 +1928,17 @@ async function renderPhpmyadminGatePreview() {
     // brak dostepu do konfiguracji Turnstile - podglad spada na klucz testowy
   }
   await renderTurnstilePreviewWidget('phpmyadmin-gate', 'phpmyadmin-gate-preview-box', 'phpmyadmin-gate-preview', sitekey);
+}
+
+async function renderAdminerGatePreview() {
+  let sitekey = TURNSTILE_PREVIEW_FALLBACK_SITEKEY;
+  try {
+    const cfg = await api('GET', '/caddy/turnstile');
+    if (cfg.siteKey) sitekey = cfg.siteKey;
+  } catch {
+    // brak dostepu do konfiguracji Turnstile - podglad spada na klucz testowy
+  }
+  await renderTurnstilePreviewWidget('adminer-gate', 'adminer-gate-preview-box', 'adminer-gate-preview', sitekey);
 }
 
 function wireTurnstileSection() {
@@ -3127,9 +3237,16 @@ async function renderServiceDetailTab(key, content) {
     }
     if (key === 'adminer') {
       const status = await api('GET', '/adminer');
-      content.innerHTML = adminerInfoCardHtml(status, true);
+      const gateHtml = await renderAdminerGateSection(status);
+      content.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1 1 0;min-width:320px;">${adminerInfoCardHtml(status, true, false)}</div>
+          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
+        </div>
+      `;
       applyTranslations();
       wireAdminerInstallTile();
+      wireAdminerGateSection(status);
       return;
     }
     const svc = await api('GET', `/services/${key}`);

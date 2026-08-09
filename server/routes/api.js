@@ -10,6 +10,7 @@ import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, re
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
 import { isGateEnabled as isPhpmyadminGateEnabled, setGateEnabled as setPhpmyadminGateEnabled } from '../services/phpmyadminGate.js';
+import { isGateEnabled as isAdminerGateEnabled, setGateEnabled as setAdminerGateEnabled } from '../services/adminerGate.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -864,6 +865,23 @@ router.post('/phpmyadmin-gate', (req, res) => {
     }
   }
   setPhpmyadminGateEnabled(enabled);
+  res.json({ success: true, enabled });
+});
+
+router.get('/adminer-gate', (req, res) => {
+  const turnstile = getTurnstilePublicConfig();
+  res.json({ enabled: isAdminerGateEnabled(), turnstileConfigured: turnstile.configured && turnstile.enabled });
+});
+
+router.post('/adminer-gate', (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  if (enabled) {
+    const turnstile = getTurnstilePublicConfig();
+    if (!turnstile.configured || !turnstile.enabled) {
+      return res.status(400).json({ error: 'Najpierw skonfiguruj i wlacz Turnstile (Usługi -> Caddy) - bramka Adminera uzywa tych samych kluczy.' });
+    }
+  }
+  setAdminerGateEnabled(enabled);
   res.json({ success: true, enabled });
 });
 
