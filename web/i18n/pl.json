@@ -20,6 +20,7 @@
   "services.not_installed_detail": "Usługa nie jest zainstalowana w systemie",
   "services.active": "Aktywna",
   "services.inactive": "Nieaktywna",
+  "services.ram_label": "RAM",
   "services.unit": "Jednostka systemd",
   "services.status": "Status",
   "services.enabled_label": "Autostart",

@@ -75,9 +75,17 @@ async function getServiceStatus(def) {
 
   const { stdout } = await execFileAsync('systemctl', [
     'show', unit, '--no-page', '-p',
-    'ActiveState,SubState,UnitFileState,MainPID,ExecMainStartTimestamp,Description'
+    'ActiveState,SubState,UnitFileState,MainPID,ExecMainStartTimestamp,Description,MemoryCurrent'
   ]);
   const props = parseProps(stdout);
+
+  // MemoryCurrent to biezace zuzycie RAM przez cgroup uslugi (bajty) -
+  // wymaga MemoryAccounting=yes, wlaczone domyslnie w systemd na
+  // AlmaLinux/Rocky 9/10. Gdy niedostepne (usluga nieaktywna, cgroup
+  // brak, albo accounting wylaczone), systemctl zwraca literalny string
+  // "[not set]" - parseInt na tym da NaN, obslugujemy jako null (front
+  // pokazuje "-" zamiast falszywego zera).
+  const memoryBytes = parseInt(props.MemoryCurrent, 10);
 
   return {
     key: def.key,
@@ -88,6 +96,7 @@ async function getServiceStatus(def) {
     activeState: props.ActiveState || 'unknown',
     subState: props.SubState || '',
     enabled: props.UnitFileState || 'unknown',
+    memoryBytes: Number.isFinite(memoryBytes) ? memoryBytes : null,
     mainPid: props.MainPID && props.MainPID !== '0' ? Number(props.MainPID) : null,
     since: props.ExecMainStartTimestamp || null
   };

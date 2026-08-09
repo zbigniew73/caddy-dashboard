@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.14.5"
+APP_VERSION="1.14.6"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"

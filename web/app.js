@@ -1112,6 +1112,7 @@ function serviceCard(svc) {
         <span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span>
       </div>
       <div class="service-detail">${escapeHtml(svc.unit)}</div>
+      <div class="service-detail">${t('services.ram_label')}: ${formatBytes(svc.memoryBytes)}</div>
     </div>
   `;
 }
