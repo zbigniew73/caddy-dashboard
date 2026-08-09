@@ -544,11 +544,11 @@ function wireFrankenphpInstallTile() {
   };
 }
 
-function phpmyadminInfoCardHtml(status, includeActions) {
+function phpmyadminInfoCardHtml(status, includeActions, constrainWidth = true) {
   const name = t('services.phpmyadmin.name');
   if (!status.installed) return '';
   return `
-    <div class="system-info-card" style="max-width:640px;">
+    <div class="system-info-card"${constrainWidth ? ' style="max-width:640px;"' : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
         <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
         <span class="status-badge active">${t('install.installed_badge')}</span>
@@ -593,7 +593,7 @@ async function renderPhpmyadminGateSection(pmaStatus) {
     return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
   }
   return `
-    <div class="system-info-card" style="max-width:640px;">
+    <div class="system-info-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
         <div style="font-weight:600;font-size:15px;">${t('phpmyadmin.gate_title')}</div>
         <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('phpmyadmin.gate_enabled') : t('phpmyadmin.gate_disabled')}</span>
@@ -2888,7 +2888,7 @@ async function renderServiceDetailTab(key, content) {
       const gateHtml = await renderPhpmyadminGateSection(status);
       content.innerHTML = `
         <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="flex:1 1 0;min-width:320px;">${phpmyadminInfoCardHtml(status, true)}</div>
+          <div style="flex:1 1 0;min-width:320px;">${phpmyadminInfoCardHtml(status, true, false)}</div>
           <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
         </div>
       `;
