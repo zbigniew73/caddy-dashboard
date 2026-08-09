@@ -19,8 +19,7 @@ import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../se
 import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
-import { getInstalledStatus as getResticStatus, getLocalRepoVersion as getResticLocalRepoVersion, installRestic } from '../services/restic.js';
-import { getInstalledStatus as getGoStatus, getLocalRepoVersion as getGoLocalRepoVersion, installGo } from '../services/go.js';
+import { getInstalledStatus as getResticStatus } from '../services/restic.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -154,11 +153,6 @@ async function getCaddySiteCountSafe() {
   }
 }
 
-async function getGoVersionSafe() {
-  const { installed, version } = await getGoStatus();
-  return installed && version ? `v${version}` : null;
-}
-
 async function getResticVersionSafe() {
   const { installed, version } = await getResticStatus();
   return installed && version ? `v${version}` : null;
@@ -166,7 +160,7 @@ async function getResticVersionSafe() {
 
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
-  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, goVersion, resticVersion, caddySiteCount] = await Promise.all([
+  const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, resticVersion, caddySiteCount] = await Promise.all([
     getCpuUsagePercent(),
     getCaddyVersion(),
     getPythonVersion(),
@@ -174,7 +168,6 @@ router.get('/system', async (req, res) => {
     getPostgresqlVersion(),
     getMongodbVersion(),
     getRedisVersion(),
-    getGoVersionSafe(),
     getResticVersionSafe(),
     getCaddySiteCountSafe()
   ]);
@@ -228,7 +221,6 @@ router.get('/system', async (req, res) => {
       redis: redisVersion,
       node: process.version,
       python: pythonVersion,
-      go: goVersion,
       restic: resticVersion
     },
     usersCount: getAllowedUsers().length,
@@ -550,48 +542,6 @@ router.post('/redis/performance', async (req, res) => {
       maxClients: req.body?.maxClients,
       slowlogEnabled: Boolean(req.body?.slowlogEnabled)
     });
-    res.json(result);
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.get('/restic/status', async (req, res) => {
-  res.json(await getResticStatus());
-});
-
-router.get('/restic/local-version', async (req, res) => {
-  try {
-    res.json({ version: await getResticLocalRepoVersion() });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.post('/restic/install', async (req, res) => {
-  try {
-    const result = await installRestic({ mode: req.body?.mode });
-    res.json(result);
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.get('/go/status', async (req, res) => {
-  res.json(await getGoStatus());
-});
-
-router.get('/go/local-version', async (req, res) => {
-  try {
-    res.json({ version: await getGoLocalRepoVersion() });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.post('/go/install', async (req, res) => {
-  try {
-    const result = await installGo({ mode: req.body?.mode });
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

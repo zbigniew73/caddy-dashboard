@@ -349,6 +349,7 @@ log "$(t installing_base_pkgs)"
 dnf_retry install -y nano mc htop wget curl zip unzip gzip bzip2 tar git
 dnf_retry install -y net-tools gcc gcc-c++ make pam-devel bash-completion socat which cronie
 dnf_retry install -y glibc-langpack-pl bind-utils ca-certificates
+dnf_retry install -y golang restic
 dnf_retry update -y
 
 NODE_MAJOR_CURRENT=""
