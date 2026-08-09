@@ -31,11 +31,9 @@ dnf install -y \
     "${PKG}-php-bcmath" \
     "${PKG}-php-zip" \
     "${PKG}-php-mysqlnd" \
-    "${PKG}-php-pgsql" \
     "${PKG}-php-pdo" \
     "${PKG}-php-soap" \
     "${PKG}-php-process" \
-    "${PKG}-php-pecl-redis" \
   || err "Instalacja rozszerzen ${PKG} nie powiodla sie."
 
 SERVICE="${PKG}-php-fpm"
