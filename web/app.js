@@ -569,17 +569,19 @@ function phpmyadminInfoCardHtml(status, includeActions) {
 }
 
 function phpmyadminGateCaddyBlock(status) {
-  return `handle /pma-gate/* {
-	reverse_proxy 127.0.0.1:4300
-}
-handle {
-	forward_auth 127.0.0.1:4300 {
-		uri /pma-gate/check
+  return `pma.twojadomena.pl {
+	handle /pma-gate/* {
+		reverse_proxy 127.0.0.1:4300
 	}
-	header -X-Powered-By
-	root * ${status.docroot}
-	php_fastcgi unix/${status.socketPath}
-	file_server
+	handle {
+		forward_auth 127.0.0.1:4300 {
+			uri /pma-gate/check
+		}
+		header -X-Powered-By
+		root * ${status.docroot}
+		php_fastcgi unix/${status.socketPath}
+		file_server
+	}
 }`;
 }
 

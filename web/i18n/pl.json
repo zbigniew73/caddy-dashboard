@@ -209,7 +209,7 @@
   "phpmyadmin.gate_disabled": "Wyłączona",
   "phpmyadmin.gate_description": "Stawia weryfikację bota Cloudflare Turnstile przed formularzem logowania phpMyAdmin, używając tych samych kluczy co logowanie do panelu (Usługi -> Caddy). Nie dotyka samego phpMyAdmin - to punkt kontrolny na poziomie Caddy, wpinany ręcznie (wklej blok poniżej, zastępując obecny blok phpMyAdmin). Domyślnie wyłączona - świadomy wybór, nie włącza się automatycznie razem z instalacją phpMyAdmin.",
   "phpmyadmin.gate_requires_turnstile": "Turnstile nie jest jeszcze skonfigurowany/włączony w panelu - skonfiguruj go najpierw w Usługi -> Caddy, zanim włączysz tę bramkę.",
-  "phpmyadmin.gate_caddy_hint": "Zastąp obecny blok Caddy dla phpMyAdmin tym poniżej (dodaje sprawdzanie bramki, reszta zostaje bez zmian):",
+  "phpmyadmin.gate_caddy_hint": "To jest cała sekcja dla phpMyAdmin (podmień domenę) - zastąp nią całkowicie obecny blok phpMyAdmin w Caddyfile, nie dopisuj obok:",
   "phpmyadmin.gate_enable_button": "Włącz",
   "phpmyadmin.gate_disable_button": "Wyłącz",
   "phpmyadmin.gate_confirm_enable": "Włączyć bramkę Turnstile dla phpMyAdmin? Upewnij się, że wkleiłeś już blok Caddy poniżej - inaczej ten przełącznik na razie nic nie zmieni.",

@@ -209,7 +209,7 @@
   "phpmyadmin.gate_disabled": "Disabled",
   "phpmyadmin.gate_description": "Puts a Cloudflare Turnstile bot-check in front of phpMyAdmin's own login page, using the same keys as the panel's login (Services -> Caddy). This doesn't touch phpMyAdmin itself - it's a checkpoint at the Caddy layer, wired manually (paste the block below, replacing your current phpMyAdmin block). Off by default - a deliberate choice, not automatic just because phpMyAdmin is installed.",
   "phpmyadmin.gate_requires_turnstile": "Turnstile isn't configured/enabled on the panel yet - configure it first under Services -> Caddy before enabling this gate.",
-  "phpmyadmin.gate_caddy_hint": "Replace your current phpMyAdmin Caddy block with this one (adds the gate check, keeps everything else the same):",
+  "phpmyadmin.gate_caddy_hint": "This is the whole phpMyAdmin section (edit the domain) - replace your current phpMyAdmin block with this entirely, don't add it alongside:",
   "phpmyadmin.gate_enable_button": "Enable",
   "phpmyadmin.gate_disable_button": "Disable",
   "phpmyadmin.gate_confirm_enable": "Enable the Turnstile gate for phpMyAdmin? Make sure you've pasted the Caddy block below first - otherwise this toggle has no effect yet.",
