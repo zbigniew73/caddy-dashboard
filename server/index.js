@@ -6,6 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import pmaGateRoutes from './routes/pmaGate.js';
 import { requireAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
 import { APP_VERSION } from './version.js';
 
@@ -118,6 +119,11 @@ app.use((req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   next();
 });
+
+// Bez sesji panelu (odwiedzajacy phpMyAdmin nigdy sie do panelu nie
+// logowal) - celowo POZA /api (ktory jest w calosci za requireAuth
+// powyzej), patrz server/routes/pmaGate.js.
+app.use('/pma-gate', pmaGateRoutes);
 
 app.use(express.static(path.join(__dirname, '../web')));
 app.get('*', (req, res) => {

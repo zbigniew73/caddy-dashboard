@@ -568,6 +568,71 @@ function phpmyadminInfoCardHtml(status, includeActions) {
   `;
 }
 
+function phpmyadminGateCaddyBlock(status) {
+  return `handle /pma-gate/* {
+	reverse_proxy 127.0.0.1:4300
+}
+handle {
+	forward_auth 127.0.0.1:4300 {
+		uri /pma-gate/check
+	}
+	header -X-Powered-By
+	root * ${status.docroot}
+	php_fastcgi unix/${status.socketPath}
+	file_server
+}`;
+}
+
+async function renderPhpmyadminGateSection(pmaStatus) {
+  let gate;
+  try {
+    gate = await api('GET', '/phpmyadmin-gate');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card" style="max-width:640px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div style="font-weight:600;font-size:15px;">${t('phpmyadmin.gate_title')}</div>
+        <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('phpmyadmin.gate_enabled') : t('phpmyadmin.gate_disabled')}</span>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('phpmyadmin.gate_description')}</p>
+      ${!gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('phpmyadmin.gate_requires_turnstile')}</div>` : ''}
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('phpmyadmin.gate_caddy_hint')}</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(phpmyadminGateCaddyBlock(pmaStatus))}</pre>
+      <button type="button" id="phpmyadmin-gate-toggle-btn" ${!gate.enabled && !gate.turnstileConfigured ? 'disabled' : ''}>${gate.enabled ? t('phpmyadmin.gate_disable_button') : t('phpmyadmin.gate_enable_button')}</button>
+      <div class="action-msg" id="phpmyadmin-gate-msg"></div>
+    </div>
+  `;
+}
+
+function wirePhpmyadminGateSection(pmaStatus) {
+  const btn = document.getElementById('phpmyadmin-gate-toggle-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('phpmyadmin-gate-msg');
+  const willEnable = btn.textContent === t('phpmyadmin.gate_enable_button');
+
+  btn.onclick = async () => {
+    if (!window.confirm(willEnable ? t('phpmyadmin.gate_confirm_enable') : t('phpmyadmin.gate_confirm_disable'))) return;
+    btn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/phpmyadmin-gate', { enabled: willEnable });
+      const container = btn.closest('.system-info-card');
+      if (container) {
+        container.outerHTML = await renderPhpmyadminGateSection(pmaStatus);
+        applyTranslations();
+        wirePhpmyadminGateSection(pmaStatus);
+      }
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 function phpmyadminInstallTileHtml(status) {
   const name = t('services.phpmyadmin.name');
   if (status.installed) return phpmyadminInfoCardHtml(status, true);
@@ -2813,9 +2878,11 @@ async function renderServiceDetailTab(key, content) {
   try {
     if (key === 'phpmyadmin') {
       const status = await api('GET', '/phpmyadmin');
-      content.innerHTML = phpmyadminInfoCardHtml(status, true);
+      const gateHtml = await renderPhpmyadminGateSection(status);
+      content.innerHTML = phpmyadminInfoCardHtml(status, true) + gateHtml;
       applyTranslations();
       wirePhpmyadminInstallTile();
+      wirePhpmyadminGateSection(status);
       return;
     }
     const svc = await api('GET', `/services/${key}`);

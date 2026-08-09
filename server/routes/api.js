@@ -9,6 +9,7 @@ import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
 import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
+import { isGateEnabled as isPhpmyadminGateEnabled, setGateEnabled as setPhpmyadminGateEnabled } from '../services/phpmyadminGate.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -826,6 +827,23 @@ router.post('/phpmyadmin/uninstall', async (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+router.get('/phpmyadmin-gate', (req, res) => {
+  const turnstile = getTurnstilePublicConfig();
+  res.json({ enabled: isPhpmyadminGateEnabled(), turnstileConfigured: turnstile.configured && turnstile.enabled });
+});
+
+router.post('/phpmyadmin-gate', (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  if (enabled) {
+    const turnstile = getTurnstilePublicConfig();
+    if (!turnstile.configured || !turnstile.enabled) {
+      return res.status(400).json({ error: 'Najpierw skonfiguruj i wlacz Turnstile (Usługi -> Caddy) - bramka phpMyAdmin uzywa tych samych kluczy.' });
+    }
+  }
+  setPhpmyadminGateEnabled(enabled);
+  res.json({ success: true, enabled });
 });
 
 export default router;

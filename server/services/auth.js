@@ -28,7 +28,12 @@ function sign(payload) {
   return `${data}.${hmac}`;
 }
 
-function verify(token) {
+// Generyczna weryfikacja podpisu HMAC + wygasniecia - BEZ zadnej wiedzy o
+// "sesji panelu" (username/allowlist). To jest bezpieczne do ponownego
+// uzycia dla innych podpisywanych ciasteczek (np. bramka Turnstile przed
+// phpMyAdmin) - `verify()` ponizej dokleja na to warstwe specyficzna dla
+// sesji admina, nie odwrotnie.
+function verifyRaw(token) {
   try {
     const secret = getSecret();
     const [data, hmac] = token.split('.');
@@ -43,6 +48,17 @@ function verify(token) {
 
     const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf-8'));
     if (!payload.exp || Date.now() > payload.exp) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function verify(token) {
+  try {
+    const payload = verifyRaw(token);
+    if (!payload) return null;
 
     const allowed = getAllowedUsers();
     if (allowed.length > 0 && !allowed.includes(payload.username)) return null;
@@ -143,5 +159,7 @@ export {
   clearSessionCookie,
   verifySessionToken,
   requireAuth,
-  SESSION_COOKIE
+  SESSION_COOKIE,
+  sign,
+  verifyRaw
 };
