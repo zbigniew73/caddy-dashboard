@@ -212,7 +212,10 @@
   "phpmyadmin.gate_caddy_hint": "This is the whole phpMyAdmin section (edit the domain) - replace your current phpMyAdmin block with this entirely, don't add it alongside:",
   "phpmyadmin.gate_enable_button": "Enable",
   "phpmyadmin.gate_disable_button": "Disable",
-  "phpmyadmin.gate_confirm_enable": "Enable the Turnstile gate for phpMyAdmin? Make sure you've pasted the Caddy block below first - otherwise this toggle has no effect yet.",
+  "phpmyadmin.gate_confirm_enable": "Enable the Turnstile gate for phpMyAdmin? Turning this on alone doesn't change anything yet - you still need to update the Caddy config (block below) and restart Caddy.",
+  "phpmyadmin.gate_step1": "Enable it here in the panel (this toggle).",
+  "phpmyadmin.gate_step2": "Update the Caddy config - paste the whole block below in place of the current phpMyAdmin block.",
+  "phpmyadmin.gate_step3": "Restart Caddy: sudo systemctl reload caddy",
   "phpmyadmin.gate_confirm_disable": "Disable the Turnstile gate? phpMyAdmin will be reachable without the bot-check again (if the Caddy block is still in place, it'll just always let requests through).",
 
   "phpsettings.title": "Settings",

@@ -600,6 +600,11 @@ async function renderPhpmyadminGateSection(pmaStatus) {
       </div>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('phpmyadmin.gate_description')}</p>
       ${!gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('phpmyadmin.gate_requires_turnstile')}</div>` : ''}
+      <ol style="margin:0 0 16px;padding-left:20px;font-size:13px;line-height:1.8;">
+        <li>${t('phpmyadmin.gate_step1')}</li>
+        <li>${t('phpmyadmin.gate_step2')}</li>
+        <li>${t('phpmyadmin.gate_step3')}</li>
+      </ol>
       <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('phpmyadmin.gate_caddy_hint')}</p>
       <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(phpmyadminGateCaddyBlock(pmaStatus))}</pre>
       <button type="button" id="phpmyadmin-gate-toggle-btn" ${!gate.enabled && !gate.turnstileConfigured ? 'disabled' : ''}>${gate.enabled ? t('phpmyadmin.gate_disable_button') : t('phpmyadmin.gate_enable_button')}</button>
@@ -2881,7 +2886,12 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'phpmyadmin') {
       const status = await api('GET', '/phpmyadmin');
       const gateHtml = await renderPhpmyadminGateSection(status);
-      content.innerHTML = phpmyadminInfoCardHtml(status, true) + gateHtml;
+      content.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1 1 0;min-width:320px;">${phpmyadminInfoCardHtml(status, true)}</div>
+          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
+        </div>
+      `;
       applyTranslations();
       wirePhpmyadminInstallTile();
       wirePhpmyadminGateSection(status);

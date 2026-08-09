@@ -212,7 +212,10 @@
   "phpmyadmin.gate_caddy_hint": "To jest cała sekcja dla phpMyAdmin (podmień domenę) - zastąp nią całkowicie obecny blok phpMyAdmin w Caddyfile, nie dopisuj obok:",
   "phpmyadmin.gate_enable_button": "Włącz",
   "phpmyadmin.gate_disable_button": "Wyłącz",
-  "phpmyadmin.gate_confirm_enable": "Włączyć bramkę Turnstile dla phpMyAdmin? Upewnij się, że wkleiłeś już blok Caddy poniżej - inaczej ten przełącznik na razie nic nie zmieni.",
+  "phpmyadmin.gate_confirm_enable": "Włączyć bramkę Turnstile dla phpMyAdmin? Samo włączenie tutaj jeszcze nic nie zmieni w ruchu - musisz jeszcze zmienić config Caddy (blok poniżej) i zrestartować Caddy.",
+  "phpmyadmin.gate_step1": "Włącz tutaj w panelu (ten przełącznik).",
+  "phpmyadmin.gate_step2": "Zmień config Caddy - wklej cały blok poniżej w miejsce obecnego bloku phpMyAdmin.",
+  "phpmyadmin.gate_step3": "Zrestartuj Caddy: sudo systemctl reload caddy",
   "phpmyadmin.gate_confirm_disable": "Wyłączyć bramkę Turnstile? phpMyAdmin znów będzie dostępny bez weryfikacji bota (jeśli blok Caddy nadal tam jest, po prostu zawsze przepuści ruch).",
 
   "phpsettings.title": "Ustawienia",
