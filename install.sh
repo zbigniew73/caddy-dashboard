@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.11.3"
+APP_VERSION="1.11.4"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -120,6 +120,9 @@ declare -A MSG_PL=(
   [prompt_svc_user]="Konto systemowe, na ktorym ma dzialac usluga (root upraszcza wymog PAM+shadow, patrz README)"
   [systemd_ready]="caddy-dashboard.service gotowy (User=%s). NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [systemd_exists]="caddy-dashboard.service juz istnieje - pomijam generowanie."
+  [runtime_systemd_preparing]="Przygotowuje jednostke systemd (caddy-dashboard-runtime.service, dziala jako root)..."
+  [runtime_systemd_ready]="caddy-dashboard-runtime.service gotowy. NIE skopiowany do /etc/systemd/system - patrz ponizej."
+  [runtime_systemd_exists]="caddy-dashboard-runtime.service juz istnieje - pomijam generowanie."
   [chown_install_dir]="Ustawiam wlasciciela %s na %s (samo-aktualizacja z panelu)..."
   [sudoers_configuring]="Konfiguruje sudoers NOPASSWD dla '%s' (systemctl, dnf, firewall-cmd, zmiana portu SSH, restart systemu, konfiguracja fail2ban, instalacja MariaDB)..."
   [sudoers_configured]="sudoers skonfigurowany: /etc/sudoers.d/caddy-dashboard."
@@ -136,6 +139,10 @@ Nastepne kroki (recznie, swiadomie - skrypt niczego tu sam nie wlacza):
        sudo cp %s/caddy-dashboard.service /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now caddy-dashboard
+  4. Runtime Manager (wymagany dla funkcji PHP w panelu, dziala jako root):
+       sudo cp %s/caddy-dashboard-runtime.service /etc/systemd/system/
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now caddy-dashboard-runtime
 
 Firewall (http, https, ssh, port dashboardu) juz otwarty automatycznie -
 patrz log wyzej."
@@ -208,6 +215,9 @@ declare -A MSG_EN=(
   [prompt_svc_user]="System account the service should run as (root simplifies the PAM+shadow requirement, see README)"
   [systemd_ready]="caddy-dashboard.service ready (User=%s). NOT copied to /etc/systemd/system - see below."
   [systemd_exists]="caddy-dashboard.service already exists - skipping generation."
+  [runtime_systemd_preparing]="Preparing the systemd unit (caddy-dashboard-runtime.service, runs as root)..."
+  [runtime_systemd_ready]="caddy-dashboard-runtime.service ready. NOT copied to /etc/systemd/system - see below."
+  [runtime_systemd_exists]="caddy-dashboard-runtime.service already exists - skipping generation."
   [chown_install_dir]="Setting owner of %s to %s (self-update from the panel)..."
   [sudoers_configuring]="Configuring NOPASSWD sudoers for '%s' (systemctl, dnf, firewall-cmd, SSH port change, system reboot, fail2ban config, MariaDB install)..."
   [sudoers_configured]="sudoers configured: /etc/sudoers.d/caddy-dashboard."
@@ -224,6 +234,10 @@ Next steps (manual, deliberate - the script does not enable anything here on its
        sudo cp %s/caddy-dashboard.service /etc/systemd/system/
        sudo systemctl daemon-reload
        sudo systemctl enable --now caddy-dashboard
+  4. Runtime Manager (required for the panel's PHP feature, runs as root):
+       sudo cp %s/caddy-dashboard-runtime.service /etc/systemd/system/
+       sudo systemctl daemon-reload
+       sudo systemctl enable --now caddy-dashboard-runtime
 
 Firewall (http, https, ssh, dashboard port) is already open automatically -
 see the log above."
@@ -512,6 +526,14 @@ else
   SVC_USER="$(grep '^User=' caddy-dashboard.service | cut -d= -f2)"
 fi
 
+if [ ! -f caddy-dashboard-runtime.service ]; then
+  log "$(t runtime_systemd_preparing)"
+  cp caddy-dashboard-runtime.service.example caddy-dashboard-runtime.service
+  log "$(t runtime_systemd_ready)"
+else
+  log "$(t runtime_systemd_exists)"
+fi
+
 if [ -n "${SVC_USER:-}" ] && [ "$SVC_USER" != "root" ]; then
   log "$(t chown_install_dir "$INSTALL_DIR" "$SVC_USER")"
   chown -R "$SVC_USER":"$SVC_USER" "$INSTALL_DIR"
@@ -525,7 +547,7 @@ if [ -n "${SVC_USER:-}" ] && [ "$SVC_USER" != "root" ]; then
 fi
 
 log "$(t done_installed "$INSTALL_DIR")"
-t summary_block "$INSTALL_DIR" "$INSTALL_DIR" "$INSTALL_DIR"
+t summary_block "$INSTALL_DIR" "$INSTALL_DIR" "$INSTALL_DIR" "$INSTALL_DIR"
 echo
 
 if [ -n "$SELINUX_REBOOT_REQUIRED" ]; then

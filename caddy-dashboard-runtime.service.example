@@ -1,0 +1,23 @@
+[Unit]
+Description=Caddy Dashboard - Runtime Manager
+After=network.target
+
+[Service]
+Type=simple
+
+WorkingDirectory=/opt/caddy-dashboard
+EnvironmentFile=/opt/caddy-dashboard/.env
+
+ExecStart=/usr/bin/node server/runtime-manager/index.js
+Restart=on-failure
+
+# Dziala jako root (bez User=) - to jest celowe, inaczej niz
+# caddy-dashboard.service. Ten proces zarzadza instalacja PHP (dnf,
+# systemctl, /opt, /usr/local/bin) i komunikuje sie z panelem WWW
+# (dzialajacym jako cdadmin) wylacznie po unix sockecie zawezonym do
+# grupy RUNTIME_SOCKET_GROUP z .env - patrz server/runtime-manager/.
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

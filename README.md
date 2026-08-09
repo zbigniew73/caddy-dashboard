@@ -1,4 +1,4 @@
-# Caddy Dashboard v1.11.3
+# Caddy Dashboard v1.11.4
 
 Nowe podejście do panelu zarządzania usługami na serwerze AlmaLinux/Rocky Linux 9/10, oparte na [Caddy](https://caddyserver.com/) jako reverse proxy.
 
@@ -71,7 +71,7 @@ Na AlmaLinux/Rocky proces `node` **nie musi** być rootem ani członkiem żadnej
 
 - należy do grupy `wheel` (sudo, wymóg logowania do panelu i uruchamiania usługi - PAM na Alma/Rocky nie wymaga nic ponad to, patrz wyżej),
 - tworzony bez katalogu domowego, z powłoką `/sbin/nologin` (brak bezpośredniego logowania po SSH — tylko przez panel + sudo),
-- jeśli user jest tworzony od nowa, skrypt generuje losowe 12-znakowe hasło (wielkie/małe litery, cyfry, znaki specjalne) i zapisuje je w `/root/.usercd` (`chmod 600`, tylko root) — stamtąd trzeba je odczytać po instalacji,
+- jeśli user jest tworzony od nowa, skrypt generuje losowe 16-znakowe hasło (wielkie/małe litery, cyfry, znaki specjalne) i zapisuje je w `/root/.usercd` (`chmod 600`, tylko root) — stamtąd trzeba je odczytać po instalacji,
 - jeśli `cdadmin` jest gotowy, staje się domyślną propozycją zarówno dla `AUTH_USERS` w `.env`, jak i dla `User=` w `caddy-dashboard.service` (nadal można wpisać inne konto podczas pytań skryptu).
 
 ## Uruchamianie jako usluga systemd (autostart po restarcie)
@@ -87,6 +87,22 @@ sudo systemctl enable --now caddy-dashboard
 ```
 
 Plik `caddy-dashboard.service` (z podmienionymi wartosciami) jest w `.gitignore` - zostaje lokalnie na serwerze, nie w repo.
+
+## Runtime Manager (funkcja PHP)
+
+Osobny daemon, wymagany tylko jeśli chcesz korzystać z instalacji PHP z
+panelu (sekcja PHP). W przeciwieństwie do `caddy-dashboard.service`
+działa **jako root** — instaluje pakiety PHP (Remi), zarządza usługami
+`phpXX-php-fpm` itd., i komunikuje się z panelem (który działa jako
+`cdadmin`) wyłącznie po unix sockecie, nigdy po sieci. `install.sh`
+przygotowuje `caddy-dashboard-runtime.service` tym samym mechanizmem co
+usługę główną:
+
+```bash
+sudo cp caddy-dashboard-runtime.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now caddy-dashboard-runtime
+```
 
 ## Struktura
 

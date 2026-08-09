@@ -20,6 +20,7 @@ import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceCo
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
 import { getInstalledStatus as getResticStatus } from '../services/restic.js';
+import { getAvailablePhp, getInstalledPhp, installPhp } from '../services/runtimeManagerClient.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -542,6 +543,31 @@ router.post('/redis/performance', async (req, res) => {
       maxClients: req.body?.maxClients,
       slowlogEnabled: Boolean(req.body?.slowlogEnabled)
     });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/php/available', async (req, res) => {
+  try {
+    res.json({ versions: await getAvailablePhp() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/php', async (req, res) => {
+  try {
+    res.json({ installed: await getInstalledPhp() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/php/:id/install', async (req, res) => {
+  try {
+    const result = await installPhp(req.params.id);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

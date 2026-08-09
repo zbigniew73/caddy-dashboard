@@ -7,6 +7,13 @@
 # calego panelu). Musi byc uruchomione jako root.
 #
 # Wymagane zmienne srodowiskowe: INSTALL_DIR, SVC_USER.
+#
+# UWAGA - funkcja PHP (server/runtime-manager/) celowo NIE ma tu zadnego
+# Cmnd_Alias. Ten daemon dziala jako osobna usluga systemd z User=root
+# (nie SVC_USER/cdadmin), wiec nie potrzebuje sudo - komunikuje sie z
+# panelem po unix sockecie. Nie dodawaj tu regul dla dnf/systemctl
+# zwiazanych z PHP/Remi, to by dublowalo uprawnienia roota, ktore ten
+# proces juz ma.
 
 set -euo pipefail
 
