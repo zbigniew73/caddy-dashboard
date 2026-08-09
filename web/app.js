@@ -334,6 +334,10 @@ async function renderTab() {
   const content = document.getElementById('content');
   if (currentTab !== 'system') stopSystemAutoRefresh();
 
+  if (currentTab === 'packages') {
+    await renderPackagesTab(content);
+    return;
+  }
   if (currentTab === 'services') {
     await renderServicesTab(content);
     return;
@@ -1530,6 +1534,172 @@ function serviceCard(svc) {
       <div class="service-detail">${t('services.ram_label')}: ${formatBytes(svc.memoryBytes)}</div>
     </div>
   `;
+}
+
+async function renderPackageFormHtml(pkg) {
+  let phpOptions = '';
+  try {
+    const { installed } = await api('GET', '/php');
+    phpOptions = installed.map((v) => `<option value="${escapeHtml(v.version)}" ${pkg?.phpVersion === v.version ? 'selected' : ''}>PHP ${escapeHtml(v.version)}</option>`).join('');
+  } catch {
+    // brak dostepu do listy PHP - formularz i tak dziala, pole zostanie puste
+  }
+  const phpField = phpOptions
+    ? `<select id="pkg-form-php"><option value="">-</option>${phpOptions}</select>`
+    : `<input type="text" id="pkg-form-php" value="${escapeHtml(pkg?.phpVersion || '')}" placeholder="np. 8.4">`;
+
+  return `
+    <div class="system-info-card" id="pkg-form-card" style="margin-top:16px;max-width:480px;">
+      <h3 style="margin:0 0 14px;font-size:15px;">${pkg ? t('packages.form_title_edit') : t('packages.form_title_add')}</h3>
+      <input type="hidden" id="pkg-form-id" value="${escapeHtml(pkg?.id || '')}">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_name')}</label>
+      <input type="text" id="pkg-form-name" value="${escapeHtml(pkg?.name || '')}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_disk')}</label>
+      <input type="number" id="pkg-form-disk" min="0" value="${pkg?.diskQuotaMb ?? 1024}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_domains')}</label>
+      <input type="number" id="pkg-form-domains" min="0" value="${pkg?.maxDomains ?? 1}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_databases')}</label>
+      <input type="number" id="pkg-form-databases" min="0" value="${pkg?.maxDatabases ?? 1}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_php')}</label>
+      <div style="margin-bottom:10px;">${phpField}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_description')}</label>
+      <textarea id="pkg-form-description" rows="3" style="width:100%;margin-bottom:14px;font-family:inherit;">${escapeHtml(pkg?.description || '')}</textarea>
+
+      <button type="button" id="pkg-form-save-btn">${t('packages.save_button')}</button>
+      <button type="button" class="secondary" id="pkg-form-cancel-btn">${t('packages.cancel_button')}</button>
+      <div class="action-msg" id="pkg-form-msg"></div>
+    </div>
+  `;
+}
+
+function wirePackageForm() {
+  const saveBtn = document.getElementById('pkg-form-save-btn');
+  const cancelBtn = document.getElementById('pkg-form-cancel-btn');
+  if (!saveBtn) return;
+  const msgEl = document.getElementById('pkg-form-msg');
+
+  cancelBtn.onclick = () => {
+    document.getElementById('pkg-form-card').remove();
+  };
+
+  saveBtn.onclick = async () => {
+    const id = document.getElementById('pkg-form-id').value;
+    const body = {
+      name: document.getElementById('pkg-form-name').value,
+      diskQuotaMb: document.getElementById('pkg-form-disk').value,
+      maxDomains: document.getElementById('pkg-form-domains').value,
+      maxDatabases: document.getElementById('pkg-form-databases').value,
+      phpVersion: document.getElementById('pkg-form-php').value,
+      description: document.getElementById('pkg-form-description').value
+    };
+    saveBtn.disabled = true;
+    msgEl.textContent = t('packages.saving');
+    msgEl.className = 'action-msg';
+    try {
+      if (id) {
+        await api('PUT', `/packages/${id}`, body);
+      } else {
+        await api('POST', '/packages', body);
+      }
+      await renderPackagesTab(document.getElementById('content'));
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      saveBtn.disabled = false;
+    }
+  };
+}
+
+async function showPackageForm(pkg) {
+  const existing = document.getElementById('pkg-form-card');
+  if (existing) existing.remove();
+  const container = document.getElementById('packages-form-container');
+  container.innerHTML = await renderPackageFormHtml(pkg);
+  applyTranslations();
+  wirePackageForm();
+}
+
+async function renderPackagesTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const { packages } = await api('GET', '/packages');
+    const rows = packages.map((p) => `
+      <tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td>${p.diskQuotaMb} MB</td>
+        <td>${p.maxDomains}</td>
+        <td>${p.maxDatabases}</td>
+        <td>${escapeHtml(p.phpVersion || '-')}</td>
+        <td>
+          <button type="button" class="secondary" data-edit="${escapeHtml(p.id)}">${t('packages.edit_button')}</button>
+          <button type="button" class="danger" data-delete="${escapeHtml(p.id)}">${t('packages.delete_button')}</button>
+        </td>
+      </tr>
+    `).join('');
+
+    content.innerHTML = `
+      <div class="system-info-card">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
+          <h3 style="margin:0;font-size:15px;">${t('packages.title')}</h3>
+          <button type="button" id="packages-add-btn">${t('packages.add_button')}</button>
+        </div>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('packages.description')}</p>
+        ${packages.length ? `
+          <div style="overflow-x:auto;">
+            <table class="firewall-table">
+              <thead>
+                <tr>
+                  <th>${t('packages.column_name')}</th>
+                  <th>${t('packages.column_disk')}</th>
+                  <th>${t('packages.column_domains')}</th>
+                  <th>${t('packages.column_databases')}</th>
+                  <th>${t('packages.column_php')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        ` : `<div class="empty-state">${t('packages.empty')}</div>`}
+        <div class="action-msg" id="packages-msg"></div>
+        <div id="packages-form-container"></div>
+      </div>
+    `;
+
+    const addBtn = document.getElementById('packages-add-btn');
+    addBtn.onclick = () => showPackageForm(null);
+
+    document.querySelectorAll('[data-edit]').forEach((btn) => {
+      btn.onclick = () => {
+        const pkg = packages.find((p) => p.id === btn.dataset.edit);
+        showPackageForm(pkg);
+      };
+    });
+
+    document.querySelectorAll('[data-delete]').forEach((btn) => {
+      btn.onclick = async () => {
+        if (!window.confirm(t('packages.confirm_delete', { name: btn.closest('tr').children[0].textContent }))) return;
+        const msgEl = document.getElementById('packages-msg');
+        btn.disabled = true;
+        try {
+          await api('DELETE', `/packages/${btn.dataset.delete}`);
+          await renderPackagesTab(content);
+        } catch (e) {
+          msgEl.textContent = e.message;
+          msgEl.className = 'action-msg error';
+          btn.disabled = false;
+        }
+      };
+    });
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function renderServicesTab(content) {
