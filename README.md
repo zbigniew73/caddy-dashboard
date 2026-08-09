@@ -1,4 +1,4 @@
-# Caddy Dashboard v1.15.6
+# Caddy Dashboard v1.15.7
 
 Nowe podejście do panelu zarządzania usługami na serwerze AlmaLinux/Rocky Linux 9/10, oparte na [Caddy](https://caddyserver.com/) jako reverse proxy.
 

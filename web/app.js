@@ -607,35 +607,55 @@ async function renderPhpmyadminGateSection(pmaStatus) {
       </ol>
       <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('phpmyadmin.gate_caddy_hint')}</p>
       <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(phpmyadminGateCaddyBlock(pmaStatus))}</pre>
-      <button type="button" id="phpmyadmin-gate-toggle-btn" ${!gate.enabled && !gate.turnstileConfigured ? 'disabled' : ''}>${gate.enabled ? t('phpmyadmin.gate_disable_button') : t('phpmyadmin.gate_enable_button')}</button>
+      <button type="button" id="phpmyadmin-gate-enable-btn" ${gate.enabled || !gate.turnstileConfigured ? 'disabled' : ''}>${t('phpmyadmin.gate_enable_button')}</button>
+      <button type="button" class="danger" id="phpmyadmin-gate-disable-btn" ${gate.enabled ? '' : 'disabled'}>${t('phpmyadmin.gate_disable_button')}</button>
       <div class="action-msg" id="phpmyadmin-gate-msg"></div>
     </div>
   `;
 }
 
 function wirePhpmyadminGateSection(pmaStatus) {
-  const btn = document.getElementById('phpmyadmin-gate-toggle-btn');
-  if (!btn) return;
+  const enableBtn = document.getElementById('phpmyadmin-gate-enable-btn');
+  const disableBtn = document.getElementById('phpmyadmin-gate-disable-btn');
+  if (!enableBtn || !disableBtn) return;
   const msgEl = document.getElementById('phpmyadmin-gate-msg');
-  const willEnable = btn.textContent === t('phpmyadmin.gate_enable_button');
 
-  btn.onclick = async () => {
-    if (!window.confirm(willEnable ? t('phpmyadmin.gate_confirm_enable') : t('phpmyadmin.gate_confirm_disable'))) return;
-    btn.disabled = true;
+  async function refresh() {
+    const container = enableBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = await renderPhpmyadminGateSection(pmaStatus);
+      applyTranslations();
+      wirePhpmyadminGateSection(pmaStatus);
+    }
+  }
+
+  enableBtn.onclick = async () => {
+    if (!window.confirm(t('phpmyadmin.gate_confirm_enable'))) return;
+    enableBtn.disabled = true;
     msgEl.textContent = t('testdb.working');
     msgEl.className = 'action-msg';
     try {
-      await api('POST', '/phpmyadmin-gate', { enabled: willEnable });
-      const container = btn.closest('.system-info-card');
-      if (container) {
-        container.outerHTML = await renderPhpmyadminGateSection(pmaStatus);
-        applyTranslations();
-        wirePhpmyadminGateSection(pmaStatus);
-      }
+      await api('POST', '/phpmyadmin-gate', { enabled: true });
+      await refresh();
     } catch (e) {
       msgEl.textContent = e.message;
       msgEl.className = 'action-msg error';
-      btn.disabled = false;
+      enableBtn.disabled = false;
+    }
+  };
+
+  disableBtn.onclick = async () => {
+    if (!window.confirm(t('phpmyadmin.gate_confirm_disable'))) return;
+    disableBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/phpmyadmin-gate', { enabled: false });
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      disableBtn.disabled = false;
     }
   };
 }
