@@ -7,6 +7,7 @@ const SERVICE_REGISTRY = [
   { key: 'ssh', unitCandidates: ['sshd.service'] },
   { key: 'firewall', unitCandidates: ['firewalld.service'] },
   { key: 'cron', unitCandidates: ['crond.service'] },
+  { key: 'runtime-manager', unitCandidates: ['caddy-dashboard-runtime.service'] },
   { key: 'caddy', unitCandidates: ['caddy.service'] },
   { key: 'fail2ban', unitCandidates: ['fail2ban.service'], installable: { packageName: 'fail2ban' } },
   { key: 'mariadb', unitCandidates: ['mariadb.service', 'mysql.service'], installable: { custom: true } },

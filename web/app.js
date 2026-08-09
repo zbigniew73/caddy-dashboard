@@ -1,5 +1,5 @@
 const API = '/api';
-const CORE_SERVICE_KEYS = ['ssh', 'firewall', 'cron', 'caddy'];
+const CORE_SERVICE_KEYS = ['ssh', 'firewall', 'cron', 'runtime-manager', 'caddy'];
 let SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS];
 let INSTALL_DETAIL_TABS = [];
 let currentTab = 'system';
