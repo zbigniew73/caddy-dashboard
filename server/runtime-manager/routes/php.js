@@ -159,28 +159,48 @@ const PHP_INI_OPCACHE_KEYS = [
   'opcache.memory_consumption', 'opcache.interned_strings_buffer',
   'opcache.max_accelerated_files', 'opcache.revalidate_freq', 'opcache.validate_timestamps'
 ];
+const SETTINGS_INI_FILENAME = '99-caddy-dashboard.ini';
+const OPCACHE_INI_FILENAME = '98-caddy-dashboard-opcache.ini';
 
-// Odczyt biezacej konfiguracji idzie przez sam interpreter PHP (php -r
-// ini_get(...)) zamiast parsowania plikow ini recznie - to jedyne
-// wiarygodne zrodlo prawdy (scalony wynik glownego php.ini + WSZYSTKICH
-// plikow w php.d/, nie tylko naszego wlasnego), i nie wymaga roota -
-// uruchomienie wrappera CLI to zwykla operacja, ktora panel i tak juz
-// moze wykonac.
+// Odczyt biezacej konfiguracji NIE idzie przez `ini_get()` per-dyrektywa -
+// potwierdzone na zywym serwerze (2026-08-09), ze to zawodne dla
+// max_execution_time/max_input_time: CLI SAPI ma wlasne, zaszyte na
+// sztywno wartosci dla tych dyrektyw (skrypty CLI domyslnie bez limitu
+// czasu), NIEZALEZNE od tego co jest w php.ini/php.d - `ini_get()`
+// woalne z CLI zwracalo np. null/-1 mimo ze nasz wlasny plik mial
+// `max_execution_time = 60`.
+//
+// Zamiast tego: jesli nasz wlasny plik (99-caddy-dashboard.ini albo
+// 98-caddy-dashboard-opcache.ini) juz istnieje, czytamy go WPROST przez
+// `parse_ini_file()` - to jedyne miejsce, gdzie mamy PEWNOSC co faktycznie
+// zapisalismy (i czego uzyje FPM, bo FPM nie ma tego samego CLI-owego
+// zaszycia). Dla kluczy, ktorych nie ma w naszym pliku (albo gdy plik
+// jeszcze nie istnieje - nic nigdy nie zapisano), spadamy na `ini_get()`
+// jako sensowna propozycje startowa.
 //
 // Dwie warstwy ochrony przed tym, ze STDOUT przestanie byc czystym JSON-em
-// (np. warning/notice/deprecated z ktoregos php.d/*.ini wypisany na
-// stdout zamiast stderr, co calkowicie psuloby JSON.parse ponizej):
+// (np. warning/notice/deprecated wypisany na stdout zamiast stderr, co
+// calkowicie psuloby JSON.parse ponizej):
 // 1. `-d display_errors=stderr` wymusza, zeby jakiekolwiek komunikaty PHP
-//    lecialy na stderr, nigdy na stdout - niezaleznie od tego co ustawia
-//    display_errors w samym php.ini.
+//    lecialy na stderr, nigdy na stdout.
 // 2. Wynik owijamy unikalnymi znacznikami i wycinamy TYLKO to co miedzy
-//    nimi przed JSON.parse - defense in depth, gdyby cos innego (np.
-//    output z ktoregos rozszerzenia) i tak trafilo na stdout.
-async function readPhpIniValues(id, keys) {
+//    nimi przed JSON.parse.
+async function readOwnIniOrLive(id, filename, keys) {
   const wrapper = `/usr/local/bin/php${id}`;
+  const filePath = `/etc/opt/remi/php${id}/php.d/${filename}`;
   const MARK_START = '__CDDASH_JSON_START__';
   const MARK_END = '__CDDASH_JSON_END__';
-  const script = `echo '${MARK_START}' . json_encode(array_combine(${JSON.stringify(keys)}, array_map('ini_get', ${JSON.stringify(keys)}))) . '${MARK_END}';`;
+  const script = `
+$file = ${JSON.stringify(filePath)};
+$keys = ${JSON.stringify(keys)};
+$result = [];
+$parsed = file_exists($file) ? parse_ini_file($file, false, INI_SCANNER_RAW) : false;
+$parsed = is_array($parsed) ? $parsed : [];
+foreach ($keys as $k) {
+  $result[$k] = array_key_exists($k, $parsed) ? $parsed[$k] : ini_get($k);
+}
+echo '${MARK_START}' . json_encode($result) . '${MARK_END}';
+`;
   const { stdout } = await execFileAsync(
     wrapper,
     ['-d', 'display_errors=stderr', '-r', script],
@@ -217,15 +237,15 @@ router.get('/:id/settings', async (req, res) => {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
   }
   try {
-    const values = await readPhpIniValues(id, PHP_INI_SETTINGS_KEYS);
+    const values = await readOwnIniOrLive(id, SETTINGS_INI_FILENAME, PHP_INI_SETTINGS_KEYS);
     res.json({
       timezone: values['date.timezone'] || null,
       memoryLimitMb: parseIniSizeToMb(values['memory_limit']),
       uploadMaxMb: parseIniSizeToMb(values['upload_max_filesize']),
-      maxExecutionTime: parseInt(values['max_execution_time'], 10) || null,
-      maxInputTime: parseInt(values['max_input_time'], 10) || null,
-      maxInputVars: parseInt(values['max_input_vars'], 10) || null,
-      maxFileUploads: parseInt(values['max_file_uploads'], 10) || null,
+      maxExecutionTime: parseInt(values['max_execution_time'], 10) ?? null,
+      maxInputTime: parseInt(values['max_input_time'], 10) ?? null,
+      maxInputVars: parseInt(values['max_input_vars'], 10) ?? null,
+      maxFileUploads: parseInt(values['max_file_uploads'], 10) ?? null,
       exposePhp: iniBool(values['expose_php'])
     });
   } catch (e) {
@@ -239,11 +259,11 @@ router.get('/:id/opcache', async (req, res) => {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
   }
   try {
-    const values = await readPhpIniValues(id, PHP_INI_OPCACHE_KEYS);
+    const values = await readOwnIniOrLive(id, OPCACHE_INI_FILENAME, PHP_INI_OPCACHE_KEYS);
     res.json({
-      memoryConsumptionMb: parseInt(values['opcache.memory_consumption'], 10) || null,
-      internedStringsBufferMb: parseInt(values['opcache.interned_strings_buffer'], 10) || null,
-      maxAcceleratedFiles: parseInt(values['opcache.max_accelerated_files'], 10) || null,
+      memoryConsumptionMb: parseInt(values['opcache.memory_consumption'], 10) ?? null,
+      internedStringsBufferMb: parseInt(values['opcache.interned_strings_buffer'], 10) ?? null,
+      maxAcceleratedFiles: parseInt(values['opcache.max_accelerated_files'], 10) ?? null,
       revalidateFreqSec: parseInt(values['opcache.revalidate_freq'], 10) ?? null,
       validateTimestamps: iniBool(values['opcache.validate_timestamps'])
     });

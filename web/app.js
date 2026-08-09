@@ -2152,12 +2152,18 @@ function humanizePhpModuleKey(key) {
 // wystarczy jedno z wielu" (opcache/redis/apcu/memcached) i "Optional/
 // fallback" (sodium, iconv, zip... - o ile nie sa juz w ktorejs z list
 // powyzej), bo to nie jest "trzeba miec".
+// Kilka wariantow nazw pakietow na kazdy modul, bo dokladny sufiks
+// zalezy od konkretnego builda Remi (potwierdzone na zywym serwerze
+// 2026-08-09: ta instalacja ma np. "pecl-zip" nie "zip", i
+// "pecl-imagick-im7" nie "pecl-imagick" - stad kilka wariantow, nie
+// jeden zgadywany).
 const WORDPRESS_REQUIRED_MODULES = new Set(['json', 'mysqli', 'mysqlnd']);
 const WORDPRESS_RECOMMENDED_MODULES = new Set([
   'curl', 'dom', 'exif', 'fileinfo', 'hash',
   'igbinary', 'pecl-igbinary',
-  'imagick', 'pecl-imagick',
-  'intl', 'mbstring', 'openssl', 'xml', 'zip'
+  'imagick', 'pecl-imagick', 'pecl-imagick-im6', 'pecl-imagick-im7',
+  'intl', 'mbstring', 'openssl', 'xml',
+  'zip', 'pecl-zip'
 ]);
 
 function wordpressBadgeHtml(moduleKey) {
