@@ -2,6 +2,7 @@ node_modules
 .env
 caddy-dashboard.service
 caddy-dashboard-runtime.service
+caddy-dashboard-runtime.sock
 *.log
 .DS_Store
 /data

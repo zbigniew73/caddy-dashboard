@@ -1,11 +1,17 @@
 import http from 'http';
 
-// Klient panelu (dziala jako cdadmin) do Runtime Managera (osobny daemon,
-// dziala jako root, server/runtime-manager/) - komunikacja wylacznie po
-// unix sockecie, nigdy po sieci. Socket jest zawezony do grupy cdadmin
-// przez sam daemon (patrz server/runtime-manager/socketPermissions.js),
-// wiec brak dodatkowego tokenu tutaj jest celowy, nie przeoczeniem.
-const SOCKET_PATH = process.env.RUNTIME_SOCKET_PATH || '/run/caddy-dashboard-runtime.sock';
+// Klient panelu do Runtime Managera (osobny proces, server/runtime-manager/,
+// dziala jako TEN SAM SVC_USER co panel - patrz komentarz w
+// server/runtime-manager/index.js) - komunikacja wylacznie po unix
+// sockecie, nigdy po sieci. Skoro oba procesy dzialaja jako ten sam user,
+// socket (chmod 600) nie potrzebuje dodatkowego tokenu ani grupy.
+//
+// Domyslna sciezka jest wzgledna (patrz index.js - /run wymagaloby
+// roota), wiec musi sie zgadzac z domyslem w server/runtime-manager/
+// index.js ORAZ z tym, ze oba procesy maja to samo WorkingDirectory
+// (/opt/caddy-dashboard) - jesli jeden z tych zalozen kiedys przestanie
+// byc prawdziwe, trzeba ustawic RUNTIME_SOCKET_PATH jawnie w .env.
+const SOCKET_PATH = process.env.RUNTIME_SOCKET_PATH || 'caddy-dashboard-runtime.sock';
 
 function request(method, path, body) {
   return new Promise((resolve, reject) => {
