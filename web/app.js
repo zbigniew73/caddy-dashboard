@@ -1912,17 +1912,36 @@ function timezoneOptionsHtml(selected) {
   return zones.map((z) => `<option value="${escapeHtml(z)}"${z === selected ? ' selected' : ''}>${escapeHtml(z)}</option>`).join('');
 }
 
-function renderPhpSettingsSection(id) {
-  let defaultTz = 'UTC';
+function withSuggested(hintKey, value) {
+  return `${t(hintKey)} ${t('phpsettings.suggested_value', { value })}`;
+}
+
+async function renderPhpSettingsSection(id) {
+  let current = {};
   try {
-    defaultTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    current = await api('GET', `/php/${id}/settings`);
+  } catch {
+    current = {};
+  }
+
+  let detectedTz = 'UTC';
+  try {
+    detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
     // zostaje UTC
   }
-  const tzOptions = timezoneOptionsHtml(defaultTz);
+  const currentTz = current.timezone || detectedTz;
+  const tzOptions = timezoneOptionsHtml(currentTz);
   const tzField = tzOptions
     ? `<select id="phpsettings-timezone-${id}" style="width:100%;margin-bottom:4px;">${tzOptions}</select>`
-    : `<input type="text" id="phpsettings-timezone-${id}" value="${escapeHtml(defaultTz)}" placeholder="np. Europe/Warsaw" style="width:100%;margin-bottom:4px;">`;
+    : `<input type="text" id="phpsettings-timezone-${id}" value="${escapeHtml(currentTz)}" placeholder="np. Europe/Warsaw" style="width:100%;margin-bottom:4px;">`;
+
+  const memoryLimitMb = current.memoryLimitMb ?? 256;
+  const uploadMaxMb = current.uploadMaxMb ?? 64;
+  const maxExecutionTime = current.maxExecutionTime ?? 60;
+  const maxInputTime = current.maxInputTime ?? 60;
+  const maxInputVars = current.maxInputVars ?? 5000;
+  const maxFileUploads = current.maxFileUploads ?? 50;
 
   return `
     <div class="system-info-card">
@@ -1934,28 +1953,28 @@ function renderPhpSettingsSection(id) {
       <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.timezone_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.memory_limit_label')}</label>
-      <input type="number" id="phpsettings-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.memory_limit_hint')}</div>
+      <input type="number" id="phpsettings-memory-${id}" value="${memoryLimitMb}" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpsettings.memory_limit_hint', '256 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.upload_max_label')}</label>
-      <input type="number" id="phpsettings-upload-${id}" value="64" min="1" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.upload_max_hint')}</div>
+      <input type="number" id="phpsettings-upload-${id}" value="${uploadMaxMb}" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.upload_max_hint', '64 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_execution_time_label')}</label>
-      <input type="number" id="phpsettings-max-execution-time-${id}" value="60" min="1" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_execution_time_hint')}</div>
+      <input type="number" id="phpsettings-max-execution-time-${id}" value="${maxExecutionTime}" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpsettings.max_execution_time_hint', '60 s')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_time_label')}</label>
-      <input type="number" id="phpsettings-max-input-time-${id}" value="60" min="1" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_input_time_hint')}</div>
+      <input type="number" id="phpsettings-max-input-time-${id}" value="${maxInputTime}" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpsettings.max_input_time_hint', '60 s')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_vars_label')}</label>
-      <input type="number" id="phpsettings-max-input-vars-${id}" value="5000" min="100" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_input_vars_hint')}</div>
+      <input type="number" id="phpsettings-max-input-vars-${id}" value="${maxInputVars}" min="100" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpsettings.max_input_vars_hint', '5000')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_file_uploads_label')}</label>
-      <input type="number" id="phpsettings-max-file-uploads-${id}" value="50" min="1" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.max_file_uploads_hint')}</div>
+      <input type="number" id="phpsettings-max-file-uploads-${id}" value="${maxFileUploads}" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.max_file_uploads_hint', '50')}</div>
 
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
       <div class="action-msg" id="phpsettings-msg-${id}"></div>
@@ -2002,27 +2021,43 @@ function wirePhpSettingsSection(id) {
   };
 }
 
-function renderPhpOpcacheSection(id) {
+async function renderPhpOpcacheSection(id) {
+  let current = {};
+  try {
+    current = await api('GET', `/php/${id}/opcache`);
+  } catch {
+    current = {};
+  }
+
+  const memoryConsumptionMb = current.memoryConsumptionMb ?? 256;
+  const internedStringsBufferMb = current.internedStringsBufferMb ?? 32;
+  const maxAcceleratedFiles = current.maxAcceleratedFiles ?? 50000;
+  const revalidateFreqSec = current.revalidateFreqSec ?? 2;
+  const validateTimestamps = current.validateTimestamps ?? true;
+
   return `
     <div class="system-info-card">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('phpopcache.title')}</h3>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpopcache.description')}</p>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.memory_label')}</label>
-      <input type="number" id="phpopcache-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpopcache-memory-${id}" value="${memoryConsumptionMb}" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.memory_hint', '256 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.interned_strings_label')}</label>
-      <input type="number" id="phpopcache-interned-${id}" value="32" min="4" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpopcache-interned-${id}" value="${internedStringsBufferMb}" min="4" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.interned_strings_hint', '32 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.max_files_label')}</label>
-      <input type="number" id="phpopcache-max-files-${id}" value="50000" min="1000" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpopcache-max-files-${id}" value="${maxAcceleratedFiles}" min="1000" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.max_files_hint', '50000')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.revalidate_freq_label')}</label>
-      <input type="number" id="phpopcache-revalidate-${id}" value="2" min="0" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpopcache.revalidate_freq_hint')}</div>
+      <input type="number" id="phpopcache-revalidate-${id}" value="${revalidateFreqSec}" min="0" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.revalidate_freq_hint', '2 s')}</div>
 
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
-        <input type="checkbox" id="phpopcache-validate-timestamps-${id}" checked>
+        <input type="checkbox" id="phpopcache-validate-timestamps-${id}"${validateTimestamps ? ' checked' : ''}>
         ${t('phpopcache.validate_timestamps_label')}
       </label>
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpopcache.validate_timestamps_hint')}</div>
@@ -2171,16 +2206,21 @@ async function wrapPhpExtras(serviceHtml, id) {
   // ladowal sie pod calym rzedem 1 (czyli pod wyzsza z dwoch kolumn,
   // formularz ustawien), zostawiajac widoczna dziure pod krotszym boxem
   // usługi zamiast byc bezposrednio pod nim.
+  const [opcacheHtml, settingsHtml, modulesHtml] = await Promise.all([
+    renderPhpOpcacheSection(id),
+    renderPhpSettingsSection(id),
+    renderPhpModulesSection(id)
+  ]);
   const columns = `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
         ${serviceHtml}
-        ${renderPhpOpcacheSection(id)}
+        ${opcacheHtml}
       </div>
-      <div style="flex:1 1 0;min-width:320px;">${renderPhpSettingsSection(id)}</div>
+      <div style="flex:1 1 0;min-width:320px;">${settingsHtml}</div>
     </div>
   `;
-  const modulesRow = `<div style="margin-top:16px;">${await renderPhpModulesSection(id)}</div>`;
+  const modulesRow = `<div style="margin-top:16px;">${modulesHtml}</div>`;
   return columns + modulesRow;
 }
 

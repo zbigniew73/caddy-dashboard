@@ -21,8 +21,8 @@ import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAut
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
 import { getInstalledStatus as getResticStatus } from '../services/restic.js';
 import {
-  getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings,
-  applyPhpOpcache, getPhpModules, togglePhpModule
+  getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
+  getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule
 } from '../services/runtimeManagerClient.js';
 
 const router = Router();
@@ -606,6 +606,14 @@ router.post('/php/:id/install', async (req, res) => {
   }
 });
 
+router.get('/php/:id/settings', async (req, res) => {
+  try {
+    res.json(await getPhpSettings(req.params.id));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.post('/php/:id/settings', async (req, res) => {
   try {
     const result = await applyPhpSettings(req.params.id, {
@@ -618,6 +626,14 @@ router.post('/php/:id/settings', async (req, res) => {
       maxFileUploads: req.body?.maxFileUploads
     });
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/php/:id/opcache', async (req, res) => {
+  try {
+    res.json(await getPhpOpcache(req.params.id));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

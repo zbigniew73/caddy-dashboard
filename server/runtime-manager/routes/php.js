@@ -151,6 +151,86 @@ function requireIntInRange(value, min, max, label) {
   return parsed;
 }
 
+const PHP_INI_SETTINGS_KEYS = [
+  'date.timezone', 'memory_limit', 'upload_max_filesize', 'post_max_size',
+  'max_execution_time', 'max_input_time', 'max_input_vars', 'max_file_uploads'
+];
+const PHP_INI_OPCACHE_KEYS = [
+  'opcache.memory_consumption', 'opcache.interned_strings_buffer',
+  'opcache.max_accelerated_files', 'opcache.revalidate_freq', 'opcache.validate_timestamps'
+];
+
+// Odczyt biezacej konfiguracji idzie przez sam interpreter PHP (php -r
+// ini_get(...)) zamiast parsowania plikow ini recznie - to jedyne
+// wiarygodne zrodlo prawdy (scalony wynik glownego php.ini + WSZYSTKICH
+// plikow w php.d/, nie tylko naszego wlasnego), i nie wymaga roota -
+// uruchomienie wrappera CLI to zwykla operacja, ktora panel i tak juz
+// moze wykonac.
+async function readPhpIniValues(id, keys) {
+  const wrapper = `/usr/local/bin/php${id}`;
+  const script = `echo json_encode(array_combine(${JSON.stringify(keys)}, array_map('ini_get', ${JSON.stringify(keys)})));`;
+  const { stdout } = await execFileAsync(wrapper, ['-r', script], { timeout: 10000 });
+  return JSON.parse(stdout);
+}
+
+// PHP ini akceptuje skroty rozmiaru (256M/1G/512K) albo czysta liczbe
+// bajtow - sprowadzamy wszystko do MB dla pol formularza.
+function parseIniSizeToMb(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const match = /^(-?\d+)\s*([KMG])?$/i.exec(String(raw).trim());
+  if (!match) return null;
+  let value = parseInt(match[1], 10);
+  const unit = (match[2] || '').toUpperCase();
+  if (unit === 'K') value /= 1024;
+  else if (unit === 'G') value *= 1024;
+  else if (!unit) value /= 1024 * 1024;
+  return Math.max(0, Math.round(value));
+}
+
+function iniBool(raw) {
+  return ['1', 'on', 'true', 'yes'].includes(String(raw).trim().toLowerCase());
+}
+
+router.get('/:id/settings', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+  try {
+    const values = await readPhpIniValues(id, PHP_INI_SETTINGS_KEYS);
+    res.json({
+      timezone: values['date.timezone'] || null,
+      memoryLimitMb: parseIniSizeToMb(values['memory_limit']),
+      uploadMaxMb: parseIniSizeToMb(values['upload_max_filesize']),
+      maxExecutionTime: parseInt(values['max_execution_time'], 10) || null,
+      maxInputTime: parseInt(values['max_input_time'], 10) || null,
+      maxInputVars: parseInt(values['max_input_vars'], 10) || null,
+      maxFileUploads: parseInt(values['max_file_uploads'], 10) || null
+    });
+  } catch (e) {
+    res.status(500).json({ error: `Nie udalo sie odczytac biezacej konfiguracji PHP ${versionLabel(id)}.` });
+  }
+});
+
+router.get('/:id/opcache', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+  try {
+    const values = await readPhpIniValues(id, PHP_INI_OPCACHE_KEYS);
+    res.json({
+      memoryConsumptionMb: parseInt(values['opcache.memory_consumption'], 10) || null,
+      internedStringsBufferMb: parseInt(values['opcache.interned_strings_buffer'], 10) || null,
+      maxAcceleratedFiles: parseInt(values['opcache.max_accelerated_files'], 10) || null,
+      revalidateFreqSec: parseInt(values['opcache.revalidate_freq'], 10) ?? null,
+      validateTimestamps: iniBool(values['opcache.validate_timestamps'])
+    });
+  } catch (e) {
+    res.status(500).json({ error: `Nie udalo sie odczytac biezacej konfiguracji OPcache PHP ${versionLabel(id)}.` });
+  }
+});
+
 router.post('/:id/settings', async (req, res) => {
   const { id } = req.params;
   if (!/^[0-9]{2}$/.test(id)) {
