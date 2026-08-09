@@ -47,7 +47,9 @@ const NAV_ICONS = {
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>'
 };
+const PHP_ICON = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>';
 function navIcon(key) {
+  if (/^php\d{2}$/.test(key)) return PHP_ICON;
   return NAV_ICONS[key] || NAV_ICON_DEFAULT;
 }
 
@@ -1932,23 +1934,28 @@ function renderPhpSettingsSection(id) {
       <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.timezone_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.memory_limit_label')}</label>
-      <input type="number" id="phpsettings-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpsettings-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.memory_limit_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.upload_max_label')}</label>
       <input type="number" id="phpsettings-upload-${id}" value="64" min="1" style="width:100%;margin-bottom:4px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.upload_max_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_execution_time_label')}</label>
-      <input type="number" id="phpsettings-max-execution-time-${id}" value="60" min="1" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpsettings-max-execution-time-${id}" value="60" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_execution_time_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_time_label')}</label>
-      <input type="number" id="phpsettings-max-input-time-${id}" value="60" min="1" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpsettings-max-input-time-${id}" value="60" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_input_time_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_vars_label')}</label>
-      <input type="number" id="phpsettings-max-input-vars-${id}" value="5000" min="100" style="width:100%;margin-bottom:14px;">
+      <input type="number" id="phpsettings-max-input-vars-${id}" value="5000" min="100" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.max_input_vars_hint')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_file_uploads_label')}</label>
-      <input type="number" id="phpsettings-max-file-uploads-${id}" value="50" min="1" style="width:100%;margin-bottom:16px;">
+      <input type="number" id="phpsettings-max-file-uploads-${id}" value="50" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.max_file_uploads_hint')}</div>
 
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
       <div class="action-msg" id="phpsettings-msg-${id}"></div>
