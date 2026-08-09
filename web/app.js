@@ -46,7 +46,8 @@ const NAV_ICONS = {
   postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
-  frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>'
+  frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>',
+  phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>'
 };
 const PHP_ICON = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>';
 function navIcon(key) {
@@ -541,6 +542,106 @@ function wireFrankenphpInstallTile() {
       btn.disabled = false;
     }
   };
+}
+
+function phpmyadminInfoCardHtml(status, includeActions) {
+  const name = t('services.phpmyadmin.name');
+  if (!status.installed) return '';
+  return `
+    <div class="system-info-card" style="max-width:640px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+        <span class="status-badge active">${t('install.installed_badge')}</span>
+      </div>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('phpmyadmin.version_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.version || '-')}</dd>
+        <dt>${t('phpmyadmin.docroot_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.docroot)}</dd>
+        <dt>${t('phpmyadmin.socket_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.socketPath)}</dd>
+      </dl>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('phpmyadmin.caddy_hint')}</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(status.caddyBlock)}</pre>
+      ${includeActions ? `
+        <button type="button" class="danger" id="phpmyadmin-uninstall-btn">${t('phpmyadmin.uninstall_button')}</button>
+        <div class="action-msg" id="phpmyadmin-msg"></div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function phpmyadminInstallTileHtml(status) {
+  const name = t('services.phpmyadmin.name');
+  if (status.installed) return phpmyadminInfoCardHtml(status, true);
+
+  if (!status.php83Installed) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+        <div class="empty-state">${t('phpmyadmin.requires_php83')}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${t('install.phpmyadmin.description')}</p>
+      <button type="button" id="phpmyadmin-install-btn">${t('install.install_button')}</button>
+      <div class="action-msg" id="phpmyadmin-msg"></div>
+    </div>
+  `;
+}
+
+function wirePhpmyadminInstallTile() {
+  const installBtn = document.getElementById('phpmyadmin-install-btn');
+  const uninstallBtn = document.getElementById('phpmyadmin-uninstall-btn');
+  const msgEl = document.getElementById('phpmyadmin-msg');
+
+  if (installBtn) {
+    installBtn.onclick = async () => {
+      if (!window.confirm(t('install.phpmyadmin.confirm_install'))) return;
+      installBtn.disabled = true;
+      msgEl.textContent = t('install.installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/phpmyadmin/install');
+        const status = await api('GET', '/phpmyadmin');
+        document.getElementById('content').innerHTML = phpmyadminInstallTileHtml(status);
+        applyTranslations();
+        wirePhpmyadminInstallTile();
+        const successEl = document.getElementById('phpmyadmin-msg');
+        if (successEl) {
+          successEl.textContent = t('install.install_success');
+          successEl.className = 'action-msg success';
+        }
+        await refreshDynamicNav();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        installBtn.disabled = false;
+      }
+    };
+  }
+
+  if (uninstallBtn) {
+    uninstallBtn.onclick = async () => {
+      if (!window.confirm(t('phpmyadmin.confirm_uninstall'))) return;
+      uninstallBtn.disabled = true;
+      msgEl.textContent = t('testdb.working');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/phpmyadmin/uninstall');
+        const status = await api('GET', '/phpmyadmin');
+        document.getElementById('content').innerHTML = phpmyadminInstallTileHtml(status);
+        applyTranslations();
+        wirePhpmyadminInstallTile();
+        await refreshDynamicNav();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        uninstallBtn.disabled = false;
+      }
+    };
+  }
 }
 
 function mariadbInstallTileHtml(svc) {
@@ -1066,6 +1167,13 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = frankenphpInstallTileHtml(status, avail);
       applyTranslations();
       wireFrankenphpInstallTile();
+      return;
+    }
+    if (key === 'phpmyadmin') {
+      const status = await api('GET', '/phpmyadmin');
+      content.innerHTML = phpmyadminInstallTileHtml(status);
+      applyTranslations();
+      wirePhpmyadminInstallTile();
       return;
     }
     const svc = await api('GET', `/services/${key}`);
@@ -2703,6 +2811,13 @@ function wireServiceActions(key) {
 async function renderServiceDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
+    if (key === 'phpmyadmin') {
+      const status = await api('GET', '/phpmyadmin');
+      content.innerHTML = phpmyadminInfoCardHtml(status, true);
+      applyTranslations();
+      wirePhpmyadminInstallTile();
+      return;
+    }
     const svc = await api('GET', `/services/${key}`);
     const phpMatch = /^php(\d{2})$/.exec(key);
     let html = serviceDetailHtml(svc);

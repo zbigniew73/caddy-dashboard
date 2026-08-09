@@ -3,6 +3,7 @@ import express from 'express';
 import fs from 'fs';
 import phpRoutes from './routes/php.js';
 import frankenphpRoutes from './routes/frankenphp.js';
+import phpmyadminRoutes from './routes/phpmyadmin.js';
 
 // Ten proces to Runtime Manager - osobna usluga systemd
 // (caddy-dashboard-runtime.service) obok glownego panelu
@@ -39,6 +40,7 @@ app.use(express.json({ limit: '1mb' }));
 
 app.use('/php', phpRoutes);
 app.use('/frankenphp', frankenphpRoutes);
+app.use('/phpmyadmin', phpmyadminRoutes);
 
 app.use((err, req, res, next) => {
   console.error('[BLAD]', err);

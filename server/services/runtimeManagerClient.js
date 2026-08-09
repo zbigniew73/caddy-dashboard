@@ -115,8 +115,21 @@ async function installFrankenphp(version) {
   return request('POST', `/frankenphp/${encodeURIComponent(version)}/install`);
 }
 
+async function getPhpmyadminStatus() {
+  return request('GET', '/phpmyadmin');
+}
+
+async function installPhpmyadmin() {
+  return request('POST', '/phpmyadmin/install');
+}
+
+async function uninstallPhpmyadmin() {
+  return request('POST', '/phpmyadmin/uninstall');
+}
+
 export {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
-  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp
+  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp,
+  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin
 };

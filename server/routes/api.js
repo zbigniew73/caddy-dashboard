@@ -26,7 +26,8 @@ import { getInstalledStatus as getResticStatus } from '../services/restic.js';
 import {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
-  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp
+  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp,
+  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin
 } from '../services/runtimeManagerClient.js';
 
 const router = Router();
@@ -195,6 +196,36 @@ async function phpServiceEntries() {
   return [...installedEntries, installTileEntry];
 }
 
+// phpMyAdmin - w przeciwienstwie do PHP-FPM to JEDEN klucz dla obu sekcji
+// (Install i, po instalacji, Usługi) - nie ma osobnego "tile" wpisu i
+// osobnych "zainstalowanych wersji" jak przy PHP, bo phpMyAdmin nie jest
+// wersjonowany per-instalacja tym mechanizmem (jedna instalacja na
+// serwer). Ten sam wzorzec co MariaDB/PostgreSQL/etc - jeden
+// installable:true wpis, found przelacza sie z instalacja.
+async function phpmyadminServiceEntry() {
+  let status;
+  try {
+    status = await getPhpmyadminStatus();
+  } catch {
+    return [];
+  }
+  // "unit"/"activeState" nie maja realnego odpowiednika (nie ma dedykowanej
+  // jednostki systemd - phpMyAdmin jedzie na wspoldzielonym php83-php-fpm),
+  // ale serviceCard() w web/app.js oczekuje tych pol dla generycznej karty
+  // w gridzie Uslug - wypelniamy je sensownie (wersja zamiast nazwy
+  // jednostki, zawsze "active" gdy zainstalowany, bo nie ma tu pojecia
+  // "zatrzymany" odrebnego od "niezainstalowany") zamiast zostawiac
+  // undefined (renderowaloby sie jako dosl. "undefined").
+  return [{
+    key: 'phpmyadmin',
+    name: 'phpMyAdmin',
+    found: status.installed,
+    installable: true,
+    unit: status.version ? `v${status.version}` : status.docroot,
+    activeState: status.installed ? 'active' : 'inactive'
+  }];
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
   const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, resticVersion, caddySiteCount] = await Promise.all([
@@ -273,7 +304,7 @@ router.post('/system/reboot', (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await listServices();
-    res.json({ services: [...services, ...(await phpServiceEntries())] });
+    res.json({ services: [...services, ...(await phpServiceEntries()), ...(await phpmyadminServiceEntry())] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -768,6 +799,30 @@ router.post('/frankenphp/:version/install', async (req, res) => {
   try {
     const result = await installFrankenphp(req.params.version);
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/phpmyadmin', async (req, res) => {
+  try {
+    res.json(await getPhpmyadminStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/phpmyadmin/install', async (req, res) => {
+  try {
+    res.json(await installPhpmyadmin());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/phpmyadmin/uninstall', async (req, res) => {
+  try {
+    res.json(await uninstallPhpmyadmin());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
