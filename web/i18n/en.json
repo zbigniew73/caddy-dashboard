@@ -221,6 +221,7 @@
   "phpmodules.column_status": "Status",
   "phpmodules.enabled": "Enabled",
   "phpmodules.disabled": "Disabled",
+  "phpmodules.protected": "Foundation (protected)",
   "phpmodules.add_button": "Add",
   "phpmodules.remove_button": "Remove",
   "phpmodules.working": "Changing module...",

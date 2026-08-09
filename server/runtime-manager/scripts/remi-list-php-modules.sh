@@ -1,25 +1,29 @@
 #!/usr/bin/env bash
 #
-# Wypisuje WSZYSTKIE moduly PHP widoczne w repozytorium Remi dla danej
-# wersji, nie jakas z gory ustalona liste - "wszystko co widzi system",
-# jak chcial user. Zapytanie o pakiety celowo szerokie - "php${VERSION}-*",
-# ten sam wzorzec co `dnf search php84-*` uruchomione recznie po SSH (user
-# tak to sprawdza, wiec panel ma widziec dokladnie to samo, nie wezszy
-# podzbior) - a nie samo "php${VERSION}-php-*". Filtrujemy pozniej do
-# faktycznych modulow (prefiks "phpXX-php-"), zeby odsiac pakiety
-# rusztowania SCL (np. php84-build/php84-runtime/php84-syspaths), ktore
-# nie sa rozszerzeniami do wlaczania/wylaczania. Jeden wiersz na modul:
-# "<sufiks po phpXX-php-> installed|available <pelna-nazwa-pakietu>.<arch>"
-# - trzecie pole to dokladny identyfikator pakietu (np.
-# "php84-php-pecl-zip.x86_64", nie "ladna" etykieta) - user chce widziec
-# to samo co pokazuje `dnf` samo w sobie, wiec panel niczego tu nie
-# upiekszamy.
+# Wypisuje WSZYSTKIE pakiety php${VERSION}-* widoczne w repozytorium
+# Remi dla danej wersji, bez wyjatku - dokladnie to co pokazuje
+# `dnf search php84-*` uruchomione recznie po SSH (user tak to sprawdza,
+# wiec panel ma widziec to samo, nie wezszy podzbior; user explicite
+# potwierdzil "pokaz wszystkie php84-* bez wyjatku" po tym jak zapytal o
+# brakujace php84-runtime/scldevel/syspaths/unit-php/uwsgi-plugin-php/
+# xhprof). Jeden wiersz na pakiet: "<klucz> installed|available
+# <pelna-nazwa-pakietu>.<arch>" - trzecie pole to dokladny identyfikator
+# pakietu (np. "php84-php-pecl-zip.x86_64"), user chce widziec to samo co
+# pokazuje `dnf` samo w sobie, wiec panel niczego tu nie upiekszamy.
 #
-# Wyklucza fpm/cli/common celowo - to nie sa "moduly" do wlaczania/
-# wylaczania, tylko fundament samego runtime PHP (usuniecie ktoregokolwiek
-# zepsuloby cala usluge, nie pojedyncze rozszerzenie) - ten sam rodzaj
-# ochrony co blokada usuwania portu SSH z tabeli firewalla gdzie indziej
-# w tym projekcie.
+# Klucz ma dwa warianty w zaleznosci od prefiksu nazwy pakietu (odczytywane
+# z powrotem w php-toggle-module.sh, zeby install/remove trafialy w
+# WLASCIWY pakiet, nie odgadniety):
+#   - "phpXX-php-<reszta>"  -> klucz = "<reszta>"        (np. "zip", "pecl-zip")
+#   - "phpXX-<reszta>"      -> klucz = "pkg-<reszta>"    (np. "pkg-runtime",
+#                                                          "pkg-unit-php")
+#
+# Wyklucza z toggle'owania (patrz PROTECTED w php-toggle-module.sh, ta
+# sama lista) fpm/cli/common oraz pkg-php/pkg-build/pkg-runtime/
+# pkg-scldevel/pkg-syspaths - to nie sa "moduly" tylko fundament/rusztowanie
+# samej instalacji SCL (usuniecie ktoregokolwiek zepsuloby cala usluge, nie
+# pojedyncze rozszerzenie), ale POKAZUJEMY je w tabeli (bez przyciskow
+# akcji po stronie Node/frontu) - user chcial widziec wszystko jawnie.
 #
 # UWAGA: dokladna komenda repoquery wymaga zweryfikowania na prawdziwym
 # AlmaLinux/Rocky (ten skrypt nie moze byc przetestowany na maszynie
@@ -31,15 +35,19 @@ VERSION="${1:-}"
 [[ "$VERSION" =~ ^[0-9]{2}$ ]] || { echo "BLAD: nieprawidlowy format wersji: '${VERSION}' (oczekiwano dwoch cyfr, np. 85)." >&2; exit 1; }
 
 PREFIX="php${VERSION}-php-"
-PROTECTED=" fpm cli common "
+BASE_PREFIX="php${VERSION}-"
 
 dnf -q repoquery --qf '%{name} %{arch}' "php${VERSION}-*" 2>/dev/null | sort -u -k1,1 | while read -r pkg arch; do
-  [[ "$pkg" == "${PREFIX}"* ]] || continue
-  suffix="${pkg#"$PREFIX"}"
-  [[ "$PROTECTED" == *" ${suffix} "* ]] && continue
-  if rpm -q "$pkg" >/dev/null 2>&1; then
-    echo "${suffix} installed ${pkg}.${arch}"
+  if [[ "$pkg" == "${PREFIX}"* ]]; then
+    key="${pkg#"$PREFIX"}"
+  elif [[ "$pkg" == "${BASE_PREFIX}"* ]]; then
+    key="pkg-${pkg#"$BASE_PREFIX"}"
   else
-    echo "${suffix} available ${pkg}.${arch}"
+    continue
+  fi
+  if rpm -q "$pkg" >/dev/null 2>&1; then
+    echo "${key} installed ${pkg}.${arch}"
+  else
+    echo "${key} available ${pkg}.${arch}"
   fi
 done

@@ -2141,7 +2141,7 @@ const PHP_MODULE_LABELS = {
 
 function humanizePhpModuleKey(key) {
   if (PHP_MODULE_LABELS[key]) return PHP_MODULE_LABELS[key];
-  return key.replace(/^pecl-/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/^pkg-/, '').replace(/^pecl-/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // Dwa osobne poziomy z oficjalnej dokumentacji WordPressa
@@ -2203,6 +2203,12 @@ function wordpressBadgeHtml(moduleKey) {
   return '';
 }
 
+// Musi byc identyczna z PROTECTED_MODULES w server/runtime-manager/routes/php.js
+// (i z case'em w php-toggle-module.sh) - te pakiety sa POKAZYWANE w
+// tabeli (user chcial widziec wszystkie php84-* bez wyjatku), ale bez
+// przycisku Dodaj/Usun, bo to fundament/rusztowanie SCL, nie "modul".
+const PHP_PROTECTED_MODULE_KEYS = new Set(['fpm', 'cli', 'common', 'pkg-php', 'pkg-build', 'pkg-runtime', 'pkg-scldevel', 'pkg-syspaths']);
+
 async function renderPhpModulesSection(id) {
   let modules;
   try {
@@ -2214,9 +2220,12 @@ async function renderPhpModulesSection(id) {
   const rows = modules.map((m) => {
     const label = m.package;
     const wpBadge = wordpressBadgeHtml(m.key);
-    const actionButton = m.enabled
-      ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
-      : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`;
+    const isProtected = PHP_PROTECTED_MODULE_KEYS.has(m.key);
+    const actionButton = isProtected
+      ? `<span class="status-badge" style="opacity:0.6;">${t('phpmodules.protected')}</span>`
+      : (m.enabled
+        ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
+        : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`);
     return `
       <tr>
         <td>${escapeHtml(label)}${wpBadge}</td>

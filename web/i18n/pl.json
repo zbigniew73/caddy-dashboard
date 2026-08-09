@@ -221,6 +221,7 @@
   "phpmodules.column_status": "Status",
   "phpmodules.enabled": "Włączony",
   "phpmodules.disabled": "Wyłączony",
+  "phpmodules.protected": "Fundament (chroniony)",
   "phpmodules.add_button": "Dodaj",
   "phpmodules.remove_button": "Usuń",
   "phpmodules.working": "Trwa zmiana modułu...",

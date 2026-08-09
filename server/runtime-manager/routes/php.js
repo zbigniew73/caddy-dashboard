@@ -14,12 +14,16 @@ const OPCACHE_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-opcache.sh');
 const MODULE_TOGGLE_SCRIPT = path.join(SCRIPTS_DIR, 'php-toggle-module.sh');
 const MODULE_LIST_SCRIPT = path.join(SCRIPTS_DIR, 'remi-list-php-modules.sh');
 
-// fpm/cli/common to fundament runtime PHP, nie "moduly" - usuniecie
-// ktoregokolwiek zepsuloby cala usluge zamiast pojedynczego rozszerzenia.
-// remi-list-php-modules.sh juz je pomija na wyjsciu, ale walidujemy
-// jeszcze raz tutaj (i w samym skrypcie toggle) - modul w URL POST nigdy
-// nie jest ufany tylko dlatego, ze przeszedl przez GET wczesniej.
-const PROTECTED_MODULES = ['fpm', 'cli', 'common'];
+// fpm/cli/common oraz pkg-php/pkg-build/pkg-runtime/pkg-scldevel/
+// pkg-syspaths to fundament/rusztowanie runtime PHP (SCL), nie "moduly" -
+// usuniecie ktoregokolwiek zepsuloby cala usluge zamiast pojedynczego
+// rozszerzenia. Lista MUSI byc identyczna z PROTECTED case'em w
+// php-toggle-module.sh - remi-list-php-modules.sh nadal je POKAZUJE w
+// tabeli (user chcial widziec wszystkie php84-* bez wyjatku), ale bez
+// mozliwosci install/remove. Walidujemy tutaj (i w samym skrypcie toggle)
+// - modul w URL POST nigdy nie jest ufany tylko dlatego, ze przeszedl
+// przez GET wczesniej.
+const PROTECTED_MODULES = ['fpm', 'cli', 'common', 'pkg-php', 'pkg-build', 'pkg-runtime', 'pkg-scldevel', 'pkg-syspaths'];
 const MODULE_KEY_PATTERN = /^[a-z0-9_-]+$/;
 
 // Bezpieczny zestaw znakow dla nazwy strefy czasowej IANA (litery, cyfry,
