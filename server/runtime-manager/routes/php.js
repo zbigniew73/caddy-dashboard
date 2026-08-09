@@ -36,7 +36,13 @@ async function runViaSudo(scriptPath, args, timeout, sudoErrorLabel) {
   }
 }
 
+// Wlaczenie repo (idempotentne - patrz remi-setup-repos.sh) musi sie dziac
+// TU, nie tylko przy instalacji - inaczej pierwsze otwarcie kafelka (przed
+// jakakolwiek instalacja) pyta dnf o pakiety phpXX zanim Remi w ogole jest
+// wlaczone i dostaje pusta liste ("brak dostepnych wersji"), mimo ze Remi
+// realnie ma te pakiety.
 async function listRemiVersions() {
+  await runViaSudo(SETUP_REPOS_SCRIPT, [], 60000, 'wlaczenia repozytoriow EPEL/Remi');
   const { stdout } = await runViaSudo(LIST_SCRIPT, [], 30000, 'listy wersji PHP z Remi');
   return stdout.trim().split('\n').filter(Boolean).map((line) => {
     const [id, status] = line.trim().split(/\s+/);
@@ -65,12 +71,6 @@ router.post('/:id/install', async (req, res) => {
   const { id } = req.params;
   if (!/^[0-9]{2}$/.test(id)) {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
-  }
-
-  try {
-    await runViaSudo(SETUP_REPOS_SCRIPT, [], 60000, 'wlaczenia repozytoriow EPEL/Remi');
-  } catch (e) {
-    return res.status(e.status || 500).json({ error: e.message || 'Wlaczenie repozytoriow EPEL/Remi nie powiodlo sie.' });
   }
 
   let available;
