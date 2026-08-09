@@ -17,9 +17,6 @@ const SOCKET_PATH = '/opt/caddy-dashboard/run/phpmyadmin.sock';
 // tutaj tylko kopia do wyswietlenia w panelu (Caddyfile NIE jest
 // edytowany automatycznie - patrz komentarz w phpmyadmin-install.sh).
 const CADDY_BLOCK = `pma.twojadomena.pl {
-	reverse_proxy 127.0.0.1:4310
-}
-http://127.0.0.1:4310 {
 	header -X-Powered-By
 	root * ${DOCROOT}
 	php_fastcgi unix/${SOCKET_PATH}

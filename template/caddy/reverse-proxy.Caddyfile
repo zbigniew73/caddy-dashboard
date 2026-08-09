@@ -19,11 +19,9 @@ przyklad.domena.pl {
 		Referrer-Policy "no-referrer-when-downgrade"
 	}
 }
-# phpmyadmin
+# phpmyadmin - bezposrednio na wlasnej subdomenie, bez posredniego skoku
+# przez wewnetrzny port (upraszcza konfiguracje, mniej miejsc do zepsucia)
 #pma.twojadomena.pl {
-#        reverse_proxy 127.0.0.1:4310
-#    }
-#http://127.0.0.1:4310 {
 #    header -X-Powered-By
 #    root * /opt/caddy-dashboard/phpmyadmin
 #    php_fastcgi unix//opt/caddy-dashboard/run/phpmyadmin.sock
@@ -31,9 +29,6 @@ przyklad.domena.pl {
 #}
 # phppgadmin
 #pga.twojadomena.pl {
-#        reverse_proxy 127.0.0.1:4310
-#    }
-#http://127.0.0.1:4320 {
 #    header -X-Powered-By
 #    root * /opt/caddy-dashboard/phppgadmin
 #    php_fastcgi unix//opt/caddy-dashboard/run/phppgadmin.sock
