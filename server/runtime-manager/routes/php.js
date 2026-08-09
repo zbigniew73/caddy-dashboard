@@ -12,30 +12,15 @@ const INSTALL_SCRIPT = path.join(SCRIPTS_DIR, 'php-install.sh');
 const SETTINGS_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-settings.sh');
 const OPCACHE_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-opcache.sh');
 const MODULE_TOGGLE_SCRIPT = path.join(SCRIPTS_DIR, 'php-toggle-module.sh');
+const MODULE_LIST_SCRIPT = path.join(SCRIPTS_DIR, 'remi-list-php-modules.sh');
 
-// Whitelista modulow PHP mozliwych do wlaczenia/wylaczenia z panelu -
-// celowo NIE dowolny pakiet dnf (patrz plan Runtime Managera, punkt 12:
-// "whitelista modulow, a nie pozwalac klientowi instalowac dowolne
-// rozszerzenia"). `pkg` to sufiks po "phpXX-php-".
-const MODULE_WHITELIST = [
-  { key: 'opcache', pkg: 'opcache' },
-  { key: 'pdo', pkg: 'pdo' },
-  { key: 'mysqli', pkg: 'mysqlnd' },
-  { key: 'pgsql', pkg: 'pgsql' },
-  { key: 'mbstring', pkg: 'mbstring' },
-  { key: 'xml', pkg: 'xml' },
-  { key: 'curl', pkg: 'curl' },
-  { key: 'gd', pkg: 'gd' },
-  { key: 'imagick', pkg: 'pecl-imagick' },
-  { key: 'intl', pkg: 'intl' },
-  { key: 'zip', pkg: 'zip' },
-  { key: 'bcmath', pkg: 'bcmath' },
-  { key: 'sodium', pkg: 'sodium' },
-  { key: 'exif', pkg: 'exif' },
-  { key: 'soap', pkg: 'soap' },
-  { key: 'redis', pkg: 'pecl-redis' },
-  { key: 'process', pkg: 'process' }
-];
+// fpm/cli/common to fundament runtime PHP, nie "moduly" - usuniecie
+// ktoregokolwiek zepsuloby cala usluge zamiast pojedynczego rozszerzenia.
+// remi-list-php-modules.sh juz je pomija na wyjsciu, ale walidujemy
+// jeszcze raz tutaj (i w samym skrypcie toggle) - modul w URL POST nigdy
+// nie jest ufany tylko dlatego, ze przeszedl przez GET wczesniej.
+const PROTECTED_MODULES = ['fpm', 'cli', 'common'];
+const MODULE_KEY_PATTERN = /^[a-z0-9_-]+$/;
 
 // Bezpieczny zestaw znakow dla nazwy strefy czasowej IANA (litery, cyfry,
 // _ - / +) - trafia do php.ini wewnatrz cudzyslowu, wiec musi wykluczac
@@ -264,20 +249,19 @@ router.get('/:id/modules', async (req, res) => {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
   }
 
-  // Sam odczyt statusu pakietu (rpm -q) nie wymaga roota - w
-  // przeciwienstwie do install/remove ponizej, wiec bez sudo/skryptu.
+  // Odkrywanie idzie przez sudo (dnf repoquery), tak jak listRemiVersions -
+  // ten sam powod (przewidywalne zachowanie cache dnf niezaleznie od tego
+  // kto go wczesniej dotykal), mimo ze sam `rpm -q` osobno nie wymagalby
+  // roota.
   try {
-    const modules = await Promise.all(MODULE_WHITELIST.map(async ({ key, pkg }) => {
-      try {
-        await execFileAsync('rpm', ['-q', `php${id}-php-${pkg}`]);
-        return { key, package: `php${id}-php-${pkg}`, enabled: true };
-      } catch {
-        return { key, package: `php${id}-php-${pkg}`, enabled: false };
-      }
-    }));
+    const { stdout } = await runViaSudo(MODULE_LIST_SCRIPT, [id], 30000, 'listy modulow PHP');
+    const modules = stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const [key, status] = line.trim().split(/\s+/);
+      return { key, package: `php${id}-php-${key}`, enabled: status === 'installed' };
+    });
     res.json({ modules });
   } catch (e) {
-    res.status(500).json({ error: e.message || 'Nie udalo sie odczytac listy modulow PHP.' });
+    res.status(e.status || 500).json({ error: e.message || 'Nie udalo sie odczytac listy modulow PHP.' });
   }
 });
 
@@ -286,9 +270,8 @@ router.post('/:id/modules/:module/:action', async (req, res) => {
   if (!/^[0-9]{2}$/.test(id)) {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
   }
-  const entry = MODULE_WHITELIST.find((m) => m.key === module);
-  if (!entry) {
-    return res.status(400).json({ error: `Modul '${module}' nie jest na liscie dozwolonych modulow.` });
+  if (!MODULE_KEY_PATTERN.test(module) || PROTECTED_MODULES.includes(module)) {
+    return res.status(400).json({ error: `Modul '${module}' nie moze byc zmieniany tym mechanizmem.` });
   }
   if (action !== 'install' && action !== 'remove') {
     return res.status(400).json({ error: `Nieznana akcja: '${action}'.` });
@@ -297,13 +280,13 @@ router.post('/:id/modules/:module/:action', async (req, res) => {
   try {
     const { stdout } = await runViaSudo(
       MODULE_TOGGLE_SCRIPT,
-      [id, entry.pkg, action],
+      [id, module, action],
       120000,
-      `modulu PHP ${entry.key}`
+      `modulu PHP ${module}`
     );
     res.json({ success: true, message: stdout.trim() });
   } catch (e) {
-    res.status(e.status || 500).json({ error: e.message || `Zmiana modulu ${entry.key} nie powiodla sie.` });
+    res.status(e.status || 500).json({ error: e.message || `Zmiana modulu ${module} nie powiodla sie.` });
   }
 });
 

@@ -2070,12 +2070,21 @@ function wirePhpOpcacheSection(id) {
   };
 }
 
+// Ladne etykiety dla najczestszych modulow - lista modulow sama w sobie
+// jest teraz w pelni dynamiczna (odkrywana z Remi, nie ograniczona do
+// tych ponizej), wiec to tylko kosmetyka dla znanych nazw; wszystko inne
+// dostaje humanizePhpModuleKey() jako fallback.
 const PHP_MODULE_LABELS = {
-  opcache: 'OPcache', pdo: 'PDO', mysqli: 'MySQL (mysqli)', pgsql: 'PostgreSQL',
-  mbstring: 'Mbstring', xml: 'XML', curl: 'cURL', gd: 'GD', imagick: 'Imagick',
+  opcache: 'OPcache', pdo: 'PDO', mysqlnd: 'MySQL (mysqlnd)', pgsql: 'PostgreSQL',
+  mbstring: 'Mbstring', xml: 'XML', curl: 'cURL', gd: 'GD', 'pecl-imagick': 'Imagick',
   intl: 'Intl', zip: 'ZIP', bcmath: 'BCMath', sodium: 'Sodium', exif: 'EXIF',
-  soap: 'SOAP', redis: 'Redis', process: 'Process (pcntl/posix)'
+  soap: 'SOAP', 'pecl-redis': 'Redis', process: 'Process (pcntl/posix)'
 };
+
+function humanizePhpModuleKey(key) {
+  if (PHP_MODULE_LABELS[key]) return PHP_MODULE_LABELS[key];
+  return key.replace(/^pecl-/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 async function renderPhpModulesSection(id) {
   let modules;
@@ -2086,7 +2095,7 @@ async function renderPhpModulesSection(id) {
   }
 
   const rows = modules.map((m) => {
-    const label = PHP_MODULE_LABELS[m.key] || m.key;
+    const label = humanizePhpModuleKey(m.key);
     const actionButton = m.enabled
       ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
       : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`;
@@ -2127,7 +2136,7 @@ function wirePhpModulesSection(id) {
     btn.onclick = async () => {
       const moduleKey = btn.dataset.module;
       const action = btn.dataset.moduleAction;
-      const label = PHP_MODULE_LABELS[moduleKey] || moduleKey;
+      const label = humanizePhpModuleKey(moduleKey);
       const confirmMsg = action === 'install'
         ? t('phpmodules.confirm_add', { module: label })
         : t('phpmodules.confirm_remove', { module: label });
@@ -2157,19 +2166,22 @@ function wirePhpModulesSection(id) {
 }
 
 async function wrapPhpExtras(serviceHtml, id) {
-  const row1 = `
+  // Kolumna 1 to WLASNY flex-column (usluga + OPcache uloz jeden pod
+  // drugim), nie osobny "rzad" pod calym wierszem - inaczej OPcache
+  // ladowal sie pod calym rzedem 1 (czyli pod wyzsza z dwoch kolumn,
+  // formularz ustawien), zostawiajac widoczna dziure pod krotszym boxem
+  // usługi zamiast byc bezposrednio pod nim.
+  const columns = `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+        ${serviceHtml}
+        ${renderPhpOpcacheSection(id)}
+      </div>
       <div style="flex:1 1 0;min-width:320px;">${renderPhpSettingsSection(id)}</div>
     </div>
   `;
-  const row2 = `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
-      <div style="flex:1 1 0;min-width:320px;max-width:calc(50% - 8px);">${renderPhpOpcacheSection(id)}</div>
-    </div>
-  `;
-  const row3 = `<div style="margin-top:16px;">${await renderPhpModulesSection(id)}</div>`;
-  return row1 + row2 + row3;
+  const modulesRow = `<div style="margin-top:16px;">${await renderPhpModulesSection(id)}</div>`;
+  return columns + modulesRow;
 }
 
 function confirmMessageFor(key, action) {
