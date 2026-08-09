@@ -1,19 +1,33 @@
 #!/usr/bin/env bash
 #
-# Instaluje Adminer (jeden plik PHP, wersja tylko angielska) do
+# Instaluje Adminer (jeden plik PHP, wersja WSZYSTKIE jezyki - zawiera
+# polski przelacznik jezyka w samym UI, user tego chcial) do
 # /opt/caddy-dashboard/adminer, z dedykowanym poolem PHP-FPM na sockecie
-# /opt/caddy-dashboard/run/adminer.sock. Pozycjonowany jako odpowiednik
-# phpMyAdmin dla PostgreSQL (user swiadomie odrzucil phpPgAdmin -
-# rozwoj stanal w 2020 na PHP 7.2, brak realnej sciezki na PHP 8.3/8.4).
+# /opt/caddy-dashboard/run/adminer.sock. Wspiera MySQL/MariaDB/
+# PostgreSQL/SQLite/MSSQL/Oracle WBUDOWANE (bez wtyczek) - user
+# explicite chcial zeby MariaDB dzialala tu bez wymuszania instalacji
+# phpMyAdmin. phpPgAdmin zostal odrzucony wczesniej (rozwoj stanal w
+# 2020 na PHP 7.2).
 #
 # W przeciwienstwie do phpMyAdmin: Adminer to JEDEN plik PHP, zero
 # rozpakowywania archiwum, zero config.inc.php - logowanie dzieje sie
 # wprost do bazy przez wlasny formularz Adminera (zadne dane dostepowe
 # nie sa zaszyte w tym pliku). Stala url
-# "https://www.adminer.org/latest-en.php" zawsze przekierowuje na
+# "https://www.adminer.org/latest.php" zawsze przekierowuje na
 # najnowsze wydanie (zweryfikowane na zywo 2026-08-09: 302 ->
-# static/download/{wersja}/adminer-{wersja}-en.php), wiec nie trzeba
+# static/download/{wersja}/adminer-{wersja}.php), wiec nie trzeba
 # osobnego API do wykrywania wersji jak przy phpMyAdmin.
+#
+# MongoDB NIE jest wbudowany - wymaga wtyczki plugins/drivers/mongo.php
+# (pobieranej ponizej, best-effort, do adminer-plugins/) ORAZ
+# wlaczonego rozszerzenia PHP `pecl-mongodb` dla php83 (NIE robimy tego
+# automatycznie - rozszerzenia sa globalne dla calej uslugi
+# php83-php-fpm, nie tylko dla Adminera, wiec to swiadoma decyzja
+# admina z tabeli Moduly PHP, patrz komunikat na koncu skryptu).
+# Zweryfikowane na zywo 2026-08-09 (github.com/vrana/adminer): plugin
+# sam w kodzie robi `class_exists('MongoDB\Driver\Manager')` - bez
+# rozszerzenia PHP wtyczka wglada ale MongoDB nie dziala, bez bledu
+# instalacji.
 #
 # Wymaga PHP 8.3 - wybor bez twardego wymogu kompatybilnosci (Adminer
 # deklaruje szerokie wsparcie PHP 5.3+/7/8 bez wykluczen), ale dla
@@ -31,7 +45,7 @@ RUN_DIR="/opt/caddy-dashboard/run"
 SOCKET_PATH="${RUN_DIR}/adminer.sock"
 POOL_FILE="/etc/opt/remi/php${PHP_ID}/php-fpm.d/adminer.conf"
 FPM_SERVICE="php${PHP_ID}-php-fpm"
-LATEST_URL="https://www.adminer.org/latest-en.php"
+LATEST_URL="https://www.adminer.org/latest.php"
 
 rpm -q "php${PHP_ID}" >/dev/null 2>&1 \
   || err "PHP ${PHP_VERSION_LABEL} nie jest zainstalowany - zainstaluj go najpierw z kafelka PHP-FPM (Runtime Manager wymaga php${PHP_ID}-php-fpm dla dedykowanego poola Adminera)."
@@ -58,6 +72,21 @@ head -c 5 "${TMPDIR}/index.php" | grep -q '<?php' \
 mkdir -p "$DOCROOT" || err "Utworzenie ${DOCROOT} nie powiodlo sie."
 mv "${TMPDIR}/index.php" "${DOCROOT}/index.php" || err "Przeniesienie pliku Adminera do ${DOCROOT} nie powiodlo sie."
 echo "$ADMINER_VERSION" > "${DOCROOT}/.cddash-version"
+
+# Wtyczka MongoDB - best-effort, NIE blokuje instalacji Adminera samego
+# w sobie jesli pobranie sie nie uda (np. chwilowy problem z siecia) -
+# admin zawsze moze dograc ja recznie pozniej. Wersja przypieta do tego
+# samego wydania Adminera co glowny plik (spojnosc, ten sam tag na
+# GitHubie).
+MONGO_PLUGIN_URL="https://raw.githubusercontent.com/vrana/adminer/refs/tags/v${ADMINER_VERSION}/plugins/drivers/mongo.php"
+mkdir -p "${DOCROOT}/adminer-plugins"
+if curl -fsSL --max-time 30 -o "${DOCROOT}/adminer-plugins/mongo.php" "$MONGO_PLUGIN_URL" \
+    && [ -s "${DOCROOT}/adminer-plugins/mongo.php" ]; then
+  MONGO_PLUGIN_STATUS="OK"
+else
+  rm -f "${DOCROOT}/adminer-plugins/mongo.php"
+  MONGO_PLUGIN_STATUS="pobranie wtyczki mongo.php nie powiodlo sie (${MONGO_PLUGIN_URL}) - Adminer dziala bez obslugi MongoDB, mozna dograc plik recznie pozniej"
+fi
 
 OWNER="$(stat -c '%U:%G' /opt/caddy-dashboard)"
 chown -R "$OWNER" "$DOCROOT"
@@ -128,4 +157,4 @@ if [ -z "$LIVE" ]; then
   err "${FPM_SERVICE} nie dziala poprawnie po dodaniu poola adminer - przywrocono poprzedni stan."
 fi
 
-echo "OK: Adminer ${ADMINER_VERSION} zainstalowany w ${DOCROOT}, pool PHP-FPM na ${SOCKET_PATH} (${FPM_SERVICE})."
+echo "OK: Adminer ${ADMINER_VERSION} zainstalowany w ${DOCROOT}, pool PHP-FPM na ${SOCKET_PATH} (${FPM_SERVICE}). Wtyczka MongoDB: ${MONGO_PLUGIN_STATUS}."
