@@ -9,7 +9,11 @@
 # faktycznych modulow (prefiks "phpXX-php-"), zeby odsiac pakiety
 # rusztowania SCL (np. php84-build/php84-runtime/php84-syspaths), ktore
 # nie sa rozszerzeniami do wlaczania/wylaczania. Jeden wiersz na modul:
-# "<sufiks po phpXX-php-> installed" albo "... available".
+# "<sufiks po phpXX-php-> installed|available <pelna-nazwa-pakietu>.<arch>"
+# - trzecie pole to dokladny identyfikator pakietu (np.
+# "php84-php-pecl-zip.x86_64", nie "ladna" etykieta) - user chce widziec
+# to samo co pokazuje `dnf` samo w sobie, wiec panel niczego tu nie
+# upiekszamy.
 #
 # Wyklucza fpm/cli/common celowo - to nie sa "moduly" do wlaczania/
 # wylaczania, tylko fundament samego runtime PHP (usuniecie ktoregokolwiek
@@ -29,13 +33,13 @@ VERSION="${1:-}"
 PREFIX="php${VERSION}-php-"
 PROTECTED=" fpm cli common "
 
-dnf -q repoquery --qf '%{name}' "php${VERSION}-*" 2>/dev/null | sort -u | while read -r pkg; do
+dnf -q repoquery --qf '%{name} %{arch}' "php${VERSION}-*" 2>/dev/null | sort -u -k1,1 | while read -r pkg arch; do
   [[ "$pkg" == "${PREFIX}"* ]] || continue
   suffix="${pkg#"$PREFIX"}"
   [[ "$PROTECTED" == *" ${suffix} "* ]] && continue
   if rpm -q "$pkg" >/dev/null 2>&1; then
-    echo "${suffix} installed"
+    echo "${suffix} installed ${pkg}.${arch}"
   else
-    echo "${suffix} available"
+    echo "${suffix} available ${pkg}.${arch}"
   fi
 done

@@ -2185,7 +2185,7 @@ async function renderPhpModulesSection(id) {
   }
 
   const rows = modules.map((m) => {
-    const label = humanizePhpModuleKey(m.key);
+    const label = m.package;
     const wpBadge = wordpressBadgeHtml(m.key);
     const actionButton = m.enabled
       ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`

@@ -379,8 +379,8 @@ router.get('/:id/modules', async (req, res) => {
   try {
     const { stdout } = await runViaSudo(MODULE_LIST_SCRIPT, [id], 30000, 'listy modulow PHP');
     const modules = stdout.trim().split('\n').filter(Boolean).map((line) => {
-      const [key, status] = line.trim().split(/\s+/);
-      return { key, package: `php${id}-php-${key}`, enabled: status === 'installed' };
+      const [key, status, fullName] = line.trim().split(/\s+/);
+      return { key, package: fullName || `php${id}-php-${key}`, enabled: status === 'installed' };
     });
     res.json({ modules });
   } catch (e) {
