@@ -67,6 +67,7 @@ function applyTheme(theme) {
   localStorage.setItem('cd-theme', theme);
   renderThemeSwitches();
   renderTurnstilePreviews();
+  renderPhpmyadminGatePreview();
 }
 
 function renderThemeSwitches() {
@@ -596,8 +597,13 @@ async function renderPhpmyadminGateSection(pmaStatus) {
   return `
     <div class="system-info-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
-        <div style="font-weight:600;font-size:15px;">${t('phpmyadmin.gate_title')}</div>
-        <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('phpmyadmin.gate_enabled') : t('phpmyadmin.gate_disabled')}</span>
+        <div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${t('phpmyadmin.gate_title')}</div>
+          <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('phpmyadmin.gate_enabled') : t('phpmyadmin.gate_disabled')}</span>
+        </div>
+        <div id="phpmyadmin-gate-preview-box" style="flex:0 0 auto;border:1px solid var(--border);border-radius:8px;padding:8px;pointer-events:none;">
+          <div id="phpmyadmin-gate-preview"></div>
+        </div>
       </div>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('phpmyadmin.gate_description')}</p>
       ${!gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('phpmyadmin.gate_requires_turnstile')}</div>` : ''}
@@ -616,6 +622,7 @@ async function renderPhpmyadminGateSection(pmaStatus) {
 }
 
 function wirePhpmyadminGateSection(pmaStatus) {
+  renderPhpmyadminGatePreview();
   const enableBtn = document.getElementById('phpmyadmin-gate-enable-btn');
   const disableBtn = document.getElementById('phpmyadmin-gate-disable-btn');
   if (!enableBtn || !disableBtn) return;
@@ -1659,7 +1666,7 @@ async function renderTurnstileSection() {
 // wpisze prawdziwy site key, podglad przelacza sie na niego i adnotacja
 // znika sama, bo to juz nie jest testowy klucz Cloudflare.
 const TURNSTILE_PREVIEW_FALLBACK_SITEKEY = '1x00000000000000000000AA';
-let turnstilePreviewWidgetId = null;
+const turnstilePreviewWidgetIds = {};
 
 // Rozwiazuje "system" do faktycznego jasny/ciemny - ta sama logika co CSS
 // w web/index.html (html[data-theme="dark"] albo
@@ -1670,33 +1677,50 @@ function effectiveTheme() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-// Tylko JEDEN podglad na raz (nie jasny+ciemny obok siebie) - odpowiada
-// aktualnie aktywnemu motywowi panelu, aktualizowany na zywo przy
-// przelaczeniu motywu (patrz applyTheme() nizej) i przy wpisywaniu
-// wlasnego site key (patrz wireTurnstileSection nizej).
-async function renderTurnstilePreviews() {
-  const boxEl = document.getElementById('turnstile-preview-box');
-  const widgetEl = document.getElementById('turnstile-preview');
+// Wspolna logika podgladu widgetu Turnstile - uzywana zarowno w Uslugi ->
+// Caddy (klucz wpisywany na biezaco) jak i w Uslugi -> phpMyAdmin ->
+// Bramka Turnstile (klucz juz zapisany w panelu). Tylko JEDEN wariant na
+// raz (nie jasny+ciemny obok siebie) - odpowiada aktualnie aktywnemu
+// motywowi panelu, aktualizowany na zywo przy przelaczeniu motywu (patrz
+// applyTheme() nizej). `name` to dowolny unikalny klucz do sledzenia id
+// widgetu miedzy wywolaniami (rozne karty = rozne widgety).
+async function renderTurnstilePreviewWidget(name, boxElId, widgetElId, sitekey) {
+  const boxEl = document.getElementById(boxElId);
+  const widgetEl = document.getElementById(widgetElId);
   if (!boxEl || !widgetEl) return;
 
   const theme = effectiveTheme();
   boxEl.style.background = theme === 'dark' ? '#0f1115' : '#ffffff';
 
-  const siteKeyInput = document.getElementById('turnstile-site-key');
-  const sitekey = siteKeyInput?.value.trim() || TURNSTILE_PREVIEW_FALLBACK_SITEKEY;
-
   try {
     await loadTurnstileScript();
     widgetEl.innerHTML = '';
-    if (turnstilePreviewWidgetId !== null) {
-      try { window.turnstile.remove(turnstilePreviewWidgetId); } catch { /* widget already gone */ }
-      turnstilePreviewWidgetId = null;
+    if (turnstilePreviewWidgetIds[name] != null) {
+      try { window.turnstile.remove(turnstilePreviewWidgetIds[name]); } catch { /* widget already gone */ }
+      turnstilePreviewWidgetIds[name] = null;
     }
-    turnstilePreviewWidgetId = window.turnstile.render(widgetEl, { sitekey, theme });
+    turnstilePreviewWidgetIds[name] = window.turnstile.render(widgetEl, { sitekey, theme });
   } catch {
     // Podglad jest czysto informacyjny - brak polaczenia z Cloudflare nie
     // powinno przeszkadzac w reszcie sekcji (klucze/zapis nadal dzialaja).
   }
+}
+
+async function renderTurnstilePreviews() {
+  const siteKeyInput = document.getElementById('turnstile-site-key');
+  const sitekey = siteKeyInput?.value.trim() || TURNSTILE_PREVIEW_FALLBACK_SITEKEY;
+  await renderTurnstilePreviewWidget('caddy', 'turnstile-preview-box', 'turnstile-preview', sitekey);
+}
+
+async function renderPhpmyadminGatePreview() {
+  let sitekey = TURNSTILE_PREVIEW_FALLBACK_SITEKEY;
+  try {
+    const cfg = await api('GET', '/caddy/turnstile');
+    if (cfg.siteKey) sitekey = cfg.siteKey;
+  } catch {
+    // brak dostepu do konfiguracji Turnstile - podglad spada na klucz testowy
+  }
+  await renderTurnstilePreviewWidget('phpmyadmin-gate', 'phpmyadmin-gate-preview-box', 'phpmyadmin-gate-preview', sitekey);
 }
 
 function wireTurnstileSection() {
