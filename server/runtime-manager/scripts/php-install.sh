@@ -36,7 +36,6 @@ dnf install -y \
     "${PKG}-php-soap" \
     "${PKG}-php-process" \
     "${PKG}-php-pecl-redis" \
-    "${PKG}-php-exif" \
   || err "Instalacja rozszerzen ${PKG} nie powiodla sie."
 
 SERVICE="${PKG}-php-fpm"
