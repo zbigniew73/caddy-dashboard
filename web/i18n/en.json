@@ -92,6 +92,7 @@
   "testdb.db_label": "Database",
   "testdb.user_label": "User",
   "testdb.password_label": "Password",
+  "testdb.host_label": "Host",
   "testdb.create_button": "Add",
   "testdb.drop_button": "Remove",
   "testdb.confirm_create": "Create the test database 'baza123' with user 'baza123'?",

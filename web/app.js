@@ -1753,6 +1753,7 @@ async function renderMariadbTestDbSection() {
         <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+        <dt>${t('testdb.host_label')}</dt><dd style="font-family:monospace;">localhost</dd>
       </dl>
       <button type="button" id="mariadb-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
       <button type="button" class="danger" id="mariadb-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>
@@ -1913,6 +1914,7 @@ async function renderPostgresqlTestDbSection() {
         <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+        <dt>${t('testdb.host_label')}</dt><dd style="font-family:monospace;">localhost</dd>
       </dl>
       <button type="button" id="postgresql-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
       <button type="button" class="danger" id="postgresql-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>
@@ -2072,6 +2074,7 @@ async function renderMongodbTestDbSection() {
         <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
         <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+        <dt>${t('testdb.host_label')}</dt><dd style="font-family:monospace;">localhost</dd>
       </dl>
       <button type="button" id="mongodb-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
       <button type="button" class="danger" id="mongodb-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>

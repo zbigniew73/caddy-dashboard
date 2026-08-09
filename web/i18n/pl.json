@@ -92,6 +92,7 @@
   "testdb.db_label": "Baza",
   "testdb.user_label": "Użytkownik",
   "testdb.password_label": "Hasło",
+  "testdb.host_label": "Host",
   "testdb.create_button": "Dodaj",
   "testdb.drop_button": "Usuń",
   "testdb.confirm_create": "Utworzyć testową bazę 'baza123' z użytkownikiem 'baza123'?",
