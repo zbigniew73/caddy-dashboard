@@ -1641,9 +1641,7 @@ async function renderTurnstileSection() {
             ${cfg.configured ? `<button type="button" class="secondary" id="turnstile-toggle-btn" data-enable="${cfg.enabled ? '0' : '1'}">${cfg.enabled ? t('turnstile.disable_button') : t('turnstile.enable_button')}</button>` : ''}
           </div>
         </div>
-        <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;align-items:center;">
-          <div style="font-size:11px;color:var(--muted);text-align:center;">${t('turnstile.preview_label')}</div>
-          <div id="turnstile-preview-icon" style="width:15px;height:15px;color:var(--muted);"></div>
+        <div style="flex:0 0 auto;">
           <div id="turnstile-preview-box" style="border:1px solid var(--border);border-radius:8px;padding:8px;pointer-events:none;">
             <div id="turnstile-preview"></div>
           </div>
@@ -1654,14 +1652,13 @@ async function renderTurnstileSection() {
   `;
 }
 
-// Oficjalny, publiczny testowy sitekey Cloudflare - zawsze renderuje sie
-// jako zwykly widget i zawsze "przechodzi" (dokumentowany przez samo
-// Cloudflare do celow demo/testowych) - uzywany TYLKO do pokazania jak
-// widget wyglada w jasnym/ciemnym motywie, niezaleznie od tego czy admin
-// skonfigurowal juz swoje prawdziwe klucze. `pointer-events:none` na
-// kontenerze (patrz renderTurnstileSection) czyni go czysto wizualnym -
-// user chcial "tylko obrazek", nie drugi dzialajacy widget.
-const TURNSTILE_PREVIEW_SITEKEY = '1x00000000000000000000AA';
+// Cloudflare-owy oficjalny publiczny testowy sitekey - uzywany TYLKO jako
+// fallback, dopoki admin nie wpisal wlasnego site key ponizej. Cloudflare
+// sam dopisuje do tego testowego widgetu adnotacje "tylko do testowania"
+// (to nie jest cos co ten kod generuje ani moze usunac) - jak tylko admin
+// wpisze prawdziwy site key, podglad przelacza sie na niego i adnotacja
+// znika sama, bo to juz nie jest testowy klucz Cloudflare.
+const TURNSTILE_PREVIEW_FALLBACK_SITEKEY = '1x00000000000000000000AA';
 let turnstilePreviewWidgetId = null;
 
 // Rozwiazuje "system" do faktycznego jasny/ciemny - ta sama logika co CSS
@@ -1675,16 +1672,18 @@ function effectiveTheme() {
 
 // Tylko JEDEN podglad na raz (nie jasny+ciemny obok siebie) - odpowiada
 // aktualnie aktywnemu motywowi panelu, aktualizowany na zywo przy
-// przelaczeniu motywu (patrz applyTheme() nizej).
+// przelaczeniu motywu (patrz applyTheme() nizej) i przy wpisywaniu
+// wlasnego site key (patrz wireTurnstileSection nizej).
 async function renderTurnstilePreviews() {
-  const iconEl = document.getElementById('turnstile-preview-icon');
   const boxEl = document.getElementById('turnstile-preview-box');
   const widgetEl = document.getElementById('turnstile-preview');
-  if (!iconEl || !boxEl || !widgetEl) return;
+  if (!boxEl || !widgetEl) return;
 
   const theme = effectiveTheme();
-  iconEl.innerHTML = THEME_ICONS[theme];
   boxEl.style.background = theme === 'dark' ? '#0f1115' : '#ffffff';
+
+  const siteKeyInput = document.getElementById('turnstile-site-key');
+  const sitekey = siteKeyInput?.value.trim() || TURNSTILE_PREVIEW_FALLBACK_SITEKEY;
 
   try {
     await loadTurnstileScript();
@@ -1693,7 +1692,7 @@ async function renderTurnstilePreviews() {
       try { window.turnstile.remove(turnstilePreviewWidgetId); } catch { /* widget already gone */ }
       turnstilePreviewWidgetId = null;
     }
-    turnstilePreviewWidgetId = window.turnstile.render(widgetEl, { sitekey: TURNSTILE_PREVIEW_SITEKEY, theme });
+    turnstilePreviewWidgetId = window.turnstile.render(widgetEl, { sitekey, theme });
   } catch {
     // Podglad jest czysto informacyjny - brak polaczenia z Cloudflare nie
     // powinno przeszkadzac w reszcie sekcji (klucze/zapis nadal dzialaja).
@@ -1707,6 +1706,14 @@ function wireTurnstileSection() {
   const msgEl = document.getElementById('turnstile-msg');
   const widgetContainer = document.getElementById('turnstile-widget-container');
   renderTurnstilePreviews();
+  const siteKeyInput = document.getElementById('turnstile-site-key');
+  if (siteKeyInput) {
+    let debounceTimer = null;
+    siteKeyInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(renderTurnstilePreviews, 500);
+    });
+  }
   if (!verifyBtn) return;
 
   verifyBtn.onclick = async () => {
