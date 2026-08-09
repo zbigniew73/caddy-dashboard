@@ -127,9 +127,22 @@ async function uninstallPhpmyadmin() {
   return request('POST', '/phpmyadmin/uninstall');
 }
 
+async function getAdminerStatus() {
+  return request('GET', '/adminer');
+}
+
+async function installAdminer() {
+  return request('POST', '/adminer/install');
+}
+
+async function uninstallAdminer() {
+  return request('POST', '/adminer/uninstall');
+}
+
 export {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
   getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp,
-  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin
+  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin,
+  getAdminerStatus, installAdminer, uninstallAdminer
 };

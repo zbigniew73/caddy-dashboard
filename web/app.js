@@ -47,7 +47,8 @@ const NAV_ICONS = {
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
   frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>',
-  phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>'
+  phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
+  adminer: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
 };
 const PHP_ICON = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>';
 function navIcon(key) {
@@ -744,6 +745,106 @@ function wirePhpmyadminInstallTile() {
   }
 }
 
+function adminerInfoCardHtml(status, includeActions, constrainWidth = true) {
+  const name = t('services.adminer.name');
+  if (!status.installed) return '';
+  return `
+    <div class="system-info-card"${constrainWidth ? ' style="max-width:640px;"' : ''}>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+        <span class="status-badge active">${t('install.installed_badge')}</span>
+      </div>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('adminer.version_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.version || '-')}</dd>
+        <dt>${t('adminer.docroot_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.docroot)}</dd>
+        <dt>${t('adminer.socket_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.socketPath)}</dd>
+      </dl>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('adminer.caddy_hint')}</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(status.caddyBlock)}</pre>
+      ${includeActions ? `
+        <button type="button" class="danger" id="adminer-uninstall-btn">${t('adminer.uninstall_button')}</button>
+        <div class="action-msg" id="adminer-msg"></div>
+      ` : ''}
+    </div>
+  `;
+}
+
+function adminerInstallTileHtml(status) {
+  const name = t('services.adminer.name');
+  if (status.installed) return adminerInfoCardHtml(status, true);
+
+  if (!status.php83Installed) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+        <div class="empty-state">${t('adminer.requires_php83')}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${t('install.adminer.description')}</p>
+      <button type="button" id="adminer-install-btn">${t('install.install_button')}</button>
+      <div class="action-msg" id="adminer-msg"></div>
+    </div>
+  `;
+}
+
+function wireAdminerInstallTile() {
+  const installBtn = document.getElementById('adminer-install-btn');
+  const uninstallBtn = document.getElementById('adminer-uninstall-btn');
+  const msgEl = document.getElementById('adminer-msg');
+
+  if (installBtn) {
+    installBtn.onclick = async () => {
+      if (!window.confirm(t('install.adminer.confirm_install'))) return;
+      installBtn.disabled = true;
+      msgEl.textContent = t('install.installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/adminer/install');
+        const status = await api('GET', '/adminer');
+        document.getElementById('content').innerHTML = adminerInstallTileHtml(status);
+        applyTranslations();
+        wireAdminerInstallTile();
+        const successEl = document.getElementById('adminer-msg');
+        if (successEl) {
+          successEl.textContent = t('install.install_success');
+          successEl.className = 'action-msg success';
+        }
+        await refreshDynamicNav();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        installBtn.disabled = false;
+      }
+    };
+  }
+
+  if (uninstallBtn) {
+    uninstallBtn.onclick = async () => {
+      if (!window.confirm(t('adminer.confirm_uninstall'))) return;
+      uninstallBtn.disabled = true;
+      msgEl.textContent = t('testdb.working');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/adminer/uninstall');
+        const status = await api('GET', '/adminer');
+        document.getElementById('content').innerHTML = adminerInstallTileHtml(status);
+        applyTranslations();
+        wireAdminerInstallTile();
+        await refreshDynamicNav();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        uninstallBtn.disabled = false;
+      }
+    };
+  }
+}
+
 function mariadbInstallTileHtml(svc) {
   const name = t('services.mariadb.name');
   const description = t('install.mariadb.description');
@@ -1274,6 +1375,13 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = phpmyadminInstallTileHtml(status);
       applyTranslations();
       wirePhpmyadminInstallTile();
+      return;
+    }
+    if (key === 'adminer') {
+      const status = await api('GET', '/adminer');
+      content.innerHTML = adminerInstallTileHtml(status);
+      applyTranslations();
+      wireAdminerInstallTile();
       return;
     }
     const svc = await api('GET', `/services/${key}`);
@@ -3015,6 +3123,13 @@ async function renderServiceDetailTab(key, content) {
       applyTranslations();
       wirePhpmyadminInstallTile();
       wirePhpmyadminGateSection(status);
+      return;
+    }
+    if (key === 'adminer') {
+      const status = await api('GET', '/adminer');
+      content.innerHTML = adminerInfoCardHtml(status, true);
+      applyTranslations();
+      wireAdminerInstallTile();
       return;
     }
     const svc = await api('GET', `/services/${key}`);

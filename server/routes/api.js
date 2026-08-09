@@ -28,7 +28,8 @@ import {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
   getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp,
-  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin
+  getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin,
+  getAdminerStatus, installAdminer, uninstallAdminer
 } from '../services/runtimeManagerClient.js';
 
 const router = Router();
@@ -226,6 +227,27 @@ async function phpmyadminServiceEntry() {
   }];
 }
 
+// Adminer - odpowiednik phpmyadminServiceEntry() powyzej, ten sam
+// powod dla "unit"/"activeState" pol. Zero hardcodowanego "name" (patrz
+// notatka w phpmyadminServiceEntry - user musial ten bledny wzorzec
+// pierwotnie poprawiac, tutaj od razu bez tego bledu) - nazwa zawsze z
+// i18n (t('services.adminer.name')) po stronie frontu.
+async function adminerServiceEntry() {
+  let status;
+  try {
+    status = await getAdminerStatus();
+  } catch {
+    return [];
+  }
+  return [{
+    key: 'adminer',
+    found: status.installed,
+    installable: true,
+    unit: status.version ? `v${status.version}` : status.docroot,
+    activeState: status.installed ? 'active' : 'inactive'
+  }];
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
   const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, resticVersion, caddySiteCount] = await Promise.all([
@@ -304,7 +326,7 @@ router.post('/system/reboot', (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await listServices();
-    res.json({ services: [...services, ...(await phpServiceEntries()), ...(await phpmyadminServiceEntry())] });
+    res.json({ services: [...services, ...(await phpServiceEntries()), ...(await phpmyadminServiceEntry()), ...(await adminerServiceEntry())] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -843,6 +865,30 @@ router.post('/phpmyadmin-gate', (req, res) => {
   }
   setPhpmyadminGateEnabled(enabled);
   res.json({ success: true, enabled });
+});
+
+router.get('/adminer', async (req, res) => {
+  try {
+    res.json(await getAdminerStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/adminer/install', async (req, res) => {
+  try {
+    res.json(await installAdminer());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/adminer/uninstall', async (req, res) => {
+  try {
+    res.json(await uninstallAdminer());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 export default router;
