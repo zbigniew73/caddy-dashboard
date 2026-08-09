@@ -219,7 +219,6 @@ async function phpmyadminServiceEntry() {
   // undefined (renderowaloby sie jako dosl. "undefined").
   return [{
     key: 'phpmyadmin',
-    name: 'phpMyAdmin',
     found: status.installed,
     installable: true,
     unit: status.version ? `v${status.version}` : status.docroot,

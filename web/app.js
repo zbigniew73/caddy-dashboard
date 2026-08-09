@@ -47,7 +47,7 @@ const NAV_ICONS = {
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
   frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>',
-  phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>'
+  phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>'
 };
 const PHP_ICON = '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>';
 function navIcon(key) {
@@ -1837,11 +1837,21 @@ async function wrapCaddyExtras(serviceHtml) {
   const caddyfileHtml = await renderCaddyfileViewerSection();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 45%;max-width:45%;">${serviceHtml}</div>
-      <div style="flex:1 1 45%;max-width:45%;">${turnstileHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${turnstileHtml}</div>
     </div>
     <div style="margin-top:16px;">${perfHtml}</div>
     <div style="margin-top:16px;">${caddyfileHtml}</div>
+  `;
+}
+
+async function wrapSshExtras(serviceHtml) {
+  const portHtml = await renderSshPortSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${portHtml}</div>
+    </div>
   `;
 }
 
@@ -2844,7 +2854,7 @@ function wireServiceActions(key) {
         const svc = await api('POST', `/services/${key}/${action}`);
         const phpMatch = /^php(\d{2})$/.exec(key);
         let html = serviceDetailHtml(svc);
-        if (key === 'ssh' && svc.found) html += await renderSshPortSection();
+        if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
         if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
@@ -2900,7 +2910,7 @@ async function renderServiceDetailTab(key, content) {
     const svc = await api('GET', `/services/${key}`);
     const phpMatch = /^php(\d{2})$/.exec(key);
     let html = serviceDetailHtml(svc);
-    if (key === 'ssh' && svc.found) html += await renderSshPortSection();
+    if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
     if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
