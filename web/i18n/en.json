@@ -292,6 +292,7 @@
   "fail2ban.save_success": "Saved, fail2ban reloaded.",
 
   "turnstile.title": "Cloudflare - Turnstile widgets",
+  "turnstile.preview_label": "Preview (light/dark)",
   "turnstile.description": "Secure panel login",
   "turnstile.status_not_configured": "Not configured",
   "turnstile.status_enabled": "Enabled - login requires Turnstile",

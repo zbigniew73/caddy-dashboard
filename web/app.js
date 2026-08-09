@@ -1624,22 +1624,64 @@ async function renderTurnstileSection() {
   const statusClass = cfg.enabled ? 'success' : '';
   return `
     <div class="system-info-card">
-      <h3 style="margin:0 0 4px;font-size:15px;">${t('turnstile.title')}</h3>
-      <p style="margin:0 0 14px;color:var(--muted);font-size:13px;">${t('turnstile.description')}</p>
-      <div class="action-msg ${statusClass}" style="margin-bottom:10px;">${escapeHtml(statusText)}</div>
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.site_key_label')}</label>
-      <input type="text" id="turnstile-site-key" value="${escapeHtml(cfg.siteKey || '')}" style="width:100%;margin-bottom:10px;">
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.secret_key_label')}</label>
-      <input type="password" id="turnstile-secret-key" placeholder="${cfg.configured ? escapeHtml(t('turnstile.secret_key_saved_placeholder')) : ''}" style="width:100%;">
-      <div id="turnstile-widget-container" style="margin:14px 0;display:none;"></div>
-      <div class="service-actions">
-        <button type="button" id="turnstile-verify-btn">${t('turnstile.verify_button')}</button>
-        <button type="button" id="turnstile-apply-btn" style="display:none;">${t('turnstile.apply_button')}</button>
-        ${cfg.configured ? `<button type="button" class="secondary" id="turnstile-toggle-btn" data-enable="${cfg.enabled ? '0' : '1'}">${cfg.enabled ? t('turnstile.disable_button') : t('turnstile.enable_button')}</button>` : ''}
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="flex:1 1 260px;min-width:260px;">
+          <h3 style="margin:0 0 4px;font-size:15px;">${t('turnstile.title')}</h3>
+          <p style="margin:0 0 14px;color:var(--muted);font-size:13px;">${t('turnstile.description')}</p>
+          <div class="action-msg ${statusClass}" style="margin-bottom:10px;">${escapeHtml(statusText)}</div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.site_key_label')}</label>
+          <input type="text" id="turnstile-site-key" value="${escapeHtml(cfg.siteKey || '')}" style="width:100%;margin-bottom:10px;">
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('turnstile.secret_key_label')}</label>
+          <input type="password" id="turnstile-secret-key" placeholder="${cfg.configured ? escapeHtml(t('turnstile.secret_key_saved_placeholder')) : ''}" style="width:100%;">
+          <div id="turnstile-widget-container" style="margin:14px 0;display:none;"></div>
+          <div class="service-actions">
+            <button type="button" id="turnstile-verify-btn">${t('turnstile.verify_button')}</button>
+            <button type="button" id="turnstile-apply-btn" style="display:none;">${t('turnstile.apply_button')}</button>
+            ${cfg.configured ? `<button type="button" class="secondary" id="turnstile-toggle-btn" data-enable="${cfg.enabled ? '0' : '1'}">${cfg.enabled ? t('turnstile.disable_button') : t('turnstile.enable_button')}</button>` : ''}
+          </div>
+        </div>
+        <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:14px;align-items:center;">
+          <div style="font-size:11px;color:var(--muted);text-align:center;">${t('turnstile.preview_label')}</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" width="14" height="14"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+            <div style="background:#ffffff;border:1px solid var(--border);border-radius:8px;padding:8px;pointer-events:none;">
+              <div id="turnstile-preview-light"></div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+            <div style="background:#0f1115;border:1px solid var(--border);border-radius:8px;padding:8px;pointer-events:none;">
+              <div id="turnstile-preview-dark"></div>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="action-msg" id="turnstile-msg"></div>
     </div>
   `;
+}
+
+// Oficjalny, publiczny testowy sitekey Cloudflare - zawsze renderuje sie
+// jako zwykly widget i zawsze "przechodzi" (dokumentowany przez samo
+// Cloudflare do celow demo/testowych) - uzywany TYLKO do pokazania jak
+// widget wyglada w jasnym/ciemnym motywie, niezaleznie od tego czy admin
+// skonfigurowal juz swoje prawdziwe klucze. `pointer-events:none` na
+// kontenerze (patrz renderTurnstileSection) czyni go czysto wizualnym -
+// user chcial "tylko obrazek", nie drugi dzialajacy widget.
+const TURNSTILE_PREVIEW_SITEKEY = '1x00000000000000000000AA';
+
+async function renderTurnstilePreviews() {
+  const lightEl = document.getElementById('turnstile-preview-light');
+  const darkEl = document.getElementById('turnstile-preview-dark');
+  if (!lightEl || !darkEl) return;
+  try {
+    await loadTurnstileScript();
+    window.turnstile.render(lightEl, { sitekey: TURNSTILE_PREVIEW_SITEKEY, theme: 'light' });
+    window.turnstile.render(darkEl, { sitekey: TURNSTILE_PREVIEW_SITEKEY, theme: 'dark' });
+  } catch {
+    // Podglad jest czysto informacyjny - brak polaczenia z Cloudflare nie
+    // powinno przeszkadzac w reszcie sekcji (klucze/zapis nadal dzialaja).
+  }
 }
 
 function wireTurnstileSection() {
@@ -1648,6 +1690,7 @@ function wireTurnstileSection() {
   const toggleBtn = document.getElementById('turnstile-toggle-btn');
   const msgEl = document.getElementById('turnstile-msg');
   const widgetContainer = document.getElementById('turnstile-widget-container');
+  renderTurnstilePreviews();
   if (!verifyBtn) return;
 
   verifyBtn.onclick = async () => {
