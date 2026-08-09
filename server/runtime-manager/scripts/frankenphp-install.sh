@@ -34,10 +34,18 @@ dnf install -y frankenphp \
 command -v frankenphp >/dev/null 2>&1 \
   || err "Instalacja zakonczona, ale binarka frankenphp nie zostala znaleziona w PATH."
 
-frankenphp version >/dev/null 2>&1 \
+# `frankenphp php-cli -v` NIE dziala jak zwykle `php -v` - podkomenda
+# "php-cli" uruchamia PHP skrypt/kod (jak `php <plik>`), wiec `-v` jest
+# interpretowane jako nazwa pliku do wykonania, nie flaga ("Failed opening
+# required '-v'") - potwierdzone na zywym serwerze (2026-08-09). Zamiast
+# tego `frankenphp version` samo w sobie wypisuje podlinkowana wersje PHP
+# w formacie "FrankenPHP vX.Y.Z PHP A.B Caddy vC.D.E ..." - to jest
+# pewny, bezposredni dowod ze wybrany strumien ZTS zostal poprawnie
+# podlinkowany, bez potrzeby zgadywania skladni php-cli.
+VERSION_OUTPUT="$(frankenphp version 2>&1)" \
   || err "Instalacja zakonczona, ale 'frankenphp version' zwrocilo blad."
 
-frankenphp php-cli -v >/dev/null 2>&1 \
-  || err "Instalacja zakonczona, ale 'frankenphp php-cli -v' zwrocilo blad (PHP ZTS ${VERSION} moze nie byc poprawnie wlaczone)."
+echo "$VERSION_OUTPUT" | grep -q "PHP ${VERSION}" \
+  || err "Instalacja zakonczona, ale 'frankenphp version' nie pokazuje PHP ${VERSION} ZTS (wyjscie: ${VERSION_OUTPUT}) - modul php-zts:static-${VERSION} moze nie byc poprawnie wlaczony."
 
-echo "OK: FrankenPHP + PHP ${VERSION} ZTS zainstalowane. Usluga systemd NIE zostala uruchomiona automatycznie."
+echo "OK: FrankenPHP + PHP ${VERSION} ZTS zainstalowane (${VERSION_OUTPUT}). Usluga systemd NIE zostala uruchomiona automatycznie."
