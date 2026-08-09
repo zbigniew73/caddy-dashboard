@@ -166,11 +166,31 @@ const PHP_INI_OPCACHE_KEYS = [
 // plikow w php.d/, nie tylko naszego wlasnego), i nie wymaga roota -
 // uruchomienie wrappera CLI to zwykla operacja, ktora panel i tak juz
 // moze wykonac.
+//
+// Dwie warstwy ochrony przed tym, ze STDOUT przestanie byc czystym JSON-em
+// (np. warning/notice/deprecated z ktoregos php.d/*.ini wypisany na
+// stdout zamiast stderr, co calkowicie psuloby JSON.parse ponizej):
+// 1. `-d display_errors=stderr` wymusza, zeby jakiekolwiek komunikaty PHP
+//    lecialy na stderr, nigdy na stdout - niezaleznie od tego co ustawia
+//    display_errors w samym php.ini.
+// 2. Wynik owijamy unikalnymi znacznikami i wycinamy TYLKO to co miedzy
+//    nimi przed JSON.parse - defense in depth, gdyby cos innego (np.
+//    output z ktoregos rozszerzenia) i tak trafilo na stdout.
 async function readPhpIniValues(id, keys) {
   const wrapper = `/usr/local/bin/php${id}`;
-  const script = `echo json_encode(array_combine(${JSON.stringify(keys)}, array_map('ini_get', ${JSON.stringify(keys)})));`;
-  const { stdout } = await execFileAsync(wrapper, ['-r', script], { timeout: 10000 });
-  return JSON.parse(stdout);
+  const MARK_START = '__CDDASH_JSON_START__';
+  const MARK_END = '__CDDASH_JSON_END__';
+  const script = `echo '${MARK_START}' . json_encode(array_combine(${JSON.stringify(keys)}, array_map('ini_get', ${JSON.stringify(keys)}))) . '${MARK_END}';`;
+  const { stdout } = await execFileAsync(
+    wrapper,
+    ['-d', 'display_errors=stderr', '-r', script],
+    { timeout: 10000 }
+  );
+  const match = new RegExp(`${MARK_START}([\\s\\S]*?)${MARK_END}`).exec(stdout);
+  if (!match) {
+    throw new Error(`Nieoczekiwana odpowiedz z ${wrapper} (brak spodziewanych znacznikow w wyjsciu): ${stdout.slice(0, 300)}`);
+  }
+  return JSON.parse(match[1]);
 }
 
 // PHP ini akceptuje skroty rozmiaru (256M/1G/512K) albo czysta liczbe

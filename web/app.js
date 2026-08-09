@@ -2144,18 +2144,31 @@ function humanizePhpModuleKey(key) {
   return key.replace(/^pecl-/, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Moduly, ktore oficjalna dokumentacja WordPressa
-// (make.wordpress.org/hosting/handbook/server-environment/) oznacza jako
-// REQUIRED albo HIGHLY RECOMMENDED (nie "optional"/"fallback"/cache-owe
-// jak opcache/redis, ktore sa "wystarczy jedno z wielu") - stan
-// zweryfikowany na zywo z tej strony, nie zgadywany.
-const WORDPRESS_REQUIRED_MODULES = new Set([
-  'json', 'mysqli', 'mysqlnd',
+// Dwa osobne poziomy z oficjalnej dokumentacji WordPressa
+// (make.wordpress.org/hosting/handbook/server-environment/), zweryfikowane
+// na zywo z tej strony, nie zgadywane. Celowo NIE laczymy ich w jeden
+// badge - strona sama rozroznia REQUIRED od HIGHLY RECOMMENDED, wiec
+// panel tez to pokazuje osobno. Pomijamy kategorie "Recommended (cache) -
+// wystarczy jedno z wielu" (opcache/redis/apcu/memcached) i "Optional/
+// fallback" (sodium, iconv, zip... - o ile nie sa juz w ktorejs z list
+// powyzej), bo to nie jest "trzeba miec".
+const WORDPRESS_REQUIRED_MODULES = new Set(['json', 'mysqli', 'mysqlnd']);
+const WORDPRESS_RECOMMENDED_MODULES = new Set([
   'curl', 'dom', 'exif', 'fileinfo', 'hash',
   'igbinary', 'pecl-igbinary',
   'imagick', 'pecl-imagick',
   'intl', 'mbstring', 'openssl', 'xml', 'zip'
 ]);
+
+function wordpressBadgeHtml(moduleKey) {
+  if (WORDPRESS_REQUIRED_MODULES.has(moduleKey)) {
+    return `<span title="${escapeHtml(t('phpmodules.wordpress_required_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--danger);color:var(--danger);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_required')}</span>`;
+  }
+  if (WORDPRESS_RECOMMENDED_MODULES.has(moduleKey)) {
+    return `<span title="${escapeHtml(t('phpmodules.wordpress_recommended_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--border);color:var(--muted);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_recommended')}</span>`;
+  }
+  return '';
+}
 
 async function renderPhpModulesSection(id) {
   let modules;
@@ -2167,9 +2180,7 @@ async function renderPhpModulesSection(id) {
 
   const rows = modules.map((m) => {
     const label = humanizePhpModuleKey(m.key);
-    const wpBadge = WORDPRESS_REQUIRED_MODULES.has(m.key)
-      ? `<span title="${escapeHtml(t('phpmodules.wordpress_required_title'))}" style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;border:1px solid var(--border);color:var(--muted);font-size:10px;white-space:nowrap;">${t('phpmodules.wordpress_required')}</span>`
-      : '';
+    const wpBadge = wordpressBadgeHtml(m.key);
     const actionButton = m.enabled
       ? `<button type="button" class="danger" data-module="${escapeHtml(m.key)}" data-module-action="remove">${t('phpmodules.remove_button')}</button>`
       : `<button type="button" data-module="${escapeHtml(m.key)}" data-module-action="install">${t('phpmodules.add_button')}</button>`;
