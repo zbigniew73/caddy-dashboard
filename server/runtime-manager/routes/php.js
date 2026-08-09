@@ -127,30 +127,58 @@ function writeSettingsViaSudo(id, iniContent) {
   });
 }
 
+// Zwraca liczbe calkowita w podanym zakresie albo rzuca blad 400 z jasnym
+// komunikatem - uzywane dla kazdego z pol liczbowych ponizej, zeby nie
+// powtarzac tej samej walidacji siedem razy.
+function requireIntInRange(value, min, max, label) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw Object.assign(new Error(`Nieprawidlowa wartosc: ${label} (${min}-${max}).`), { status: 400 });
+  }
+  return parsed;
+}
+
 router.post('/:id/settings', async (req, res) => {
   const { id } = req.params;
   if (!/^[0-9]{2}$/.test(id)) {
     return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
   }
 
-  const { timezone, memoryLimitMb, uploadMaxMb } = req.body || {};
-  if (typeof timezone !== 'string' || !TIMEZONE_PATTERN.test(timezone)) {
-    return res.status(400).json({ error: 'Nieprawidlowa strefa czasowa.' });
-  }
-  const memoryLimit = parseInt(memoryLimitMb, 10);
-  if (!Number.isInteger(memoryLimit) || memoryLimit < 16 || memoryLimit > 16384) {
-    return res.status(400).json({ error: 'Nieprawidlowa wartosc memory_limit (16-16384 MB).' });
-  }
-  const uploadMax = parseInt(uploadMaxMb, 10);
-  if (!Number.isInteger(uploadMax) || uploadMax < 1 || uploadMax > 16384) {
-    return res.status(400).json({ error: 'Nieprawidlowa wartosc rozmiaru uploadu (1-16384 MB).' });
+  const body = req.body || {};
+  let timezone, memoryLimit, uploadMax, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads;
+  try {
+    timezone = body.timezone;
+    if (typeof timezone !== 'string' || !TIMEZONE_PATTERN.test(timezone)) {
+      throw Object.assign(new Error('Nieprawidlowa strefa czasowa.'), { status: 400 });
+    }
+    memoryLimit = requireIntInRange(body.memoryLimitMb, 16, 16384, 'memory_limit (MB)');
+    uploadMax = requireIntInRange(body.uploadMaxMb, 1, 16384, 'rozmiar uploadu (MB)');
+    maxExecutionTime = requireIntInRange(body.maxExecutionTime, 1, 3600, 'max_execution_time (s)');
+    maxInputTime = requireIntInRange(body.maxInputTime, 1, 3600, 'max_input_time (s)');
+    maxInputVars = requireIntInRange(body.maxInputVars, 100, 100000, 'max_input_vars');
+    maxFileUploads = requireIntInRange(body.maxFileUploads, 1, 1000, 'max_file_uploads');
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
   }
 
+  // expose_php/default_charset/realpath_cache_* to swiadome, stale
+  // wartosci (bezpieczenstwo + wydajnosc) - nie sa polami w formularzu,
+  // zawsze dopisywane razem z ustawieniami, ktore admin faktycznie
+  // wybiera. Zestaw pol i wartosci zgodny z przykladem "Globalne PHP
+  // 8.5" z pierwotnego planu Runtime Managera.
   const iniContent = `[PHP]
+expose_php = Off
+default_charset = "UTF-8"
 date.timezone = "${timezone}"
 memory_limit = ${memoryLimit}M
+max_execution_time = ${maxExecutionTime}
+max_input_time = ${maxInputTime}
+max_input_vars = ${maxInputVars}
 upload_max_filesize = ${uploadMax}M
 post_max_size = ${uploadMax}M
+max_file_uploads = ${maxFileUploads}
+realpath_cache_size = 4096K
+realpath_cache_ttl = 600
 `;
 
   try {

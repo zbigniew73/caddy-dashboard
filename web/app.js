@@ -1938,6 +1938,18 @@ function renderPhpSettingsSection(id) {
       <input type="number" id="phpsettings-upload-${id}" value="64" min="1" style="width:100%;margin-bottom:4px;">
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.upload_max_hint')}</div>
 
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_execution_time_label')}</label>
+      <input type="number" id="phpsettings-max-execution-time-${id}" value="60" min="1" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_time_label')}</label>
+      <input type="number" id="phpsettings-max-input-time-${id}" value="60" min="1" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_input_vars_label')}</label>
+      <input type="number" id="phpsettings-max-input-vars-${id}" value="5000" min="100" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.max_file_uploads_label')}</label>
+      <input type="number" id="phpsettings-max-file-uploads-${id}" value="50" min="1" style="width:100%;margin-bottom:16px;">
+
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
       <div class="action-msg" id="phpsettings-msg-${id}"></div>
     </div>
@@ -1953,8 +1965,12 @@ function wirePhpSettingsSection(id) {
     const timezone = document.getElementById(`phpsettings-timezone-${id}`).value.trim();
     const memoryLimitMb = parseInt(document.getElementById(`phpsettings-memory-${id}`).value, 10);
     const uploadMaxMb = parseInt(document.getElementById(`phpsettings-upload-${id}`).value, 10);
+    const maxExecutionTime = parseInt(document.getElementById(`phpsettings-max-execution-time-${id}`).value, 10);
+    const maxInputTime = parseInt(document.getElementById(`phpsettings-max-input-time-${id}`).value, 10);
+    const maxInputVars = parseInt(document.getElementById(`phpsettings-max-input-vars-${id}`).value, 10);
+    const maxFileUploads = parseInt(document.getElementById(`phpsettings-max-file-uploads-${id}`).value, 10);
 
-    if (!timezone || !Number.isInteger(memoryLimitMb) || !Number.isInteger(uploadMaxMb)) {
+    if (!timezone || ![memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads].every(Number.isInteger)) {
       msgEl.textContent = t('phpsettings.invalid_values');
       msgEl.className = 'action-msg error';
       return;
@@ -1965,7 +1981,9 @@ function wirePhpSettingsSection(id) {
     msgEl.textContent = t('phpsettings.saving');
     msgEl.className = 'action-msg';
     try {
-      await api('POST', `/php/${id}/settings`, { timezone, memoryLimitMb, uploadMaxMb });
+      await api('POST', `/php/${id}/settings`, {
+        timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads
+      });
       msgEl.textContent = t('phpsettings.save_success');
       msgEl.className = 'action-msg success';
     } catch (e) {

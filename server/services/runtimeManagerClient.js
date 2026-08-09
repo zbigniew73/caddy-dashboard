@@ -73,8 +73,10 @@ async function installPhp(id) {
   return request('POST', `/php/${encodeURIComponent(id)}/install`);
 }
 
-async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb }) {
-  return request('POST', `/php/${encodeURIComponent(id)}/settings`, { timezone, memoryLimitMb, uploadMaxMb });
+async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads }) {
+  return request('POST', `/php/${encodeURIComponent(id)}/settings`, {
+    timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads
+  });
 }
 
 export { getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings };

@@ -608,7 +608,11 @@ router.post('/php/:id/settings', async (req, res) => {
     const result = await applyPhpSettings(req.params.id, {
       timezone: req.body?.timezone,
       memoryLimitMb: req.body?.memoryLimitMb,
-      uploadMaxMb: req.body?.uploadMaxMb
+      uploadMaxMb: req.body?.uploadMaxMb,
+      maxExecutionTime: req.body?.maxExecutionTime,
+      maxInputTime: req.body?.maxInputTime,
+      maxInputVars: req.body?.maxInputVars,
+      maxFileUploads: req.body?.maxFileUploads
     });
     res.json(result);
   } catch (e) {
