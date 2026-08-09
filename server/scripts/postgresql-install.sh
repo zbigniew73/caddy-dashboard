@@ -46,6 +46,36 @@ esac
 
 systemctl enable --now "$PG_UNIT" || err "Zainstalowano, ale nie udalo sie uruchomic/wlaczyc uslugi ${PG_UNIT}."
 
+# Domyslny pg_hba.conf na AlmaLinux/Rocky ma dla polaczen sieciowych
+# (host 127.0.0.1/32 i ::1/128) metode "ident" - to NIGDY nie dziala dla
+# logowania haslem z zewnetrznego narzedzia (np. Adminer) - potwierdzone
+# na zywym serwerze (2026-08-09): "FATAL: Ident authentication failed
+# for user...". Przelaczamy te dwie linie na scram-sha-256 (nowoczesna,
+# zalecana metoda haslowa PostgreSQL 10+), zostawiamy WSZYSTKO INNE
+# (w tym "local all all peer" dla polaczen przez socket) bez zmian.
+# Sciezka do pg_hba.conf jest wykrywana dynamicznie (SHOW hba_file) -
+# rozna w zaleznosci od trybu instalacji (local: /var/lib/pgsql/data/,
+# official: /var/lib/pgsql/${VERSION}/data/), nie zgadywana na sztywno.
+HBA_FILE="$(runuser -u postgres -- psql -tAc 'SHOW hba_file;' 2>/dev/null | tr -d '[:space:]')"
+if [ -n "$HBA_FILE" ] && [ -f "$HBA_FILE" ]; then
+  HBA_BACKUP="${HBA_FILE}.bak-$(date +%Y%m%d%H%M%S)"
+  cp -p "$HBA_FILE" "$HBA_BACKUP"
+  sed -i -E \
+    -e '/^host[[:space:]]+all[[:space:]]+all[[:space:]]+127\.0\.0\.1\/32[[:space:]]+ident/ s/ident$/scram-sha-256/' \
+    -e '/^host[[:space:]]+all[[:space:]]+all[[:space:]]+::1\/128[[:space:]]+ident/ s/ident$/scram-sha-256/' \
+    "$HBA_FILE"
+  if ! systemctl reload "$PG_UNIT" 2>/tmp/postgresql-hba.err; then
+    ERR_MSG="$(cat /tmp/postgresql-hba.err 2>/dev/null)"
+    rm -f /tmp/postgresql-hba.err
+    cp -p "$HBA_BACKUP" "$HBA_FILE"
+    systemctl reload "$PG_UNIT" >/dev/null 2>&1 || true
+    err "Zmiana pg_hba.conf (ident -> scram-sha-256) nie powiodla sie przy przeladowaniu: ${ERR_MSG} - przywrocono poprzednia wersje."
+  fi
+  rm -f /tmp/postgresql-hba.err
+else
+  echo "UWAGA: nie udalo sie ustalic sciezki pg_hba.conf (SHOW hba_file) - polaczenia haslem po TCP (127.0.0.1/::1) moga nie dzialac, sprawdz recznie." >&2
+fi
+
 if [ ! -f "$PWFILE" ]; then
   PASSWORD="$(gen_password)"
 
