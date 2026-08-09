@@ -8,12 +8,10 @@
 #
 # Wymagane zmienne srodowiskowe: INSTALL_DIR, SVC_USER.
 #
-# UWAGA - funkcja PHP (server/runtime-manager/) celowo NIE ma tu zadnego
-# Cmnd_Alias. Ten daemon dziala jako osobna usluga systemd z User=root
-# (nie SVC_USER/cdadmin), wiec nie potrzebuje sudo - komunikuje sie z
-# panelem po unix sockecie. Nie dodawaj tu regul dla dnf/systemctl
-# zwiazanych z PHP/Remi, to by dublowalo uprawnienia roota, ktore ten
-# proces juz ma.
+# Runtime Manager (server/runtime-manager/, osobna usluga systemd,
+# caddy-dashboard-runtime.service) dziala jako TEN SAM SVC_USER co glowny
+# panel (nie root) - dlatego CDDASH_PHP_* nizej, dokladnie ten sam wzorzec
+# co MariaDB/PostgreSQL/Redis itd.
 
 set -euo pipefail
 
@@ -37,8 +35,11 @@ Cmnd_Alias CDDASH_MONGODB_INSTALL = ${INSTALL_DIR}/server/scripts/mongodb-instal
 Cmnd_Alias CDDASH_MONGODB_PERF = ${INSTALL_DIR}/server/scripts/mongodb-set-performance.sh
 Cmnd_Alias CDDASH_REDIS_INSTALL = ${INSTALL_DIR}/server/scripts/redis-install.sh local, ${INSTALL_DIR}/server/scripts/redis-install.sh official
 Cmnd_Alias CDDASH_REDIS_PERF = ${INSTALL_DIR}/server/scripts/redis-set-performance.sh
+Cmnd_Alias CDDASH_PHP_REPOS = ${INSTALL_DIR}/server/runtime-manager/scripts/remi-setup-repos.sh
+Cmnd_Alias CDDASH_PHP_LIST = ${INSTALL_DIR}/server/runtime-manager/scripts/remi-list-available.sh
+Cmnd_Alias CDDASH_PHP_INSTALL = ${INSTALL_DIR}/server/runtime-manager/scripts/php-install.sh [0-9][0-9]
 
-${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF, CDDASH_MONGODB_INSTALL, CDDASH_MONGODB_PERF, CDDASH_REDIS_INSTALL, CDDASH_REDIS_PERF
+${SVC_USER} ALL=(root) NOPASSWD: CDDASH_SYSTEMCTL, CDDASH_DNF, CDDASH_FIREWALL, CDDASH_SSH_PORT, CDDASH_REBOOT, CDDASH_FAIL2BAN, CDDASH_CADDY_PERF, CDDASH_MARIADB_INSTALL, CDDASH_MARIADB_PERF, CDDASH_POSTGRESQL_INSTALL, CDDASH_POSTGRESQL_PERF, CDDASH_MONGODB_INSTALL, CDDASH_MONGODB_PERF, CDDASH_REDIS_INSTALL, CDDASH_REDIS_PERF, CDDASH_PHP_REPOS, CDDASH_PHP_LIST, CDDASH_PHP_INSTALL
 EOF
 
 if visudo -c -f "$SUDOERS_TMP" >/dev/null 2>&1; then

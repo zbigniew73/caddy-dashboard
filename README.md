@@ -1,4 +1,4 @@
-# Caddy Dashboard v1.11.4
+# Caddy Dashboard v1.11.5
 
 Nowe podejście do panelu zarządzania usługami na serwerze AlmaLinux/Rocky Linux 9/10, oparte na [Caddy](https://caddyserver.com/) jako reverse proxy.
 
@@ -90,11 +90,15 @@ Plik `caddy-dashboard.service` (z podmienionymi wartosciami) jest w `.gitignore`
 
 ## Runtime Manager (funkcja PHP)
 
-Osobny daemon, wymagany tylko jeśli chcesz korzystać z instalacji PHP z
-panelu (sekcja PHP). W przeciwieństwie do `caddy-dashboard.service`
-działa **jako root** — instaluje pakiety PHP (Remi), zarządza usługami
-`phpXX-php-fpm` itd., i komunikuje się z panelem (który działa jako
-`cdadmin`) wyłącznie po unix sockecie, nigdy po sieci. `install.sh`
+Osobny proces/usługa systemd, wymagany tylko jeśli chcesz korzystać z
+instalacji PHP z panelu (sekcja PHP) — oddzielony od głównego panelu, żeby
+błąd w logice instalacji PHP nie przewracał panelu WWW (i odwrotnie), oba
+da się restartować niezależnie. Działa jako **to samo konto** co
+`caddy-dashboard.service` (domyślnie `cdadmin`, ustawiane przez ten sam
+prompt `install.sh`) — instalację pakietów PHP (Remi) i zarządzanie
+usługami `phpXX-php-fpm` robi przez `sudo` (te same reguły w
+`/etc/sudoers.d/caddy-dashboard` co MariaDB/PostgreSQL/Redis). Z panelem
+komunikuje się wyłącznie po unix sockecie, nigdy po sieci. `install.sh`
 przygotowuje `caddy-dashboard-runtime.service` tym samym mechanizmem co
 usługę główną:
 

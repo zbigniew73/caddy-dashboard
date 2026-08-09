@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.11.4"
+APP_VERSION="1.11.5"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -120,7 +120,7 @@ declare -A MSG_PL=(
   [prompt_svc_user]="Konto systemowe, na ktorym ma dzialac usluga (root upraszcza wymog PAM+shadow, patrz README)"
   [systemd_ready]="caddy-dashboard.service gotowy (User=%s). NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [systemd_exists]="caddy-dashboard.service juz istnieje - pomijam generowanie."
-  [runtime_systemd_preparing]="Przygotowuje jednostke systemd (caddy-dashboard-runtime.service, dziala jako root)..."
+  [runtime_systemd_preparing]="Przygotowuje jednostke systemd (caddy-dashboard-runtime.service, User=%s - to samo konto co glowna usluga)..."
   [runtime_systemd_ready]="caddy-dashboard-runtime.service gotowy. NIE skopiowany do /etc/systemd/system - patrz ponizej."
   [runtime_systemd_exists]="caddy-dashboard-runtime.service juz istnieje - pomijam generowanie."
   [chown_install_dir]="Ustawiam wlasciciela %s na %s (samo-aktualizacja z panelu)..."
@@ -215,7 +215,7 @@ declare -A MSG_EN=(
   [prompt_svc_user]="System account the service should run as (root simplifies the PAM+shadow requirement, see README)"
   [systemd_ready]="caddy-dashboard.service ready (User=%s). NOT copied to /etc/systemd/system - see below."
   [systemd_exists]="caddy-dashboard.service already exists - skipping generation."
-  [runtime_systemd_preparing]="Preparing the systemd unit (caddy-dashboard-runtime.service, runs as root)..."
+  [runtime_systemd_preparing]="Preparing the systemd unit (caddy-dashboard-runtime.service, User=%s - same account as the main service)..."
   [runtime_systemd_ready]="caddy-dashboard-runtime.service ready. NOT copied to /etc/systemd/system - see below."
   [runtime_systemd_exists]="caddy-dashboard-runtime.service already exists - skipping generation."
   [chown_install_dir]="Setting owner of %s to %s (self-update from the panel)..."
@@ -527,8 +527,9 @@ else
 fi
 
 if [ ! -f caddy-dashboard-runtime.service ]; then
-  log "$(t runtime_systemd_preparing)"
-  cp caddy-dashboard-runtime.service.example caddy-dashboard-runtime.service
+  log "$(t runtime_systemd_preparing "$SVC_USER")"
+  sed -e "s#^User=.*#User=${SVC_USER}#" \
+      caddy-dashboard-runtime.service.example > caddy-dashboard-runtime.service
   log "$(t runtime_systemd_ready)"
 else
   log "$(t runtime_systemd_exists)"

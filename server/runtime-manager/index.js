@@ -2,20 +2,22 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import phpRoutes from './routes/php.js';
-import { secureSocket } from './socketPermissions.js';
 
-// Ten proces to Runtime Manager - osobny daemon dzialajacy jako root,
-// NIEZALEZNY od glownego panelu (server/index.js, dziala jako cdadmin).
-// Panel laczy sie z nim po unix sockecie (nie TCP - tak samo jak PHP-FPM/
-// FrankenPHP w docelowej architekturze), a socket jest zawezony do grupy
-// cdadmin (patrz socketPermissions.js). Dzieki temu panel WWW nie
-// potrzebuje bezposrednich uprawnien root do dnf/systemctl/systemowych
-// katalogow dla funkcji PHP - ten proces juz jest rootem, wiec zaden
-// sudo/sudoers wewnatrz niego nie jest potrzebny (patrz komentarz w
-// server/scripts/write-sudoers.sh).
+// Ten proces to Runtime Manager - osobna usluga systemd
+// (caddy-dashboard-runtime.service) obok glownego panelu
+// (caddy-dashboard.service), dzialajaca jako TEN SAM SVC_USER (cdadmin) -
+// nie root. Osobny proces = awaria/bug w logice instalacji PHP nie
+// przewraca panelu WWW (i odwrotnie), a systemd moze restartowac je
+// niezaleznie. Uprzywilejowane operacje (dnf/systemctl/pisanie do
+// /usr/local/bin) ida przez `sudo -n <skrypt>`, dokladnie tak samo jak
+// dla MariaDB/PostgreSQL/Redis w server/services/ - patrz
+// server/scripts/write-sudoers.sh (Cmnd_Alias CDDASH_PHP_*).
+//
+// Panel laczy sie z tym procesem po unix sockecie (nie TCP), zawezonym
+// do samego wlasciciela (chmod 600) - skoro oba procesy dzialaja jako
+// ten sam user, socket nie potrzebuje osobnej grupy/wlasciciela.
 
 const SOCKET_PATH = process.env.RUNTIME_SOCKET_PATH || '/run/caddy-dashboard-runtime.sock';
-const SOCKET_GROUP = process.env.RUNTIME_SOCKET_GROUP || 'cdadmin';
 
 if (fs.existsSync(SOCKET_PATH)) {
   fs.unlinkSync(SOCKET_PATH);
@@ -32,11 +34,6 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(SOCKET_PATH, () => {
-  try {
-    secureSocket(SOCKET_PATH, SOCKET_GROUP);
-  } catch (e) {
-    console.error(`\n[BLAD] ${e.message}\n`);
-    process.exit(1);
-  }
-  console.log(`\nRuntime Manager dziala na sockecie ${SOCKET_PATH} (grupa: ${SOCKET_GROUP})`);
+  fs.chmodSync(SOCKET_PATH, 0o600);
+  console.log(`\nRuntime Manager dziala na sockecie ${SOCKET_PATH}`);
 });
