@@ -23,6 +23,8 @@ CONF="/etc/mongod.conf"
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib-gen-password.sh"
+
 [[ "$VERSION" == "7.0" || "$VERSION" == "8.0" ]] || err "Nieprawidlowa wersja MongoDB: '${VERSION}'."
 
 OS_MAJOR="$(rpm -E %{rhel})"
@@ -54,7 +56,7 @@ done
 [ -n "$READY" ] || err "mongod nie odpowiada na porcie 27017 po 30 sekundach od uruchomienia."
 
 if [ ! -f "$PWFILE" ]; then
-  PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
+  PASSWORD="$(gen_password)"
 
   mongosh --quiet --eval "db.getSiblingDB('admin').createUser({user:'admin',pwd:'${PASSWORD}',roles:[{role:'root',db:'admin'}]})" \
     || err "Wygenerowano haslo, ale nie udalo sie utworzyc uzytkownika admin w MongoDB."

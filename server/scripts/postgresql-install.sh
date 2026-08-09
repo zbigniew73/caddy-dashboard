@@ -16,6 +16,8 @@ PWFILE="/root/.postgresql"
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib-gen-password.sh"
+
 case "$MODE" in
   local)
     dnf install -y postgresql-server postgresql || err "Instalacja z lokalnego repozytorium nie powiodla sie."
@@ -45,7 +47,7 @@ esac
 systemctl enable --now "$PG_UNIT" || err "Zainstalowano, ale nie udalo sie uruchomic/wlaczyc uslugi ${PG_UNIT}."
 
 if [ ! -f "$PWFILE" ]; then
-  PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
+  PASSWORD="$(gen_password)"
 
   runuser -u postgres -- psql -c "ALTER USER postgres WITH PASSWORD '${PASSWORD}';" \
     || err "Wygenerowano haslo, ale nie udalo sie ustawic go dla uzytkownika postgres."

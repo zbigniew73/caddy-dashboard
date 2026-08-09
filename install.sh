@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.10.9"
+APP_VERSION="1.11.2"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -29,12 +29,19 @@ is_yes() {
   esac
 }
 
+# Regula haseł generowanych przez ten panel (cdadmin tutaj, oraz MariaDB/
+# PostgreSQL/MongoDB/Redis root/admin w server/scripts/lib-gen-password.sh -
+# ta sama regula, dwie kopie bo install.sh dziala przez `curl | sudo bash`
+# zanim repo jest sklonowane, wiec nie moze zrodlowac pliku z repo):
+# 16 znakow = 5 wielkich liter + 5 malych liter + 3 cyfry + 3 znaki specjalne
+# z bezpiecznego zestawu (bez cudzyslowow/apostrofow/backslasha - hasla
+# trafiaja tez do zapytan SQL i JS w mongosh), calosc tasowana losowo.
 gen_password() {
   local upper lower digit special pass
-  upper="$(LC_ALL=C tr -dc 'A-Z' < /dev/urandom | head -c4)"
-  lower="$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c4)"
-  digit="$(LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c2)"
-  special="$(LC_ALL=C tr -dc '!@#%*()_+=-' < /dev/urandom | head -c2)"
+  upper="$(LC_ALL=C tr -dc 'A-Z' < /dev/urandom | head -c5)"
+  lower="$(LC_ALL=C tr -dc 'a-z' < /dev/urandom | head -c5)"
+  digit="$(LC_ALL=C tr -dc '0-9' < /dev/urandom | head -c3)"
+  special="$(LC_ALL=C tr -dc '!@#%*()_+=-' < /dev/urandom | head -c3)"
   pass="$(printf '%s%s%s%s' "$upper" "$lower" "$digit" "$special" | fold -w1 | shuf | tr -d '\n')"
   printf '%s' "$pass"
 }

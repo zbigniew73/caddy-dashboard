@@ -24,6 +24,8 @@ PWFILE="/root/.redispw"
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib-gen-password.sh"
+
 case "$MODE" in
   local)
     if ! dnf install -y redis 2>/dev/null && ! dnf install -y valkey; then
@@ -74,7 +76,7 @@ done
 [ -n "$READY" ] || err "${SVC_UNIT} nie odpowiada po 30 sekundach od uruchomienia."
 
 if [ ! -f "$PWFILE" ]; then
-  PASSWORD="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c16)"
+  PASSWORD="$(gen_password)"
 
   "$CLI" CONFIG SET requirepass "$PASSWORD" >/dev/null \
     || err "Nie udalo sie ustawic hasla (requirepass) w Redis."
