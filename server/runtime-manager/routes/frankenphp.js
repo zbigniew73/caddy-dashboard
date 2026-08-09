@@ -36,9 +36,15 @@ async function runViaSudo(scriptPath, args, timeout, sudoErrorLabel) {
 // Repo static-php musi byc wlaczone PRZED odpytaniem o dostepne strumienie
 // php-zts - inaczej pierwsze otwarcie kafelka (przed jakakolwiek
 // instalacja) dostaje pusta liste, tak samo jak przy PHP-FPM/Remi
-// (listRemiVersions() w routes/php.js).
+// (listRemiVersions() w routes/php.js). Cache w pamieci procesu - patrz
+// analogiczny komentarz przy listRemiVersions() (routes/php.js) - repo
+// bootstrap raz na cykl zycia demona, nie przy kazdym requescie.
+let repoReady = false;
 async function listFrankenphpVersions() {
-  await runViaSudo(SETUP_REPO_SCRIPT, [], 60000, 'wlaczenia repozytorium static-php');
+  if (!repoReady) {
+    await runViaSudo(SETUP_REPO_SCRIPT, [], 60000, 'wlaczenia repozytorium static-php');
+    repoReady = true;
+  }
   const { stdout } = await runViaSudo(LIST_SCRIPT, [], 30000, 'listy wersji PHP ZTS');
   return stdout.trim().split('\n').filter(Boolean).map((line) => {
     const [version, status] = line.trim().split(/\s+/);

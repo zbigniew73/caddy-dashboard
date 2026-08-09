@@ -62,8 +62,25 @@ async function runViaSudo(scriptPath, args, timeout, sudoErrorLabel) {
 // jakakolwiek instalacja) pyta dnf o pakiety phpXX zanim Remi w ogole jest
 // wlaczone i dostaje pusta liste ("brak dostepnych wersji"), mimo ze Remi
 // realnie ma te pakiety.
+//
+// ALE: remi-setup-repos.sh ma DWIE bezwarunkowe komendy dnf (instalacja
+// dnf-command(config-manager) i wlaczenie repo crb) ktore leca przy
+// KAZDYM wywolaniu, nawet gdy nic nie trzeba robic - a listRemiVersions()
+// jest wolane przy KAZDYM zaladowaniu /api/services (przez
+// phpServiceEntries() w server/routes/api.js), czyli przy kazdym
+// odswiezeniu calej strony panelu. Potwierdzone na zywym serwerze
+// (2026-08-09): to powodowalo ~30s opoznienie w ladowaniu reszty
+// nawigacji (MariaDB/PostgreSQL/MongoDB/PHP/FrankenPHP) przy KAZDYM
+// wejsciu do panelu, nie tylko przy pierwszym otwarciu kafelka PHP.
+// Cache w pamieci procesu - repo bootstrap odpalany raz na cykl zycia
+// demona (Runtime Manager to dlugo dzialajacy proces systemd, restart
+// zdarza sie rzadko), nie przy kazdym requescie.
+let reposReady = false;
 async function listRemiVersions() {
-  await runViaSudo(SETUP_REPOS_SCRIPT, [], 60000, 'wlaczenia repozytoriow EPEL/Remi');
+  if (!reposReady) {
+    await runViaSudo(SETUP_REPOS_SCRIPT, [], 60000, 'wlaczenia repozytoriow EPEL/Remi');
+    reposReady = true;
+  }
   const { stdout } = await runViaSudo(LIST_SCRIPT, [], 30000, 'listy wersji PHP z Remi');
   return stdout.trim().split('\n').filter(Boolean).map((line) => {
     const [id, status] = line.trim().split(/\s+/);
