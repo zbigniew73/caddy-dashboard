@@ -1899,6 +1899,93 @@ async function wrapRedisExtras(serviceHtml) {
   `;
 }
 
+function timezoneOptionsHtml(selected) {
+  let zones;
+  try {
+    zones = Intl.supportedValuesOf('timeZone');
+  } catch {
+    zones = null;
+  }
+  if (!zones || !zones.length) return null;
+  return zones.map((z) => `<option value="${escapeHtml(z)}"${z === selected ? ' selected' : ''}>${escapeHtml(z)}</option>`).join('');
+}
+
+function renderPhpSettingsSection(id) {
+  let defaultTz = 'UTC';
+  try {
+    defaultTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    // zostaje UTC
+  }
+  const tzOptions = timezoneOptionsHtml(defaultTz);
+  const tzField = tzOptions
+    ? `<select id="phpsettings-timezone-${id}" style="width:100%;margin-bottom:4px;">${tzOptions}</select>`
+    : `<input type="text" id="phpsettings-timezone-${id}" value="${escapeHtml(defaultTz)}" placeholder="np. Europe/Warsaw" style="width:100%;margin-bottom:4px;">`;
+
+  return `
+    <div class="system-info-card">
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('phpsettings.title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpsettings.description')}</p>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.timezone_label')}</label>
+      ${tzField}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${t('phpsettings.timezone_hint')}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.memory_limit_label')}</label>
+      <input type="number" id="phpsettings-memory-${id}" value="256" min="16" style="width:100%;margin-bottom:14px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.upload_max_label')}</label>
+      <input type="number" id="phpsettings-upload-${id}" value="64" min="1" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.upload_max_hint')}</div>
+
+      <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
+      <div class="action-msg" id="phpsettings-msg-${id}"></div>
+    </div>
+  `;
+}
+
+function wirePhpSettingsSection(id) {
+  const btn = document.getElementById(`phpsettings-save-btn-${id}`);
+  if (!btn) return;
+  const msgEl = document.getElementById(`phpsettings-msg-${id}`);
+
+  btn.onclick = async () => {
+    const timezone = document.getElementById(`phpsettings-timezone-${id}`).value.trim();
+    const memoryLimitMb = parseInt(document.getElementById(`phpsettings-memory-${id}`).value, 10);
+    const uploadMaxMb = parseInt(document.getElementById(`phpsettings-upload-${id}`).value, 10);
+
+    if (!timezone || !Number.isInteger(memoryLimitMb) || !Number.isInteger(uploadMaxMb)) {
+      msgEl.textContent = t('phpsettings.invalid_values');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('phpsettings.confirm_save'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('phpsettings.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', `/php/${id}/settings`, { timezone, memoryLimitMb, uploadMaxMb });
+      msgEl.textContent = t('phpsettings.save_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
+function wrapPhpExtras(serviceHtml, id) {
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${renderPhpSettingsSection(id)}</div>
+    </div>
+  `;
+}
+
 function confirmMessageFor(key, action) {
   if (action === 'stop' && key === 'ssh') return t('services.confirm_stop_ssh');
   if (action === 'stop' && key === 'firewall') return t('services.confirm_stop_firewall');
@@ -1918,6 +2005,7 @@ function wireServiceActions(key) {
       msgEl.className = 'action-msg';
       try {
         const svc = await api('POST', `/services/${key}/${action}`);
+        const phpMatch = /^php(\d{2})$/.exec(key);
         let html = serviceDetailHtml(svc);
         if (key === 'ssh' && svc.found) html += await renderSshPortSection();
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
@@ -1927,6 +2015,7 @@ function wireServiceActions(key) {
         if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
         if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
         if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
+        if (phpMatch && svc.found) html = wrapPhpExtras(html, phpMatch[1]);
         document.getElementById('content').innerHTML = html;
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1937,6 +2026,7 @@ function wireServiceActions(key) {
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
         if (key === 'redis' && svc.found) wireRedisPerformanceSection();
+        if (phpMatch && svc.found) wirePhpSettingsSection(phpMatch[1]);
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
@@ -1953,6 +2043,7 @@ async function renderServiceDetailTab(key, content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const svc = await api('GET', `/services/${key}`);
+    const phpMatch = /^php(\d{2})$/.exec(key);
     let html = serviceDetailHtml(svc);
     if (key === 'ssh' && svc.found) html += await renderSshPortSection();
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
@@ -1962,6 +2053,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
     if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
     if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
+    if (phpMatch && svc.found) html = wrapPhpExtras(html, phpMatch[1]);
     content.innerHTML = html;
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
@@ -1972,6 +2064,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
     if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
     if (key === 'redis' && svc.found) wireRedisPerformanceSection();
+    if (phpMatch && svc.found) wirePhpSettingsSection(phpMatch[1]);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -9,6 +9,12 @@ const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../
 const SETUP_REPOS_SCRIPT = path.join(SCRIPTS_DIR, 'remi-setup-repos.sh');
 const LIST_SCRIPT = path.join(SCRIPTS_DIR, 'remi-list-available.sh');
 const INSTALL_SCRIPT = path.join(SCRIPTS_DIR, 'php-install.sh');
+const SETTINGS_SCRIPT = path.join(SCRIPTS_DIR, 'php-set-settings.sh');
+
+// Bezpieczny zestaw znakow dla nazwy strefy czasowej IANA (litery, cyfry,
+// _ - / +) - trafia do php.ini wewnatrz cudzyslowu, wiec musi wykluczac
+// cudzyslowy/nowe linie zeby nie dalo sie wstrzyknac dodatkowych dyrektyw.
+const TIMEZONE_PATTERN = /^[A-Za-z0-9_\-/+]+$/;
 
 const router = Router();
 
@@ -88,6 +94,70 @@ router.post('/:id/install', async (req, res) => {
     res.json({ success: true, message: stdout.trim() });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message || `Instalacja PHP ${versionLabel(id)} nie powiodla sie.` });
+  }
+});
+
+// Zapis ustawien uzywa `spawn` (nie execFile) zeby przekazac tresc ini
+// przez stdin, tak samo jak server/services/mariadbPerformance.js robi to
+// dla /etc/my.cnf.d/caddy-dashboard-tuning.cnf.
+function writeSettingsViaSudo(id, iniContent) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', SETTINGS_SCRIPT, id]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ success: true, message: stdout.trim() });
+        return;
+      }
+      if (/password is required/i.test(stderr)) {
+        reject(Object.assign(
+          new Error('Brak uprawnien sudo bez hasla dla ustawien PHP - sprawdz /etc/sudoers.d/caddy-dashboard'),
+          { status: 403 }
+        ));
+        return;
+      }
+      reject(Object.assign(new Error(stderr.trim() || `exit code ${code}`), { status: 500 }));
+    });
+    child.stdin.write(iniContent);
+    child.stdin.end();
+  });
+}
+
+router.post('/:id/settings', async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9]{2}$/.test(id)) {
+    return res.status(400).json({ error: `Nieprawidlowy identyfikator wersji: '${id}'.` });
+  }
+
+  const { timezone, memoryLimitMb, uploadMaxMb } = req.body || {};
+  if (typeof timezone !== 'string' || !TIMEZONE_PATTERN.test(timezone)) {
+    return res.status(400).json({ error: 'Nieprawidlowa strefa czasowa.' });
+  }
+  const memoryLimit = parseInt(memoryLimitMb, 10);
+  if (!Number.isInteger(memoryLimit) || memoryLimit < 16 || memoryLimit > 16384) {
+    return res.status(400).json({ error: 'Nieprawidlowa wartosc memory_limit (16-16384 MB).' });
+  }
+  const uploadMax = parseInt(uploadMaxMb, 10);
+  if (!Number.isInteger(uploadMax) || uploadMax < 1 || uploadMax > 16384) {
+    return res.status(400).json({ error: 'Nieprawidlowa wartosc rozmiaru uploadu (1-16384 MB).' });
+  }
+
+  const iniContent = `[PHP]
+date.timezone = "${timezone}"
+memory_limit = ${memoryLimit}M
+upload_max_filesize = ${uploadMax}M
+post_max_size = ${uploadMax}M
+`;
+
+  try {
+    const result = await writeSettingsViaSudo(id, iniContent);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || `Zapisanie ustawien PHP ${versionLabel(id)} nie powiodlo sie.` });
   }
 });
 

@@ -73,4 +73,8 @@ async function installPhp(id) {
   return request('POST', `/php/${encodeURIComponent(id)}/install`);
 }
 
-export { getAvailablePhp, getInstalledPhp, installPhp };
+async function applyPhpSettings(id, { timezone, memoryLimitMb, uploadMaxMb }) {
+  return request('POST', `/php/${encodeURIComponent(id)}/settings`, { timezone, memoryLimitMb, uploadMaxMb });
+}
+
+export { getAvailablePhp, getInstalledPhp, installPhp, applyPhpSettings };
