@@ -7,6 +7,7 @@ const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../
 const DATA_PATH = path.join(DATA_DIR, 'hosting-packages.json');
 
 const MAX_DESCRIPTION_LEN = 500;
+const ALLOWED_PHP_MEMORY_LIMITS_MB = [512, 1024, 2048, 4096];
 
 function loadPackages() {
   try {
@@ -43,15 +44,17 @@ function normalizeInput(body) {
   const maxDomains = requirePositiveInt(body?.maxDomains, 'liczba domen');
   const maxDatabases = requirePositiveInt(body?.maxDatabases, 'liczba baz danych');
 
-  // Wersja PHP trzymana jako zwykly string (nie walidowana przeciwko
-  // liscie zainstalowanych wersji) - celowo, zeby usuniecie wersji PHP
-  // pozniej nie uniewazniało istniejacego pakietu; front podpowiada
-  // liste z /api/php, ale to tylko UX, nie twardy wymog.
-  const phpVersion = String(body?.phpVersion || '').trim();
+  const phpMemoryLimitMb = requirePositiveInt(body?.phpMemoryLimitMb, 'RAM na proces PHP (MB)');
+  if (!ALLOWED_PHP_MEMORY_LIMITS_MB.includes(phpMemoryLimitMb)) {
+    throw Object.assign(
+      new Error(`Nieprawidlowa wartosc: RAM na proces PHP (dozwolone: ${ALLOWED_PHP_MEMORY_LIMITS_MB.join(', ')} MB).`),
+      { status: 400 }
+    );
+  }
 
   const description = String(body?.description || '').trim().slice(0, MAX_DESCRIPTION_LEN);
 
-  return { name, diskQuotaMb, maxDomains, maxDatabases, phpVersion, description };
+  return { name, diskQuotaMb, maxDomains, maxDatabases, phpMemoryLimitMb, description };
 }
 
 function listPackages() {

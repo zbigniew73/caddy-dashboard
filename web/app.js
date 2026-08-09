@@ -1536,17 +1536,13 @@ function serviceCard(svc) {
   `;
 }
 
+const PACKAGE_PHP_MEMORY_OPTIONS_MB = [512, 1024, 2048, 4096];
+
 async function renderPackageFormHtml(pkg) {
-  let phpOptions = '';
-  try {
-    const { installed } = await api('GET', '/php');
-    phpOptions = installed.map((v) => `<option value="${escapeHtml(v.version)}" ${pkg?.phpVersion === v.version ? 'selected' : ''}>PHP ${escapeHtml(v.version)}</option>`).join('');
-  } catch {
-    // brak dostepu do listy PHP - formularz i tak dziala, pole zostanie puste
-  }
-  const phpField = phpOptions
-    ? `<select id="pkg-form-php"><option value="">-</option>${phpOptions}</select>`
-    : `<input type="text" id="pkg-form-php" value="${escapeHtml(pkg?.phpVersion || '')}" placeholder="np. 8.4">`;
+  const currentPhpMemory = pkg?.phpMemoryLimitMb ?? 1024;
+  const phpMemoryField = `<select id="pkg-form-php">${PACKAGE_PHP_MEMORY_OPTIONS_MB.map((mb) =>
+    `<option value="${mb}" ${currentPhpMemory === mb ? 'selected' : ''}>${mb} MB</option>`
+  ).join('')}</select>`;
 
   return `
     <div class="system-info-card" id="pkg-form-card" style="margin-top:16px;max-width:480px;">
@@ -1566,7 +1562,7 @@ async function renderPackageFormHtml(pkg) {
       <input type="number" id="pkg-form-databases" min="0" value="${pkg?.maxDatabases ?? 1}" style="width:100%;margin-bottom:10px;">
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_php')}</label>
-      <div style="margin-bottom:10px;">${phpField}</div>
+      <div style="margin-bottom:10px;">${phpMemoryField}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_description')}</label>
       <textarea id="pkg-form-description" rows="3" style="width:100%;margin-bottom:14px;font-family:inherit;">${escapeHtml(pkg?.description || '')}</textarea>
@@ -1595,7 +1591,7 @@ function wirePackageForm() {
       diskQuotaMb: document.getElementById('pkg-form-disk').value,
       maxDomains: document.getElementById('pkg-form-domains').value,
       maxDatabases: document.getElementById('pkg-form-databases').value,
-      phpVersion: document.getElementById('pkg-form-php').value,
+      phpMemoryLimitMb: document.getElementById('pkg-form-php').value,
       description: document.getElementById('pkg-form-description').value
     };
     saveBtn.disabled = true;
@@ -1635,7 +1631,7 @@ async function renderPackagesTab(content) {
         <td>${p.diskQuotaMb} MB</td>
         <td>${p.maxDomains}</td>
         <td>${p.maxDatabases}</td>
-        <td>${escapeHtml(p.phpVersion || '-')}</td>
+        <td>${p.phpMemoryLimitMb ? `${p.phpMemoryLimitMb} MB` : '-'}</td>
         <td>
           <button type="button" class="secondary" data-edit="${escapeHtml(p.id)}">${t('packages.edit_button')}</button>
           <button type="button" class="danger" data-delete="${escapeHtml(p.id)}">${t('packages.delete_button')}</button>
