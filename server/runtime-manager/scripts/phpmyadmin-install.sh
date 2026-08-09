@@ -80,7 +80,13 @@ OWNER="$(stat -c '%U:%G' /opt/caddy-dashboard)"
 CADDY_GROUP="$(id -gn caddy 2>/dev/null)"
 [ -n "$CADDY_GROUP" ] || err "Nie udalo sie ustalic grupy systemowej usera 'caddy' (id -gn caddy) - czy Caddy jest zainstalowany?"
 
-BLOWFISH_SECRET="$(openssl rand -base64 32 | tr -d '\n')"
+# phpMyAdmin chce blowfish_secret dlugosci DOKLADNIE 32 bajtow/znakow -
+# potwierdzone na zywym serwerze (2026-08-09): "openssl rand -base64 32"
+# koduje 32 SUROWE bajty do stringa base64 z paddingiem (44 znaki), co
+# phpMyAdmin zglasza jako "cookie encryption key ... longer than
+# necessary". 24 surowe bajty kodujemy do dokladnie 32 znakow base64 (24
+# jest podzielne przez 3, wiec bez paddingu '=').
+BLOWFISH_SECRET="$(openssl rand -base64 24 | tr -d '\n')"
 cat > "${DOCROOT}/config.inc.php" <<PHPCONF
 <?php
 declare(strict_types=1);
