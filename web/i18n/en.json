@@ -229,7 +229,7 @@
   "system.cpu_detail": "{model} · {cores} cores",
   "system.ram": "RAM",
   "system.swap": "Swap",
-  "system.reboot_button": "Restart system",
+  "system.reboot_button": "Reboot Now",
   "system.confirm_reboot": "WARNING: this will immediately reboot the ENTIRE server (not just the panel). Useful e.g. if you lose SSH access. The server should come back online shortly. Really reboot?",
   "system.rebooting": "Sending reboot command...",
   "system.reboot_initiated": "Reboot initiated - the server should come back online shortly.",

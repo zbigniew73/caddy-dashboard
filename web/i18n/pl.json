@@ -229,7 +229,7 @@
   "system.cpu_detail": "{model} · {cores} rdzeni",
   "system.ram": "RAM",
   "system.swap": "Swap",
-  "system.reboot_button": "Restart systemu",
+  "system.reboot_button": "Reboot Now",
   "system.confirm_reboot": "UWAGA: to natychmiast zrestartuje CAŁY serwer (nie tylko panel). Przydatne np. gdy stracisz połączenie SSH. Serwer wróci online po chwili. Na pewno zrestartować?",
   "system.rebooting": "Wysyłam polecenie restartu...",
   "system.reboot_initiated": "Restart zainicjowany - serwer powinien wrócić online za chwilę.",
