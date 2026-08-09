@@ -18,6 +18,7 @@ import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPos
 import { getLocalRepoVersion as getPostgresqlLocalRepoVersion, installPostgresql } from '../services/postgresql.js';
 import { getRamRecommendation as getPostgresqlRamRecommendation, applyPerformanceConfig as applyPostgresqlPerformanceConfig } from '../services/postgresqlPerformance.js';
 import { installMongodb, checkAuthStatus as checkMongodbAuthStatus } from '../services/mongodb.js';
+import { getTestDbStatus as getMongodbTestDbStatus, createTestDb as createMongodbTestDb, dropTestDb as dropMongodbTestDb } from '../services/mongodbTestDb.js';
 import { getRamRecommendation as getMongodbRamRecommendation, applyPerformanceConfig as applyMongodbPerformanceConfig } from '../services/mongodbPerformance.js';
 import { getLocalRepoVersion as getRedisLocalRepoVersion, installRedis, checkAuthStatus as checkRedisAuthStatus } from '../services/redis.js';
 import { getRamRecommendation as getRedisRamRecommendation, applyPerformanceConfig as applyRedisPerformanceConfig } from '../services/redisPerformance.js';
@@ -575,6 +576,30 @@ router.post('/mongodb/install', async (req, res) => {
 
 router.get('/mongodb/auth-status', async (req, res) => {
   res.json(await checkMongodbAuthStatus());
+});
+
+router.get('/mongodb/test-db', async (req, res) => {
+  try {
+    res.json(await getMongodbTestDbStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mongodb/test-db/create', async (req, res) => {
+  try {
+    res.json(await createMongodbTestDb());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mongodb/test-db/drop', async (req, res) => {
+  try {
+    res.json(await dropMongodbTestDb());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 router.get('/mongodb/ram-info', (req, res) => {

@@ -2054,11 +2054,90 @@ function wireMongodbPerformanceSection() {
   };
 }
 
+async function renderMongodbTestDbSection() {
+  let status;
+  try {
+    status = await api('GET', '/mongodb/test-db');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
+        <h3 style="margin:0;font-size:15px;">${t('testdb.title')}</h3>
+        <span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('testdb.exists') : t('testdb.missing')}</span>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('testdb.description')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('testdb.db_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.user_label')}</dt><dd style="font-family:monospace;">baza123</dd>
+        <dt>${t('testdb.password_label')}</dt><dd style="font-family:monospace;">pass!123</dd>
+      </dl>
+      <button type="button" id="mongodb-testdb-create-btn" ${status.exists ? 'disabled' : ''}>${t('testdb.create_button')}</button>
+      <button type="button" class="danger" id="mongodb-testdb-drop-btn" ${status.exists ? '' : 'disabled'}>${t('testdb.drop_button')}</button>
+      <div class="action-msg" id="mongodb-testdb-msg"></div>
+    </div>
+  `;
+}
+
+function wireMongodbTestDbSection() {
+  const createBtn = document.getElementById('mongodb-testdb-create-btn');
+  const dropBtn = document.getElementById('mongodb-testdb-drop-btn');
+  if (!createBtn || !dropBtn) return;
+  const msgEl = document.getElementById('mongodb-testdb-msg');
+
+  async function refresh() {
+    const html = await renderMongodbTestDbSection();
+    const container = createBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = html;
+      applyTranslations();
+      wireMongodbTestDbSection();
+    }
+  }
+
+  createBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_create'))) return;
+    createBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mongodb/test-db/create');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      createBtn.disabled = false;
+    }
+  };
+
+  dropBtn.onclick = async () => {
+    if (!window.confirm(t('testdb.confirm_drop'))) return;
+    dropBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mongodb/test-db/drop');
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      dropBtn.disabled = false;
+    }
+  };
+}
+
 async function wrapMongodbExtras(serviceHtml) {
-  const perfHtml = await renderMongodbPerformanceSection();
+  const [perfHtml, testDbHtml] = await Promise.all([
+    renderMongodbPerformanceSection(),
+    renderMongodbTestDbSection()
+  ]);
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+        ${serviceHtml}
+        ${testDbHtml}
+      </div>
       <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
     </div>
   `;
@@ -2598,7 +2677,7 @@ function wireServiceActions(key) {
         if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
-        if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
+        if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }
         if (key === 'redis' && svc.found) wireRedisPerformanceSection();
         if (phpMatch && svc.found) {
           wirePhpSettingsSection(phpMatch[1]);
@@ -2640,7 +2719,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
     if (key === 'mariadb' && svc.found) { wireMariadbPerformanceSection(); wireMariadbTestDbSection(); }
     if (key === 'postgresql' && svc.found) { wirePostgresqlPerformanceSection(); wirePostgresqlTestDbSection(); }
-    if (key === 'mongodb' && svc.found) wireMongodbPerformanceSection();
+    if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }
     if (key === 'redis' && svc.found) wireRedisPerformanceSection();
     if (phpMatch && svc.found) {
       wirePhpSettingsSection(phpMatch[1]);
