@@ -1918,10 +1918,13 @@ function withSuggested(hintKey, value) {
 
 async function renderPhpSettingsSection(id) {
   let current = {};
+  let readFailed = false;
   try {
     current = await api('GET', `/php/${id}/settings`);
-  } catch {
+  } catch (e) {
     current = {};
+    readFailed = true;
+    console.error('GET /php/' + id + '/settings failed:', e.message);
   }
 
   let detectedTz = 'UTC';
@@ -1943,10 +1946,14 @@ async function renderPhpSettingsSection(id) {
   const maxInputVars = current.maxInputVars ?? 5000;
   const maxFileUploads = current.maxFileUploads ?? 50;
   const exposePhp = current.exposePhp ?? false;
+  const readFailedBanner = readFailed
+    ? `<div class="action-msg error" style="margin-bottom:14px;">${t('phpsettings.read_failed')}</div>`
+    : '';
 
   return `
     <div class="system-info-card">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('phpsettings.title')}</h3>
+      ${readFailedBanner}
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpsettings.description')}</p>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpsettings.timezone_label')}</label>
@@ -2031,10 +2038,13 @@ function wirePhpSettingsSection(id) {
 
 async function renderPhpOpcacheSection(id) {
   let current = {};
+  let readFailed = false;
   try {
     current = await api('GET', `/php/${id}/opcache`);
-  } catch {
+  } catch (e) {
     current = {};
+    readFailed = true;
+    console.error('GET /php/' + id + '/opcache failed:', e.message);
   }
 
   const memoryConsumptionMb = current.memoryConsumptionMb ?? 256;
@@ -2042,10 +2052,14 @@ async function renderPhpOpcacheSection(id) {
   const maxAcceleratedFiles = current.maxAcceleratedFiles ?? 50000;
   const revalidateFreqSec = current.revalidateFreqSec ?? 2;
   const validateTimestamps = current.validateTimestamps ?? true;
+  const readFailedBanner = readFailed
+    ? `<div class="action-msg error" style="margin-bottom:14px;">${t('phpopcache.read_failed')}</div>`
+    : '';
 
   return `
     <div class="system-info-card">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('phpopcache.title')}</h3>
+      ${readFailedBanner}
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('phpopcache.description')}</p>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.memory_label')}</label>

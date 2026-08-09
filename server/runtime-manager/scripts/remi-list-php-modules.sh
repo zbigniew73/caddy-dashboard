@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 #
 # Wypisuje WSZYSTKIE moduly PHP widoczne w repozytorium Remi dla danej
-# wersji (pakiety phpXX-php-*), nie jakas z gory ustalona liste - "wszystko
-# co widzi system", jak chcial user. Jeden wiersz na modul: "<sufiks
-# po phpXX-php-> installed" albo "... available".
+# wersji, nie jakas z gory ustalona liste - "wszystko co widzi system",
+# jak chcial user. Zapytanie o pakiety celowo szerokie - "php${VERSION}-*",
+# ten sam wzorzec co `dnf search php84-*` uruchomione recznie po SSH (user
+# tak to sprawdza, wiec panel ma widziec dokladnie to samo, nie wezszy
+# podzbior) - a nie samo "php${VERSION}-php-*". Filtrujemy pozniej do
+# faktycznych modulow (prefiks "phpXX-php-"), zeby odsiac pakiety
+# rusztowania SCL (np. php84-build/php84-runtime/php84-syspaths), ktore
+# nie sa rozszerzeniami do wlaczania/wylaczania. Jeden wiersz na modul:
+# "<sufiks po phpXX-php-> installed" albo "... available".
 #
 # Wyklucza fpm/cli/common celowo - to nie sa "moduly" do wlaczania/
 # wylaczania, tylko fundament samego runtime PHP (usuniecie ktoregokolwiek
@@ -23,7 +29,7 @@ VERSION="${1:-}"
 PREFIX="php${VERSION}-php-"
 PROTECTED=" fpm cli common "
 
-dnf -q repoquery --qf '%{name}' "php${VERSION}-php-*" 2>/dev/null | sort -u | while read -r pkg; do
+dnf -q repoquery --qf '%{name}' "php${VERSION}-*" 2>/dev/null | sort -u | while read -r pkg; do
   [[ "$pkg" == "${PREFIX}"* ]] || continue
   suffix="${pkg#"$PREFIX"}"
   [[ "$PROTECTED" == *" ${suffix} "* ]] && continue

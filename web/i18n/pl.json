@@ -194,6 +194,7 @@
   "phpsettings.suggested_value": "Proponowane: {value}.",
   "phpsettings.expose_php_label": "Pokazuj wersję PHP w nagłówkach (expose_php)",
   "phpsettings.expose_php_hint": "Ujawnianie wersji PHP ułatwia atakującym dobór exploitów pod konkretną wersję - zalecane wyłączone.",
+  "phpsettings.read_failed": "Nie udało się odczytać bieżącej konfiguracji PHP - poniżej pokazane są tylko wartości proponowane, nie rzeczywisty stan.",
 
   "phpopcache.title": "OPcache",
   "phpopcache.description": "Cache skompilowanego bajtkodu PHP - kluczowe dla wydajności. Zmiany przeładują PHP-FPM.",
@@ -207,6 +208,7 @@
   "phpopcache.revalidate_freq_hint": "Co ile sekund OPcache sprawdza czy plik na dysku się zmienił",
   "phpopcache.validate_timestamps_label": "Sprawdzaj zmiany plików (validate_timestamps)",
   "phpopcache.validate_timestamps_hint": "Wyłączenie daje najwyższą wydajność, ale zmiany w kodzie wymagają wtedy ręcznego przeładowania PHP-FPM",
+  "phpopcache.read_failed": "Nie udało się odczytać bieżącej konfiguracji OPcache - poniżej pokazane są tylko wartości proponowane, nie rzeczywisty stan.",
   "phpopcache.save_button": "Zapisz i przeładuj PHP-FPM",
   "phpopcache.saving": "Zapisuję i przeładowuję PHP-FPM...",
   "phpopcache.save_success": "Zapisano, PHP-FPM przeładowany.",

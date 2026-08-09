@@ -194,6 +194,7 @@
   "phpsettings.suggested_value": "Suggested: {value}.",
   "phpsettings.expose_php_label": "Show PHP version in headers (expose_php)",
   "phpsettings.expose_php_hint": "Revealing the PHP version makes it easier for attackers to target exploits at that specific version - recommended off.",
+  "phpsettings.read_failed": "Couldn't read the current PHP configuration - the values below are only proposed defaults, not the real state.",
 
   "phpopcache.title": "OPcache",
   "phpopcache.description": "PHP compiled-bytecode cache - key for performance. Changes reload PHP-FPM.",
@@ -207,6 +208,7 @@
   "phpopcache.revalidate_freq_hint": "How often OPcache checks whether a file on disk has changed",
   "phpopcache.validate_timestamps_label": "Check for file changes (validate_timestamps)",
   "phpopcache.validate_timestamps_hint": "Disabling gives the highest performance, but code changes then require a manual PHP-FPM reload",
+  "phpopcache.read_failed": "Couldn't read the current OPcache configuration - the values below are only proposed defaults, not the real state.",
   "phpopcache.save_button": "Save and reload PHP-FPM",
   "phpopcache.saving": "Saving and reloading PHP-FPM...",
   "phpopcache.save_success": "Saved, PHP-FPM reloaded.",
