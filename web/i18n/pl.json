@@ -398,6 +398,7 @@
   "packages.confirm_delete": "Usunąć pakiet \"{name}\"?",
   "packages.column_name": "Nazwa",
   "packages.column_disk": "Dysk",
+  "packages.column_quota_mode": "Mechanizm quota",
   "packages.column_domains": "Domeny",
   "packages.column_databases": "Bazy danych",
   "packages.column_php": "RAM/proces PHP",
@@ -433,5 +434,8 @@
   "packages.quota_help_xfs_title": "XFS (domyślny na AlmaLinux/Rocky) - project quota, per katalog, bez osobnego UID na stronę:",
   "packages.quota_help_xfs_example": "1. Dodaj prjquota w /etc/fstab (kolumna z opcjami montowania):\n   UUID=xxxx-xxxx  /  xfs  defaults,prjquota  0 0\n\n2. Zamontuj ponownie OD ZERA (XFS wlacza quota tylko przy (za)\n   montowaniu, nigdy przez remount - to twarde ograniczenie XFS):\n   - jesli to osobna partycja (np. /home): umount /home && mount /home\n   - jesli to / (root): potrzebny restart calego serwera (root nie\n     da sie odmontowac na zywo)\n\n3. Zdefiniuj projekt dla katalogu strony w /etc/projects:\n   1:/home/klient1/public_html\n\n4. Nazwij projekt w /etc/projid:\n   klient1:1\n\n5. Zainicjuj projekt:\n   xfs_quota -x -c 'project -s klient1' /\n\n6. Ustaw limit (tu ok. 1 GB miekki / 1.1 GB twardy):\n   xfs_quota -x -c 'limit -p bsoft=1g bhard=1.1g klient1' /\n\n7. Sprawdz:\n   xfs_quota -x -c 'report -p' /",
   "packages.quota_help_ext4_title": "ext4 - klasyczna quota per użytkownik systemowy:",
-  "packages.quota_help_ext4_example": "1. Dodaj usrquota,grpquota w /etc/fstab (kolumna z opcjami montowania):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Przemontuj:\n   mount -o remount /\n\n3. Zbuduj baze quota:\n   quotacheck -cug /\n\n4. Wlacz quote:\n   quotaon /\n\n5. Ustaw limit dla usera (wartosci w KB - tu ok. 1 GB miekki / 1.1 GB twardy):\n   setquota -u nazwa_usera 1048576 1153434 0 0 /\n\n6. Sprawdz:\n   repquota /"
+  "packages.quota_help_ext4_example": "1. Dodaj usrquota,grpquota w /etc/fstab (kolumna z opcjami montowania):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Przemontuj:\n   mount -o remount /\n\n3. Zbuduj baze quota:\n   quotacheck -cug /\n\n4. Wlacz quote:\n   quotaon /\n\n5. Ustaw limit dla usera (wartosci w KB - tu ok. 1 GB miekki / 1.1 GB twardy):\n   setquota -u nazwa_usera 1048576 1153434 0 0 /\n\n6. Sprawdz:\n   repquota /",
+  "packages.field_disk_fs": "Mechanizm limitu dysku (globalny dla VPS)",
+  "packages.field_disk_fs_hint": "Po jednorazowym reczym setupie z przykladu powyzej (fstab + quotacheck/quotaon dla ext4, albo fstab + projekt dla XFS) panel bedzie mogl automatycznie egzekwowac diskQuotaMb pakietu przez ten mechanizm dla kazdego nowego konta.",
+  "packages.disk_fs_none": "Brak"
 }

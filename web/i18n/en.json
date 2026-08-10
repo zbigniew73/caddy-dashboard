@@ -398,6 +398,7 @@
   "packages.confirm_delete": "Remove package \"{name}\"?",
   "packages.column_name": "Name",
   "packages.column_disk": "Disk",
+  "packages.column_quota_mode": "Quota mechanism",
   "packages.column_domains": "Domains",
   "packages.column_databases": "Databases",
   "packages.column_php": "RAM/PHP process",
@@ -433,5 +434,8 @@
   "packages.quota_help_xfs_title": "XFS (default on AlmaLinux/Rocky) - project quota, per directory, no separate UID per site needed:",
   "packages.quota_help_xfs_example": "1. Add prjquota in /etc/fstab (mount options column):\n   UUID=xxxx-xxxx  /  xfs  defaults,prjquota  0 0\n\n2. Mount it fresh (XFS only turns quota accounting on at mount\n   time, never via remount - this is a hard XFS limitation):\n   - separate partition (e.g. /home): umount /home && mount /home\n   - root (/): needs a full server reboot (root can't be\n     unmounted while running)\n\n3. Define a project for the site directory in /etc/projects:\n   1:/home/client1/public_html\n\n4. Name the project in /etc/projid:\n   client1:1\n\n5. Initialize the project:\n   xfs_quota -x -c 'project -s client1' /\n\n6. Set a limit (here roughly 1 GB soft / 1.1 GB hard):\n   xfs_quota -x -c 'limit -p bsoft=1g bhard=1.1g client1' /\n\n7. Check:\n   xfs_quota -x -c 'report -p' /",
   "packages.quota_help_ext4_title": "ext4 - classic quota per system user:",
-  "packages.quota_help_ext4_example": "1. Add usrquota,grpquota in /etc/fstab (mount options column):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Remount:\n   mount -o remount /\n\n3. Build the quota database:\n   quotacheck -cug /\n\n4. Turn quota on:\n   quotaon /\n\n5. Set a limit for a user (values in KB - here roughly 1 GB soft / 1.1 GB hard):\n   setquota -u username 1048576 1153434 0 0 /\n\n6. Check:\n   repquota /"
+  "packages.quota_help_ext4_example": "1. Add usrquota,grpquota in /etc/fstab (mount options column):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Remount:\n   mount -o remount /\n\n3. Build the quota database:\n   quotacheck -cug /\n\n4. Turn quota on:\n   quotaon /\n\n5. Set a limit for a user (values in KB - here roughly 1 GB soft / 1.1 GB hard):\n   setquota -u username 1048576 1153434 0 0 /\n\n6. Check:\n   repquota /",
+  "packages.field_disk_fs": "Disk quota mechanism (global for the VPS)",
+  "packages.field_disk_fs_hint": "After the one-time manual setup from the example above (fstab + quotacheck/quotaon for ext4, or fstab + project setup for XFS), the panel will be able to automatically enforce a package's diskQuotaMb through this mechanism for every new account.",
+  "packages.disk_fs_none": "None"
 }

@@ -1643,7 +1643,7 @@ async function showPackageForm(pkg, cpuCount) {
 }
 
 function renderSystemResourcesHtml(resources) {
-  const { reservePercent, slice, quota } = resources;
+  const { reservePercent, slice, quota, diskFsType, diskMountPoint } = resources;
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('packages.resources_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('packages.resources_description')}</p>
@@ -1672,6 +1672,19 @@ function renderSystemResourcesHtml(resources) {
             ? `<span class="status-badge active">${t('packages.quota_installed')}</span>`
             : `<span class="status-badge inactive">${t('packages.quota_not_installed')}</span><button type="button" id="quota-install-btn">${t('packages.quota_install_button')}</button>`}
         </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_disk_fs')}</label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <select id="sysres-fstype">
+            <option value="none" ${diskFsType === 'none' ? 'selected' : ''}>${t('packages.disk_fs_none')}</option>
+            <option value="ext4" ${diskFsType === 'ext4' ? 'selected' : ''}>ext4</option>
+            <option value="xfs" ${diskFsType === 'xfs' ? 'selected' : ''}>XFS</option>
+          </select>
+          <input type="text" id="sysres-mountpoint" value="${escapeHtml(diskMountPoint)}" style="width:110px;" placeholder="/home">
+          <button type="button" id="sysres-disk-apply-btn">${t('packages.apply_button')}</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;">${t('packages.field_disk_fs_hint')}</div>
       </div>
     </div>
     <div style="margin-top:16px;">
@@ -1739,6 +1752,24 @@ function wireSystemResourcesSection(resources, content) {
       }
     };
   }
+
+  const diskFsApplyBtn = document.getElementById('sysres-disk-apply-btn');
+  diskFsApplyBtn.onclick = async () => {
+    diskFsApplyBtn.disabled = true;
+    msgEl.textContent = t('packages.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('PUT', '/quota/settings', {
+        diskFsType: document.getElementById('sysres-fstype').value,
+        diskMountPoint: document.getElementById('sysres-mountpoint').value
+      });
+      await renderPackagesTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      diskFsApplyBtn.disabled = false;
+    }
+  };
 }
 
 async function renderPackagesTab(content) {
@@ -1749,10 +1780,12 @@ async function renderPackagesTab(content) {
       api('GET', '/system-resources')
     ]);
     const cpuCount = resources.slice.cpuCount;
+    const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : t('packages.disk_fs_none'));
     const rows = packages.map((p) => `
       <tr>
         <td>${escapeHtml(p.name)}</td>
         <td>${p.diskQuotaMb} MB</td>
+        <td>${diskModeLabel(p.diskQuotaMode)}</td>
         <td>${p.maxDomains}</td>
         <td>${p.maxDatabases}</td>
         <td>${p.phpMemoryLimitMb ? `${p.phpMemoryLimitMb} MB` : '-'}</td>
@@ -1781,6 +1814,7 @@ async function renderPackagesTab(content) {
                 <tr>
                   <th>${t('packages.column_name')}</th>
                   <th>${t('packages.column_disk')}</th>
+                  <th>${t('packages.column_quota_mode')}</th>
                   <th>${t('packages.column_domains')}</th>
                   <th>${t('packages.column_databases')}</th>
                   <th>${t('packages.column_php')}</th>

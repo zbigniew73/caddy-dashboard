@@ -11,7 +11,10 @@ import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
 import { isGateEnabled as isPhpmyadminGateEnabled, setGateEnabled as setPhpmyadminGateEnabled } from '../services/phpmyadminGate.js';
 import { isGateEnabled as isAdminerGateEnabled, setGateEnabled as setAdminerGateEnabled } from '../services/adminerGate.js';
-import { listPackages, createPackage, updatePackage, deletePackage, getSystemReservePercent, setSystemReservePercent } from '../services/hostingPackages.js';
+import {
+  listPackages, createPackage, updatePackage, deletePackage,
+  getSystemReservePercent, setSystemReservePercent, getDiskSettings, setDiskSettings
+} from '../services/hostingPackages.js';
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
 import { getQuotaStatus, installQuotaPackage } from '../services/diskQuota.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
@@ -948,7 +951,7 @@ router.delete('/packages/:id', (req, res) => {
 router.get('/system-resources', async (req, res) => {
   try {
     const [slice, quota] = await Promise.all([getSliceStatus(), getQuotaStatus()]);
-    res.json({ reservePercent: getSystemReservePercent(), slice, quota });
+    res.json({ reservePercent: getSystemReservePercent(), slice, quota, ...getDiskSettings() });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -967,6 +970,19 @@ router.put('/system-resources', async (req, res) => {
 router.post('/quota/install', async (req, res) => {
   try {
     res.json(await installQuotaPackage());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Wybor mechanizmu egzekwowania limitu dysku (patrz getDiskSettings w
+// hostingPackages.js) - GLOBALNY dla calego VPS, bo mechanizm (ext4 quota
+// vs XFS project quota) zalezy od filesystemu, nie od pakietu. Pakiety
+// (GET /packages) wystawiaja to jako diskQuotaMode, wyliczone z tego
+// ustawienia - informacyjnie, admin go tam nie wybiera osobno per pakiet.
+router.put('/quota/settings', (req, res) => {
+  try {
+    res.json(setDiskSettings(req.body || {}));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

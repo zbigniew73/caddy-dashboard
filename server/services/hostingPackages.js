@@ -10,6 +10,9 @@ const DATA_PATH = path.join(DATA_DIR, 'hosting-packages.json');
 const MAX_DESCRIPTION_LEN = 500;
 const ALLOWED_PHP_MEMORY_LIMITS_MB = [512, 1024, 2048, 4096];
 const DEFAULT_SYSTEM_RESERVE_PERCENT = 10;
+const ALLOWED_DISK_FS_TYPES = ['none', 'ext4', 'xfs'];
+const DEFAULT_DISK_FS_TYPE = 'none';
+const DEFAULT_DISK_MOUNT_POINT = '/home';
 
 function loadData() {
   try {
@@ -18,10 +21,19 @@ function loadData() {
       packages: Array.isArray(parsed.packages) ? parsed.packages : [],
       systemReservePercent: Number.isInteger(parsed.systemReservePercent)
         ? parsed.systemReservePercent
-        : DEFAULT_SYSTEM_RESERVE_PERCENT
+        : DEFAULT_SYSTEM_RESERVE_PERCENT,
+      diskFsType: ALLOWED_DISK_FS_TYPES.includes(parsed.diskFsType) ? parsed.diskFsType : DEFAULT_DISK_FS_TYPE,
+      diskMountPoint: typeof parsed.diskMountPoint === 'string' && parsed.diskMountPoint.startsWith('/')
+        ? parsed.diskMountPoint
+        : DEFAULT_DISK_MOUNT_POINT
     };
   } catch {
-    return { packages: [], systemReservePercent: DEFAULT_SYSTEM_RESERVE_PERCENT };
+    return {
+      packages: [],
+      systemReservePercent: DEFAULT_SYSTEM_RESERVE_PERCENT,
+      diskFsType: DEFAULT_DISK_FS_TYPE,
+      diskMountPoint: DEFAULT_DISK_MOUNT_POINT
+    };
   }
 }
 
@@ -76,16 +88,21 @@ function normalizeInput(body) {
   return { name, diskQuotaMb, maxDomains, maxDatabases, phpMemoryLimitMb, cpuPercent, description };
 }
 
-function withComputedCpu(pkg) {
+function withComputed(pkg, diskFsType) {
   // Pakiety zapisane przed dodaniem cpuPercent (starsze dane na VPS) nie
   // maja tego pola - domyslnie 100% jednego rdzenia, zeby lista sie nie
   // wywalala na NaN, dopoki admin nie zapisze pakietu ponownie.
   const cpuPercent = Number.isInteger(pkg.cpuPercent) ? pkg.cpuPercent : 100;
-  return { ...pkg, cpuPercent, cpuTotalPercent: cpuPercent * cpuCount() };
+  // diskQuotaMode jest wyliczany z GLOBALNEGO ustawienia filesystemu
+  // (patrz getDiskSettings/setDiskSettings), nie jest polem pakietu -
+  // wszystkie pakiety na danym VPS egzekwuja limit dysku tym samym
+  // mechanizmem, bo mechanizm zalezy od filesystemu, nie od planu.
+  return { ...pkg, cpuPercent, cpuTotalPercent: cpuPercent * cpuCount(), diskQuotaMode: diskFsType };
 }
 
 function listPackages() {
-  return loadData().packages.map(withComputedCpu);
+  const data = loadData();
+  return data.packages.map((p) => withComputed(p, data.diskFsType));
 }
 
 function createPackage(body) {
@@ -94,7 +111,7 @@ function createPackage(body) {
   const pkg = { id: randomUUID(), ...fields, createdAt: new Date().toISOString() };
   data.packages.push(pkg);
   saveData(data);
-  return withComputedCpu(pkg);
+  return withComputed(pkg, data.diskFsType);
 }
 
 function updatePackage(id, body) {
@@ -106,7 +123,7 @@ function updatePackage(id, body) {
   }
   data.packages[idx] = { ...data.packages[idx], ...fields };
   saveData(data);
-  return withComputedCpu(data.packages[idx]);
+  return withComputed(data.packages[idx], data.diskFsType);
 }
 
 function deletePackage(id) {
@@ -129,7 +146,31 @@ function setSystemReservePercent(percent) {
   saveData(data);
 }
 
+function getDiskSettings() {
+  const { diskFsType, diskMountPoint } = loadData();
+  return { diskFsType, diskMountPoint };
+}
+
+function setDiskSettings({ diskFsType, diskMountPoint }) {
+  if (!ALLOWED_DISK_FS_TYPES.includes(diskFsType)) {
+    throw Object.assign(
+      new Error(`Nieprawidlowy typ filesystemu (dozwolone: ${ALLOWED_DISK_FS_TYPES.join(', ')}).`),
+      { status: 400 }
+    );
+  }
+  const mountPoint = String(diskMountPoint || '').trim();
+  if (!mountPoint.startsWith('/')) {
+    throw Object.assign(new Error('Punkt montowania musi byc absolutna sciezka (zaczynac sie od /).'), { status: 400 });
+  }
+  const data = loadData();
+  data.diskFsType = diskFsType;
+  data.diskMountPoint = mountPoint;
+  saveData(data);
+  return { diskFsType, diskMountPoint: mountPoint };
+}
+
 export {
   listPackages, createPackage, updatePackage, deletePackage,
-  getSystemReservePercent, setSystemReservePercent, cpuCount
+  getSystemReservePercent, setSystemReservePercent,
+  getDiskSettings, setDiskSettings, cpuCount
 };
