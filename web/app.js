@@ -1538,11 +1538,20 @@ function serviceCard(svc) {
 
 const PACKAGE_PHP_MEMORY_OPTIONS_MB = [512, 1024, 2048, 4096];
 
-async function renderPackageFormHtml(pkg, cpuCount) {
+async function renderPackageFormHtml(pkg, cpuCount, resources) {
   const currentPhpMemory = pkg?.phpMemoryLimitMb ?? 1024;
   const phpMemoryField = `<select id="pkg-form-php">${PACKAGE_PHP_MEMORY_OPTIONS_MB.map((mb) =>
     `<option value="${mb}" ${currentPhpMemory === mb ? 'selected' : ''}>${mb} MB</option>`
   ).join('')}</select>`;
+
+  const diskFsType = resources?.diskFsType ?? 'none';
+  const diskModeLabel = diskFsType === 'ext4' ? 'ext4' : diskFsType === 'xfs' ? 'XFS' : t('packages.disk_fs_none');
+  const diskQuotaOffBadge = diskFsType === 'none' ? `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>` : '';
+  const diskQuotaHint = diskFsType === 'none'
+    ? t('packages.pkg_form_quota_none_hint')
+    : resources?.diskQuotaVerified
+      ? t('packages.pkg_form_quota_active_hint', { mode: diskModeLabel, mount: resources.diskMountPoint })
+      : t('packages.pkg_form_quota_unverified_hint', { mode: diskModeLabel, mount: resources.diskMountPoint });
 
   return `
     <div class="system-info-card" id="pkg-form-card" style="margin-top:16px;max-width:480px;">
@@ -1553,8 +1562,9 @@ async function renderPackageFormHtml(pkg, cpuCount) {
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_name')}</label>
       <input type="text" id="pkg-form-name" value="${escapeHtml(pkg?.name || '')}" style="width:100%;margin-bottom:10px;">
 
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_disk')}</label>
-      <input type="number" id="pkg-form-disk" min="0" value="${pkg?.diskQuotaMb ?? 1024}" style="width:100%;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_disk')} ${diskQuotaOffBadge}</label>
+      <input type="number" id="pkg-form-disk" min="0" value="${pkg?.diskQuotaMb ?? 1024}" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${diskQuotaHint}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_domains')}</label>
       <input type="number" id="pkg-form-domains" min="0" value="${pkg?.maxDomains ?? 1}" style="width:100%;margin-bottom:10px;">
@@ -1633,17 +1643,22 @@ function wirePackageForm() {
   };
 }
 
-async function showPackageForm(pkg, cpuCount) {
+async function showPackageForm(pkg, cpuCount, resources) {
   const existing = document.getElementById('pkg-form-card');
   if (existing) existing.remove();
   const container = document.getElementById('packages-form-container');
-  container.innerHTML = await renderPackageFormHtml(pkg, cpuCount);
+  container.innerHTML = await renderPackageFormHtml(pkg, cpuCount, resources);
   applyTranslations();
   wirePackageForm();
 }
 
 function renderSystemResourcesHtml(resources) {
-  const { reservePercent, slice, quota, diskFsType, diskMountPoint } = resources;
+  const { reservePercent, slice, quota, diskFsType, diskMountPoint, diskQuotaVerified, diskQuotaVerifiedMessage } = resources;
+  const verifyBadge = diskFsType === 'none'
+    ? `<span style="font-size:13px;color:var(--muted);">${t('packages.quota_verify_na')}</span>`
+    : diskQuotaVerified
+      ? `<span class="status-badge active">${t('packages.quota_verify_ok')}</span>`
+      : `<span class="status-badge inactive">${t('packages.quota_verify_missing')}</span>`;
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('packages.resources_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('packages.resources_description')}</p>
@@ -1681,10 +1696,15 @@ function renderSystemResourcesHtml(resources) {
             <option value="ext4" ${diskFsType === 'ext4' ? 'selected' : ''}>ext4</option>
             <option value="xfs" ${diskFsType === 'xfs' ? 'selected' : ''}>XFS</option>
           </select>
-          <input type="text" id="sysres-mountpoint" value="${escapeHtml(diskMountPoint)}" style="width:110px;" placeholder="/home">
+          <select id="sysres-mountpoint">
+            <option value="/" ${diskMountPoint === '/' ? 'selected' : ''}>/</option>
+            <option value="/home" ${diskMountPoint === '/home' ? 'selected' : ''}>/home</option>
+          </select>
           <button type="button" id="sysres-disk-apply-btn">${t('packages.apply_button')}</button>
         </div>
         <div style="font-size:12px;color:var(--muted);margin-top:6px;">${t('packages.field_disk_fs_hint')}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${verifyBadge}</div>
+        ${diskQuotaVerifiedMessage ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;">${escapeHtml(diskQuotaVerifiedMessage)}</div>` : ''}
       </div>
     </div>
     <div style="margin-top:16px;">
@@ -1763,6 +1783,14 @@ function wireSystemResourcesSection(resources, content) {
         diskFsType: document.getElementById('sysres-fstype').value,
         diskMountPoint: document.getElementById('sysres-mountpoint').value
       });
+      msgEl.textContent = t('packages.quota_verifying');
+      try {
+        await api('POST', '/quota/verify');
+      } catch {
+        // Blad juz zapisany po stronie serwera (setDiskQuotaVerified) -
+        // odswiezenie ponizej pokaze czerwony status + tresc bledu w
+        // trwalym baneriku, nie tylko w znikajacym komunikacie.
+      }
       await renderPackagesTab(content);
     } catch (e) {
       msgEl.textContent = e.message;
@@ -1800,6 +1828,7 @@ function renderAccountsHtml(accounts, packages) {
               <th>${t('accounts.column_username')}</th>
               <th>${t('accounts.column_package')}</th>
               <th>${t('accounts.column_homedir')}</th>
+              <th>${t('accounts.column_quota')}</th>
               <th>${t('accounts.column_created')}</th>
               <th></th>
             </tr>
@@ -1810,6 +1839,7 @@ function renderAccountsHtml(accounts, packages) {
                 <td>${escapeHtml(a.username)}</td>
                 <td>${escapeHtml(a.packageName || '-')}</td>
                 <td>${escapeHtml(a.homeDir)}</td>
+                <td>${a.diskFsType === 'ext4' ? 'ext4' : a.diskFsType === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`}</td>
                 <td>${escapeHtml(new Date(a.createdAt).toLocaleString())}</td>
                 <td><button type="button" class="danger" data-delete-account="${escapeHtml(a.id)}">${t('accounts.delete_button')}</button></td>
               </tr>
@@ -1868,7 +1898,7 @@ async function renderPackagesTab(content) {
       api('GET', '/accounts')
     ]);
     const cpuCount = resources.slice.cpuCount;
-    const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : t('packages.disk_fs_none'));
+    const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`);
     const rows = packages.map((p) => `
       <tr>
         <td>${escapeHtml(p.name)}</td>
@@ -1927,12 +1957,12 @@ async function renderPackagesTab(content) {
     wireAccountsSection(content);
 
     const addBtn = document.getElementById('packages-add-btn');
-    addBtn.onclick = () => showPackageForm(null, cpuCount);
+    addBtn.onclick = () => showPackageForm(null, cpuCount, resources);
 
     document.querySelectorAll('[data-edit]').forEach((btn) => {
       btn.onclick = () => {
         const pkg = packages.find((p) => p.id === btn.dataset.edit);
-        showPackageForm(pkg, cpuCount);
+        showPackageForm(pkg, cpuCount, resources);
       };
     });
 

@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.16.7"
+APP_VERSION="1.20.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -94,11 +94,12 @@ declare -A MSG_PL=(
   [cdadmin_exists]="Uzytkownik systemowy '%s' juz istnieje."
   [cdadmin_setup_prompt]="Skonfigurowac '%s' jako admina panelu (grupy: %s, usluga systemd zamiast root)?"
   [cdadmin_groups_added]="'%s' dodany do grup: %s (haslo bez zmian)."
+  [cdadmin_home_fixed]="'%s' - uzupelniono katalog domowy (%s) i wlaczono logowanie SSH (shell /bin/bash)."
   [cdadmin_skip_existing]="Pomijam '%s' - logowanie do panelu i usluga systemd zostana skonfigurowane jak dotychczas."
-  [cdadmin_create_prompt]="Uzytkownik '%s' nie istnieje - utworzyc go jako admina panelu (bez katalogu domowego, grupy: %s)?"
+  [cdadmin_create_prompt]="Uzytkownik '%s' nie istnieje - utworzyc go jako admina panelu (katalog domowy /home/%s, logowanie SSH, grupy: %s)?"
   [err_cdadmin_create]="Nie udalo sie utworzyc uzytkownika %s."
   [err_cdadmin_password]="Nie udalo sie ustawic hasla dla %s."
-  [cdadmin_created]="Utworzono '%s' (grupy: %s, bez katalogu domowego)."
+  [cdadmin_created]="Utworzono '%s' (grupy: %s, katalog domowy /home/%s, logowanie SSH wlaczone)."
   [cdadmin_password_saved]="Haslo zapisane w /root/.usercd (chmod 600, tylko root)."
   [cdadmin_create_skip]="Pomijam tworzenie '%s'."
   [firewalld_installing]="firewalld nie znaleziony - instaluje..."
@@ -189,11 +190,12 @@ declare -A MSG_EN=(
   [cdadmin_exists]="System user '%s' already exists."
   [cdadmin_setup_prompt]="Configure '%s' as the panel admin (groups: %s, systemd service instead of root)?"
   [cdadmin_groups_added]="'%s' added to groups: %s (password unchanged)."
+  [cdadmin_home_fixed]="'%s' - added home directory (%s) and enabled SSH login (shell /bin/bash)."
   [cdadmin_skip_existing]="Skipping '%s' - panel login and the systemd service will be configured as before."
-  [cdadmin_create_prompt]="User '%s' does not exist - create it as the panel admin (no home directory, groups: %s)?"
+  [cdadmin_create_prompt]="User '%s' does not exist - create it as the panel admin (home directory /home/%s, SSH login, groups: %s)?"
   [err_cdadmin_create]="Failed to create user %s."
   [err_cdadmin_password]="Failed to set the password for %s."
-  [cdadmin_created]="Created '%s' (groups: %s, no home directory)."
+  [cdadmin_created]="Created '%s' (groups: %s, home directory /home/%s, SSH login enabled)."
   [cdadmin_password_saved]="Password saved to /root/.usercd (chmod 600, root only)."
   [cdadmin_create_skip]="Skipping creation of '%s'."
   [firewalld_installing]="firewalld not found - installing..."
@@ -426,19 +428,33 @@ if id "$CD_ADMIN_USER" >/dev/null 2>&1; then
   if is_yes "$SETUP_CD_ADMIN"; then
     usermod -aG "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER"
     log "$(t cdadmin_groups_added "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")"
+
+    CD_ADMIN_HOME="/home/$CD_ADMIN_USER"
+    CURRENT_HOME="$(getent passwd "$CD_ADMIN_USER" | cut -d: -f6)"
+    CURRENT_SHELL="$(getent passwd "$CD_ADMIN_USER" | cut -d: -f7)"
+    if [ ! -d "$CURRENT_HOME" ] || [ "$CURRENT_SHELL" = "/sbin/nologin" ] || [ "$CURRENT_SHELL" = "/usr/sbin/nologin" ]; then
+      usermod -d "$CD_ADMIN_HOME" -m -s /bin/bash "$CD_ADMIN_USER" 2>/dev/null || true
+      if [ ! -d "$CD_ADMIN_HOME" ]; then
+        mkdir -p "$CD_ADMIN_HOME"
+        cp -r /etc/skel/. "$CD_ADMIN_HOME/" 2>/dev/null || true
+      fi
+      chown -R "$CD_ADMIN_USER":"$CD_ADMIN_USER" "$CD_ADMIN_HOME"
+      chmod 700 "$CD_ADMIN_HOME"
+      log "$(t cdadmin_home_fixed "$CD_ADMIN_USER" "$CD_ADMIN_HOME")"
+    fi
     CD_ADMIN_READY=1
   else
     log "$(t cdadmin_skip_existing "$CD_ADMIN_USER")"
   fi
 else
-  prompt CREATE_CD_ADMIN "$(t cdadmin_create_prompt "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")" "$YES_DEFAULT"
+  prompt CREATE_CD_ADMIN "$(t cdadmin_create_prompt "$CD_ADMIN_USER" "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")" "$YES_DEFAULT"
   if is_yes "$CREATE_CD_ADMIN"; then
-    useradd --no-create-home --shell /sbin/nologin --groups "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER" \
+    useradd -m --shell /bin/bash --groups "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER" \
       || die "$(t err_cdadmin_create "$CD_ADMIN_USER")"
     CD_ADMIN_PASSWORD="$(gen_password)"
     echo "${CD_ADMIN_USER}:${CD_ADMIN_PASSWORD}" | chpasswd || die "$(t err_cdadmin_password "$CD_ADMIN_USER")"
     ( umask 077; printf '%s:%s\n' "$CD_ADMIN_USER" "$CD_ADMIN_PASSWORD" > /root/.usercd )
-    log "$(t cdadmin_created "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS")"
+    log "$(t cdadmin_created "$CD_ADMIN_USER" "$CD_ADMIN_GROUPS" "$CD_ADMIN_USER")"
     log "$(t cdadmin_password_saved)"
     CD_ADMIN_READY=1
   else

@@ -37,6 +37,10 @@ if [ -z "$MOUNTPOINT" ] || [ ! -d "$MOUNTPOINT" ]; then
   echo "BLAD: nieprawidlowy punkt montowania: '${MOUNTPOINT}'" >&2
   exit 1
 fi
+if ! mountpoint -q "$MOUNTPOINT"; then
+  echo "BLAD: '${MOUNTPOINT}' nie jest osobnym punktem montowania filesystemu (to zwykly katalog na innym mouncie) - xfs project quota dziala tylko na realnym mouncie. Sprawdz: findmnt '${MOUNTPOINT}'. Jesli to katalog na filesystemie root, ustaw mountpoint na '/'." >&2
+  exit 1
+fi
 case "$HOMEDIR" in
   "$MOUNTPOINT"/*|"$MOUNTPOINT") ;;
   *) echo "BLAD: katalog domowy '${HOMEDIR}' nie lezy pod punktem montowania '${MOUNTPOINT}'." >&2; exit 1 ;;

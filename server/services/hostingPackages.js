@@ -11,6 +11,7 @@ const MAX_DESCRIPTION_LEN = 500;
 const ALLOWED_PHP_MEMORY_LIMITS_MB = [512, 1024, 2048, 4096];
 const DEFAULT_SYSTEM_RESERVE_PERCENT = 10;
 const ALLOWED_DISK_FS_TYPES = ['none', 'ext4', 'xfs'];
+const ALLOWED_DISK_MOUNT_POINTS = ['/', '/home'];
 const DEFAULT_DISK_FS_TYPE = 'none';
 const DEFAULT_DISK_MOUNT_POINT = '/home';
 
@@ -23,16 +24,20 @@ function loadData() {
         ? parsed.systemReservePercent
         : DEFAULT_SYSTEM_RESERVE_PERCENT,
       diskFsType: ALLOWED_DISK_FS_TYPES.includes(parsed.diskFsType) ? parsed.diskFsType : DEFAULT_DISK_FS_TYPE,
-      diskMountPoint: typeof parsed.diskMountPoint === 'string' && parsed.diskMountPoint.startsWith('/')
+      diskMountPoint: ALLOWED_DISK_MOUNT_POINTS.includes(parsed.diskMountPoint)
         ? parsed.diskMountPoint
-        : DEFAULT_DISK_MOUNT_POINT
+        : DEFAULT_DISK_MOUNT_POINT,
+      diskQuotaVerified: typeof parsed.diskQuotaVerified === 'boolean' ? parsed.diskQuotaVerified : false,
+      diskQuotaVerifiedMessage: typeof parsed.diskQuotaVerifiedMessage === 'string' ? parsed.diskQuotaVerifiedMessage : ''
     };
   } catch {
     return {
       packages: [],
       systemReservePercent: DEFAULT_SYSTEM_RESERVE_PERCENT,
       diskFsType: DEFAULT_DISK_FS_TYPE,
-      diskMountPoint: DEFAULT_DISK_MOUNT_POINT
+      diskMountPoint: DEFAULT_DISK_MOUNT_POINT,
+      diskQuotaVerified: false,
+      diskQuotaVerifiedMessage: ''
     };
   }
 }
@@ -147,10 +152,15 @@ function setSystemReservePercent(percent) {
 }
 
 function getDiskSettings() {
-  const { diskFsType, diskMountPoint } = loadData();
-  return { diskFsType, diskMountPoint };
+  const { diskFsType, diskMountPoint, diskQuotaVerified, diskQuotaVerifiedMessage } = loadData();
+  return { diskFsType, diskMountPoint, diskQuotaVerified, diskQuotaVerifiedMessage };
 }
 
+// Zmiana mechanizmu/punktu montowania ZAWSZE kasuje flage weryfikacji -
+// poprzednia weryfikacja dotyczyla innej kombinacji fstype+mountpoint i nie
+// jest juz miarodajna. Wyjatek: diskFsType "none" nie ma nic do
+// weryfikowania (konta powstaja bez egzekwowanego limitu), wiec ustawiamy
+// verified=true od razu, zeby nie blokowac tworzenia kont bez sensu.
 function setDiskSettings({ diskFsType, diskMountPoint }) {
   if (!ALLOWED_DISK_FS_TYPES.includes(diskFsType)) {
     throw Object.assign(
@@ -159,18 +169,37 @@ function setDiskSettings({ diskFsType, diskMountPoint }) {
     );
   }
   const mountPoint = String(diskMountPoint || '').trim();
-  if (!mountPoint.startsWith('/')) {
-    throw Object.assign(new Error('Punkt montowania musi byc absolutna sciezka (zaczynac sie od /).'), { status: 400 });
+  if (!ALLOWED_DISK_MOUNT_POINTS.includes(mountPoint)) {
+    throw Object.assign(
+      new Error(`Nieprawidlowy punkt montowania (dozwolone: ${ALLOWED_DISK_MOUNT_POINTS.join(', ')}).`),
+      { status: 400 }
+    );
   }
   const data = loadData();
   data.diskFsType = diskFsType;
   data.diskMountPoint = mountPoint;
+  data.diskQuotaVerified = diskFsType === 'none';
+  data.diskQuotaVerifiedMessage = '';
   saveData(data);
-  return { diskFsType, diskMountPoint: mountPoint };
+  return {
+    diskFsType, diskMountPoint: mountPoint,
+    diskQuotaVerified: data.diskQuotaVerified, diskQuotaVerifiedMessage: data.diskQuotaVerifiedMessage
+  };
+}
+
+// Wolane po realnym sprawdzeniu na filesystemie (patrz diskQuota.js
+// verifyQuotaMechanism + POST /quota/verify) - NIGDY nie zgadujemy, tylko
+// zapisujemy wynik faktycznie wykonanej komendy.
+function setDiskQuotaVerified(verified, message) {
+  const data = loadData();
+  data.diskQuotaVerified = !!verified;
+  data.diskQuotaVerifiedMessage = String(message || '');
+  saveData(data);
+  return { diskQuotaVerified: data.diskQuotaVerified, diskQuotaVerifiedMessage: data.diskQuotaVerifiedMessage };
 }
 
 export {
   listPackages, createPackage, updatePackage, deletePackage,
   getSystemReservePercent, setSystemReservePercent,
-  getDiskSettings, setDiskSettings, cpuCount
+  getDiskSettings, setDiskSettings, setDiskQuotaVerified, cpuCount
 };

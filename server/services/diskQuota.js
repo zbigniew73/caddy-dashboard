@@ -63,4 +63,14 @@ function applyXfsQuota(username, homeDir, softMb, hardMb, mountPoint) {
   return runQuotaScript('quota-xfs-set.sh', [username, homeDir, String(softMb), String(hardMb), mountPoint]);
 }
 
-export { getQuotaStatus, installQuotaPackage, applyExt4Quota, applyXfsQuota };
+// Realna weryfikacja na filesystemie (findmnt + xfs_quota state / quotaon
+// -p) - NIE zaklada niczego, tylko odczytuje biezacy stan. Wynik zapisuje
+// wolajacy (server/routes/api.js POST /quota/verify) przez
+// setDiskQuotaVerified w hostingPackages.js. Dopiero pozytywny wynik
+// odblokowuje tworzenie kont z egzekwowanym limitem (patrz
+// hostingAccounts.js createAccount).
+function verifyQuotaMechanism(diskFsType, diskMountPoint) {
+  return runQuotaScript('quota-verify.sh', [diskFsType, diskMountPoint]);
+}
+
+export { getQuotaStatus, installQuotaPackage, applyExt4Quota, applyXfsQuota, verifyQuotaMechanism };

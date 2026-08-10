@@ -32,6 +32,10 @@ if [ -z "$MOUNTPOINT" ] || [ ! -d "$MOUNTPOINT" ]; then
   echo "BLAD: nieprawidlowy punkt montowania: '${MOUNTPOINT}'" >&2
   exit 1
 fi
+if ! mountpoint -q "$MOUNTPOINT"; then
+  echo "BLAD: '${MOUNTPOINT}' nie jest osobnym punktem montowania filesystemu (to zwykly katalog na innym mouncie) - quota dziala tylko na realnym mouncie. Sprawdz: findmnt '${MOUNTPOINT}'. Jesli to katalog na filesystemie root, ustaw mountpoint na '/'." >&2
+  exit 1
+fi
 
 setquota -u "$USERNAME" $((SOFT_MB * 1024)) $((HARD_MB * 1024)) 0 0 "$MOUNTPOINT"
 echo "OK: ext4 quota dla ${USERNAME} ustawiona na ${SOFT_MB}/${HARD_MB} MB na ${MOUNTPOINT}"

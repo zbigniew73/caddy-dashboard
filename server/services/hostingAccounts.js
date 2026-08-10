@@ -63,7 +63,10 @@ function listAccounts() {
 // hosting-account-create.sh) i OD RAZU stosuje limit dysku pakietu przez
 // mechanizm ustawiony globalnie w getDiskSettings() (Brak/ext4/XFS). Jesli
 // mechanizm to "none", konto powstaje bez wymuszonego limitu (tak samo jak
-// pakiet pokazuje wtedy diskQuotaMode: "none").
+// pakiet pokazuje wtedy diskQuotaMode: "none"). Dla ext4/XFS wymagana jest
+// wczesniejsza pozytywna weryfikacja (POST /quota/verify, patrz
+// diskQuota.js verifyQuotaMechanism) - bez niej wpisy do /etc/projects i
+// /etc/projid (XFS) w ogole nie powstaja, funkcja odrzuca zadanie ponizej.
 //
 // Jesli useradd sie powiedzie, ale nastepny krok (nalozenie quota) zawiedzie,
 // blad leci dalej i rekord konta NIE jest zapisywany w panelu - w systemie
@@ -90,7 +93,16 @@ async function createAccount(body) {
     throw Object.assign(new Error(`Konto '${username}' juz istnieje w panelu.`), { status: 409 });
   }
 
-  const { diskFsType, diskMountPoint } = getDiskSettings();
+  const { diskFsType, diskMountPoint, diskQuotaVerified } = getDiskSettings();
+  if (diskFsType !== 'none' && !diskQuotaVerified) {
+    throw Object.assign(
+      new Error(
+        `Mechanizm limitu dysku (${diskFsType.toUpperCase()} na ${diskMountPoint}) nie zostal zweryfikowany - ` +
+        `przejdz do karty "Zasoby systemowe" i nacisnij Zastosuj, az pojawi sie potwierdzenie ze quota dziala, zanim dodasz konto.`
+      ),
+      { status: 409 }
+    );
+  }
 
   await runScript('hosting-account-create.sh', [username, diskMountPoint]);
   const homeDir = `${diskMountPoint}/${username}`;

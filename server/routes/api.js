@@ -13,10 +13,10 @@ import { isGateEnabled as isPhpmyadminGateEnabled, setGateEnabled as setPhpmyadm
 import { isGateEnabled as isAdminerGateEnabled, setGateEnabled as setAdminerGateEnabled } from '../services/adminerGate.js';
 import {
   listPackages, createPackage, updatePackage, deletePackage,
-  getSystemReservePercent, setSystemReservePercent, getDiskSettings, setDiskSettings
+  getSystemReservePercent, setSystemReservePercent, getDiskSettings, setDiskSettings, setDiskQuotaVerified
 } from '../services/hostingPackages.js';
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
-import { getQuotaStatus, installQuotaPackage } from '../services/diskQuota.js';
+import { getQuotaStatus, installQuotaPackage, verifyQuotaMechanism } from '../services/diskQuota.js';
 import { listAccounts, createAccount, deleteAccount } from '../services/hostingAccounts.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
@@ -986,6 +986,30 @@ router.put('/quota/settings', (req, res) => {
     res.json(setDiskSettings(req.body || {}));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Realna weryfikacja na filesystemie mechanizmu ustawionego przez
+// /quota/settings powyzej (findmnt + xfs_quota state / quotaon -p, patrz
+// server/scripts/quota-verify.sh) - NIE zaklada niczego, tylko sprawdza
+// biezacy stan. Wynik (ok/blad) jest trwale zapisywany przez
+// setDiskQuotaVerified i dopiero pozytywny wynik odblokowuje POST
+// /accounts z egzekwowanym limitem (patrz hostingAccounts.js
+// createAccount). diskFsType "none" nie ma nic do weryfikowania.
+router.post('/quota/verify', async (req, res) => {
+  try {
+    const { diskFsType, diskMountPoint } = getDiskSettings();
+    if (diskFsType === 'none') {
+      const saved = setDiskQuotaVerified(true, '');
+      res.json({ ok: true, message: '', ...saved });
+      return;
+    }
+    const result = await verifyQuotaMechanism(diskFsType, diskMountPoint);
+    const saved = setDiskQuotaVerified(true, result.message);
+    res.json({ ok: true, message: result.message, ...saved });
+  } catch (e) {
+    setDiskQuotaVerified(false, e.message);
+    res.status(e.status || 500).json({ ok: false, error: e.message });
   }
 });
 
