@@ -6,9 +6,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import userApiRoutes from './routes/userApi.js';
 import pmaGateRoutes from './routes/pmaGate.js';
 import admGateRoutes from './routes/admGate.js';
-import { requireAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
+import { requireAuth, requireUserAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
 import { APP_VERSION } from './version.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -96,6 +97,11 @@ app.use((req, res, next) => {
 });
 
 app.use('/api/auth', authRoutes);
+// Musi byc PRZED '/api' ponizej (Express dopasowuje middleware po
+// kolejnosci rejestracji, nie po dlugosci prefiksu) - inaczej
+// /api/user/* zostaloby przechwycone przez requireAuth (sesja admina) i
+// nigdy nie doszloby do requireUserAuth.
+app.use('/api/user', authRequired ? requireUserAuth : (req, res, next) => next(), userApiRoutes);
 app.use('/api', authRequired ? requireAuth : (req, res, next) => next(), apiRoutes);
 
 app.use((req, res, next) => {
@@ -128,6 +134,12 @@ app.use('/pma-gate', pmaGateRoutes);
 app.use('/adm-gate', admGateRoutes);
 
 app.use(express.static(path.join(__dirname, '../web')));
+// SPA fallback dla panelu klienta (/user/*) - MUSI byc przed catch-allem
+// panelu admina ponizej, inaczej kazda podstrona /user/... (np. po
+// odswiezeniu) dostalaby index.html admina zamiast web/user/index.html.
+app.get(['/user', '/user/*'], (req, res) => {
+  res.sendFile(path.join(__dirname, '../web/user/index.html'));
+});
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../web/index.html'));
 });

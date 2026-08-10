@@ -9,7 +9,18 @@ const require = createRequire(import.meta.url);
 const pam = require('authenticate-pam');
 
 const SESSION_COOKIE = 'cd_session';
+const USER_SESSION_COOKIE = 'cd_user_session';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+
+// Konta hostingowe (panel klienta, /user/) - tylko ta konwencja nazw ma
+// dostep, patrz hosting-account-create.sh. Osobna sesja/ciasteczko od
+// panelu admina (USER_SESSION_COOKIE), zeby logowanie do jednego nie
+// wygaszalo sesji w drugim w tej samej przegladarce.
+const HOSTING_USERNAME_RE = /^srv_[0-9]+$/;
+
+function isHostingUsername(username) {
+  return typeof username === 'string' && HOSTING_USERNAME_RE.test(username);
+}
 
 function getSecret() {
   const secret = process.env.SESSION_SECRET;
@@ -106,10 +117,37 @@ async function authenticateSystemUser(username, password) {
   return userHasSudoAccess(username);
 }
 
+// Panel klienta (/user/) - PAM przeciwko temu samemu systemowemu kontu co
+// SSH (patrz hosting-account-create.sh), ale BEZ AUTH_USERS/wheel - to
+// osobna, nieuprzywilejowana rola. Explicit "NIE ma sudo" jako dodatkowe
+// zabezpieczenie przed pomyleniem roli, gdyby jakis srv_* user kiedys
+// trafil do wheel przez pomylke.
+async function authenticateHostingUser(username, password) {
+  if (!isHostingUsername(username)) return false;
+
+  const pamOk = await pamAuthenticate(username, password);
+  if (!pamOk) return false;
+
+  const hasSudo = await userHasSudoAccess(username);
+  return !hasSudo;
+}
+
 function issueSessionCookie(res, username) {
   const token = sign({ username, exp: Date.now() + SESSION_TTL_MS });
   const secure = (process.env.EXPOSURE || 'local') === 'world';
   res.cookie(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure,
+    maxAge: SESSION_TTL_MS,
+    path: '/'
+  });
+}
+
+function issueUserSessionCookie(res, username) {
+  const token = sign({ username, role: 'user', exp: Date.now() + SESSION_TTL_MS });
+  const secure = (process.env.EXPOSURE || 'local') === 'world';
+  res.cookie(USER_SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: 'strict',
     secure,
@@ -136,8 +174,21 @@ function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
+function clearUserSessionCookie(res) {
+  res.clearCookie(USER_SESSION_COOKIE, { path: '/' });
+}
+
 function verifySessionToken(token) {
   return verify(token);
+}
+
+// Celowo NIE przez verify() (ten dokleja AUTH_USERS - liste adminow, ktora
+// nigdy nie zawiera kont hostingowych) - tylko podpis+wygasniecie z
+// verifyRaw(), plus wlasny check roli/konwencji nazwy.
+function verifyUserSessionToken(token) {
+  const payload = verifyRaw(token);
+  if (!payload || payload.role !== 'user' || !isHostingUsername(payload.username)) return null;
+  return payload;
 }
 
 function requireAuth(req, res, next) {
@@ -151,15 +202,34 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireUserAuth(req, res, next) {
+  const token = req.cookies?.[USER_SESSION_COOKIE];
+  if (!token) return res.status(401).json({ error: 'Brak sesji - zaloguj sie' });
+
+  const payload = verifyUserSessionToken(token);
+  if (!payload) return res.status(401).json({ error: 'Sesja wygasla lub nieprawidlowa - zaloguj sie ponownie' });
+
+  req.hostingUser = payload.username;
+  next();
+}
+
 export {
   authenticateSystemUser,
+  authenticateHostingUser,
+  isHostingUsername,
+  pamAuthenticate,
   getAllowedUsers,
   isSameOrigin,
   issueSessionCookie,
+  issueUserSessionCookie,
   clearSessionCookie,
+  clearUserSessionCookie,
   verifySessionToken,
+  verifyUserSessionToken,
   requireAuth,
+  requireUserAuth,
   SESSION_COOKIE,
+  USER_SESSION_COOKIE,
   sign,
   verifyRaw
 };

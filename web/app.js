@@ -192,6 +192,10 @@ document.getElementById('login-btn').onclick = async () => {
     const body = { username, password };
     if (TURNSTILE_STATE.enabled) body.turnstileToken = loginTurnstileToken;
     const result = await api('POST', '/auth/login', body);
+    if (result.role === 'user') {
+      window.location.href = result.redirect || '/user/';
+      return;
+    }
     showApp(result.username);
   } catch (e) {
     document.getElementById('login-error').textContent = t('login.error_wrong_password');

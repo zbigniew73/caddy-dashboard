@@ -1,12 +1,19 @@
 import { Router } from 'express';
 import {
   authenticateSystemUser,
+  authenticateHostingUser,
+  isHostingUsername,
   getAllowedUsers,
   issueSessionCookie,
+  issueUserSessionCookie,
   clearSessionCookie,
+  clearUserSessionCookie,
   verifySessionToken,
-  SESSION_COOKIE
+  verifyUserSessionToken,
+  SESSION_COOKIE,
+  USER_SESSION_COOKIE
 } from '../services/auth.js';
+import { getMustChangePassword } from '../services/hostingUserSelf.js';
 import { APP_VERSION } from '../version.js';
 import { getPublicConfig as getTurnstilePublicConfig, isEnabled as isTurnstileEnabled, getSecretKey, verifyWithCloudflare } from '../services/turnstile.js';
 
@@ -62,6 +69,27 @@ router.post('/login', async (req, res) => {
     }
   }
 
+  // Panel klienta (/user/) - te same pola formularza logowania co panel
+  // admina, rozgraniczenie po samej konwencji nazwy usera (srv_<id>).
+  if (isHostingUsername(username)) {
+    const ok = await authenticateHostingUser(username, password);
+    if (!ok) {
+      await padFailure(startedAt);
+      return res.status(401).json({ error: 'Nieprawidlowy uzytkownik lub haslo' });
+    }
+    issueUserSessionCookie(res, username);
+    let mustChangePassword = false;
+    try {
+      mustChangePassword = await getMustChangePassword(username);
+    } catch {
+      // Nieznany stan (np. sudoers jeszcze nie odswiezony) - nie blokujemy
+      // logowania, panel klienta po prostu pokaze Dashboard zamiast
+      // wymuszonej zmiany hasla.
+    }
+    res.json({ success: true, role: 'user', username, redirect: '/user/', mustChangePassword });
+    return;
+  }
+
   const ok = await authenticateSystemUser(username, password);
   if (!ok) {
     await padFailure(startedAt);
@@ -69,11 +97,12 @@ router.post('/login', async (req, res) => {
   }
 
   issueSessionCookie(res, username);
-  res.json({ success: true, username });
+  res.json({ success: true, role: 'admin', username, redirect: '/' });
 });
 
 router.post('/logout', (req, res) => {
   clearSessionCookie(res);
+  clearUserSessionCookie(res);
   res.json({ success: true });
 });
 
@@ -88,6 +117,15 @@ router.get('/status', (req, res) => {
     version: APP_VERSION,
     turnstile: { enabled: turnstile.enabled, siteKey: turnstile.enabled ? turnstile.siteKey : '' }
   });
+});
+
+// Bootstrap dla panelu klienta (/user/) - analogiczne do /status powyzej,
+// ale sprawdza USER_SESSION_COOKIE (rola "user"), nie sesje admina.
+router.get('/user-status', (req, res) => {
+  const authRequired = getAllowedUsers().length > 0;
+  const token = req.cookies?.[USER_SESSION_COOKIE];
+  const payload = token ? verifyUserSessionToken(token) : null;
+  res.json({ authRequired, username: payload?.username || null, version: APP_VERSION });
 });
 
 export default router;
