@@ -454,6 +454,7 @@
   "accounts.field_package": "Package",
   "accounts.create_button": "Create account",
   "accounts.creating": "Creating...",
+  "accounts.error_missing_id": "Enter the account number (e.g. 1001).",
   "accounts.delete_button": "Remove",
   "accounts.confirm_delete": "Remove account \"{name}\"? The system user will be deleted (userdel), but the home directory and data will REMAIN on disk.",
   "accounts.column_username": "Username",

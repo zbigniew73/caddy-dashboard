@@ -11,6 +11,30 @@ const DATA_PATH = path.join(DATA_DIR, 'hosting-accounts.json');
 const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
 
 const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
+const HOSTING_PREFIX = 'srv_';
+const HOSTING_ID_START = 1000;
+
+// Pierwszy wolny numer dla "srv_<id>" - <id> jest jednoczesnie wymuszanym
+// UID-em konta (patrz hosting-account-create.sh: -u <id> gdy nazwa pasuje
+// do tego wzorca), wiec sprawdzamy zarowno zajete nazwy jak i zajete UID-y
+// w /etc/passwd (swiatoczytelny, nie trzeba sudo). To tylko PODPOWIEDZ w
+// formularzu - admin moze ja nadpisac, useradd i tak odrzuci kolizje.
+function getNextHostingUsername() {
+  const passwd = readFileSync('/etc/passwd', 'utf-8');
+  const usedUids = new Set();
+  const usedIds = new Set();
+  for (const line of passwd.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split(':');
+    const uid = parseInt(parts[2], 10);
+    if (Number.isInteger(uid)) usedUids.add(uid);
+    const m = /^srv_([0-9]+)$/.exec(parts[0]);
+    if (m) usedIds.add(parseInt(m[1], 10));
+  }
+  let id = HOSTING_ID_START;
+  while (usedIds.has(id) || usedUids.has(id)) id += 1;
+  return { prefix: HOSTING_PREFIX, nextId: id, username: `${HOSTING_PREFIX}${id}` };
+}
 
 function loadAccounts() {
   try {
@@ -135,4 +159,4 @@ async function deleteAccount(id) {
   return account;
 }
 
-export { listAccounts, createAccount, deleteAccount };
+export { listAccounts, createAccount, deleteAccount, getNextHostingUsername };

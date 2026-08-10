@@ -454,6 +454,7 @@
   "accounts.field_package": "Pakiet",
   "accounts.create_button": "Utworz konto",
   "accounts.creating": "Tworzenie...",
+  "accounts.error_missing_id": "Podaj numer konta (np. 1001).",
   "accounts.delete_button": "Usun",
   "accounts.confirm_delete": "Usunac konto \"{name}\"? Uzytkownik systemowy zostanie usuniety (userdel), ale katalog domowy i dane POZOSTANA na dysku.",
   "accounts.column_username": "Nazwa uzytkownika",

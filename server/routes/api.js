@@ -17,7 +17,7 @@ import {
 } from '../services/hostingPackages.js';
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
 import { getQuotaStatus, installQuotaPackage, verifyQuotaMechanism } from '../services/diskQuota.js';
-import { listAccounts, createAccount, deleteAccount } from '../services/hostingAccounts.js';
+import { listAccounts, createAccount, deleteAccount, getNextHostingUsername } from '../services/hostingAccounts.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -1019,6 +1019,17 @@ router.post('/quota/verify', async (req, res) => {
 router.get('/accounts', (req, res) => {
   try {
     res.json({ accounts: listAccounts() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Podpowiedz nazwy dla formularza "Utworz konto" - patrz
+// getNextHostingUsername w hostingAccounts.js (srv_<id>, <id> = wolny UID,
+// tylko sugestia, admin moze nadpisac).
+router.get('/accounts/next-username', (req, res) => {
+  try {
+    res.json(getNextHostingUsername());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

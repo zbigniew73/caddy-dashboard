@@ -55,7 +55,18 @@ if ! getent group caddy >/dev/null 2>&1; then
   exit 1
 fi
 
-useradd -m -b "$HOME_BASE_DIR" -s /bin/bash "$USERNAME"
+# Jesli nazwa pasuje do konwencji panelu (srv_<id>), wymuszamy UID = <id> -
+# to ta konwencja sprawia, ze "srv_1001" faktycznie ma UID 1001, nie
+# przypadkowy, kolejny wolny numer z puli useradd. Panel podpowiada wolne
+# <id> w formularzu (GET /accounts/next-username), ale to i tak tylko
+# podpowiedz - jesli admin wpisze zajety numer, useradd -u ponizej po
+# prostu odrzuci kolizje z czytelnym bledem.
+UID_ARGS=()
+if [[ "$USERNAME" =~ ^srv_([0-9]+)$ ]]; then
+  UID_ARGS=(-u "${BASH_REMATCH[1]}")
+fi
+
+useradd -m -b "$HOME_BASE_DIR" -s /bin/bash "${UID_ARGS[@]}" "$USERNAME"
 echo "${USERNAME}:${DEFAULT_TEMP_PASSWORD}" | chpasswd
 chage -d 0 "$USERNAME"
 

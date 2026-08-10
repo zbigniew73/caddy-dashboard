@@ -1804,7 +1804,9 @@ function wireSystemResourcesSection(resources, content) {
   };
 }
 
-function renderAccountsHtml(accounts, packages) {
+function renderAccountsHtml(accounts, packages, nextUsername) {
+  const prefix = nextUsername?.prefix || 'srv_';
+  const nextId = nextUsername?.nextId ?? '';
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('accounts.title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('accounts.description')}</p>
@@ -1812,7 +1814,11 @@ function renderAccountsHtml(accounts, packages) {
       <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
         <div>
           <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_username')}</label>
-          <input type="text" id="acc-form-username" style="width:180px;">
+          <input type="hidden" id="acc-form-username-prefix" value="${escapeHtml(prefix)}">
+          <div style="display:flex;">
+            <span style="display:flex;align-items:center;padding:0 0 0 12px;background:var(--input-bg);border:1px solid var(--border);border-right:none;border-radius:8px 0 0 8px;font-family:var(--mono);color:var(--muted);font-size:14px;">${escapeHtml(prefix)}</span>
+            <input type="text" id="acc-form-username-id" inputmode="numeric" value="${escapeHtml(String(nextId))}" style="width:100px;border-radius:0 8px 8px 0;font-family:var(--mono);">
+          </div>
         </div>
         <div>
           <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_package')}</label>
@@ -1858,10 +1864,24 @@ function renderAccountsHtml(accounts, packages) {
 function wireAccountsSection(content) {
   const createBtn = document.getElementById('acc-form-create-btn');
   const msgEl = document.getElementById('acc-form-msg');
+  const idInput = document.getElementById('acc-form-username-id');
+
+  if (idInput) {
+    idInput.oninput = () => { idInput.value = idInput.value.replace(/[^0-9]/g, ''); };
+    idInput.focus();
+    idInput.select();
+  }
 
   if (createBtn) {
     createBtn.onclick = async () => {
-      const username = document.getElementById('acc-form-username').value;
+      const prefix = document.getElementById('acc-form-username-prefix').value;
+      const idValue = idInput.value.trim();
+      if (!idValue) {
+        msgEl.textContent = t('accounts.error_missing_id');
+        msgEl.className = 'action-msg error';
+        return;
+      }
+      const username = prefix + idValue;
       const packageId = document.getElementById('acc-form-package').value;
       createBtn.disabled = true;
       msgEl.textContent = t('accounts.creating');
@@ -1896,10 +1916,11 @@ function wireAccountsSection(content) {
 async function renderPackagesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [{ packages }, resources, { accounts }] = await Promise.all([
+    const [{ packages }, resources, { accounts }, nextUsername] = await Promise.all([
       api('GET', '/packages'),
       api('GET', '/system-resources'),
-      api('GET', '/accounts')
+      api('GET', '/accounts'),
+      api('GET', '/accounts/next-username')
     ]);
     const cpuCount = resources.slice.cpuCount;
     const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`);
@@ -1952,7 +1973,7 @@ async function renderPackagesTab(content) {
         <div id="packages-form-container"></div>
       </div>
       <div class="system-info-card" style="margin-top:16px;">
-        ${renderAccountsHtml(accounts, packages)}
+        ${renderAccountsHtml(accounts, packages, nextUsername)}
       </div>
     `;
 
