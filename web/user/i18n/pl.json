@@ -19,7 +19,7 @@
   "settings.field_new": "Nowe haslo",
   "settings.field_confirm": "Powtorz nowe haslo",
   "settings.generate_button": "Wygeneruj",
-  "settings.password_hint": "Zalecane: min. 16 znakow, duze i male litery, cyfry, znaki specjalne.",
+  "settings.password_hint": "Wymagane: min. 8 znakow. Zalecane: min. 16 znakow, duze i male litery, cyfry, znaki specjalne.",
   "settings.save_button": "Zapisz nowe haslo",
   "settings.saving": "Zapisywanie...",
   "settings.success": "Haslo zmienione.",

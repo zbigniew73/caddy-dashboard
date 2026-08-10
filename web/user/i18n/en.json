@@ -19,7 +19,7 @@
   "settings.field_new": "New password",
   "settings.field_confirm": "Repeat new password",
   "settings.generate_button": "Generate",
-  "settings.password_hint": "Recommended: at least 16 characters, upper and lower case letters, digits, special characters.",
+  "settings.password_hint": "Required: at least 8 characters. Recommended: at least 16 characters, upper and lower case letters, digits, special characters.",
   "settings.save_button": "Save new password",
   "settings.saving": "Saving...",
   "settings.success": "Password changed.",
