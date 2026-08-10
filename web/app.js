@@ -1538,7 +1538,7 @@ function serviceCard(svc) {
 
 const PACKAGE_PHP_MEMORY_OPTIONS_MB = [512, 1024, 2048, 4096];
 
-async function renderPackageFormHtml(pkg) {
+async function renderPackageFormHtml(pkg, cpuCount) {
   const currentPhpMemory = pkg?.phpMemoryLimitMb ?? 1024;
   const phpMemoryField = `<select id="pkg-form-php">${PACKAGE_PHP_MEMORY_OPTIONS_MB.map((mb) =>
     `<option value="${mb}" ${currentPhpMemory === mb ? 'selected' : ''}>${mb} MB</option>`
@@ -1548,6 +1548,7 @@ async function renderPackageFormHtml(pkg) {
     <div class="system-info-card" id="pkg-form-card" style="margin-top:16px;max-width:480px;">
       <h3 style="margin:0 0 14px;font-size:15px;">${pkg ? t('packages.form_title_edit') : t('packages.form_title_add')}</h3>
       <input type="hidden" id="pkg-form-id" value="${escapeHtml(pkg?.id || '')}">
+      <input type="hidden" id="pkg-form-cpu-count" value="${cpuCount}">
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_name')}</label>
       <input type="text" id="pkg-form-name" value="${escapeHtml(pkg?.name || '')}" style="width:100%;margin-bottom:10px;">
@@ -1564,6 +1565,13 @@ async function renderPackageFormHtml(pkg) {
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_php')}</label>
       <div style="margin-bottom:10px;">${phpMemoryField}</div>
 
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_cpu')}</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <input type="number" id="pkg-form-cpu" min="1" max="100" value="${pkg?.cpuPercent ?? 100}" style="width:100%;">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;">% / rdzen</span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;" id="pkg-form-cpu-hint"></div>
+
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_description')}</label>
       <textarea id="pkg-form-description" rows="3" style="width:100%;margin-bottom:14px;font-family:inherit;">${escapeHtml(pkg?.description || '')}</textarea>
 
@@ -1579,6 +1587,18 @@ function wirePackageForm() {
   const cancelBtn = document.getElementById('pkg-form-cancel-btn');
   if (!saveBtn) return;
   const msgEl = document.getElementById('pkg-form-msg');
+  const cpuInput = document.getElementById('pkg-form-cpu');
+  const cpuHint = document.getElementById('pkg-form-cpu-hint');
+  const cpuCount = parseInt(document.getElementById('pkg-form-cpu-count').value, 10) || 1;
+
+  const updateCpuHint = () => {
+    const percent = parseInt(cpuInput.value, 10);
+    cpuHint.textContent = Number.isInteger(percent) && percent >= 1 && percent <= 100
+      ? t('packages.cpu_hint', { total: percent * cpuCount, count: cpuCount })
+      : '';
+  };
+  cpuInput.oninput = updateCpuHint;
+  updateCpuHint();
 
   cancelBtn.onclick = () => {
     document.getElementById('pkg-form-card').remove();
@@ -1592,6 +1612,7 @@ function wirePackageForm() {
       maxDomains: document.getElementById('pkg-form-domains').value,
       maxDatabases: document.getElementById('pkg-form-databases').value,
       phpMemoryLimitMb: document.getElementById('pkg-form-php').value,
+      cpuPercent: cpuInput.value,
       description: document.getElementById('pkg-form-description').value
     };
     saveBtn.disabled = true;
@@ -1612,19 +1633,107 @@ function wirePackageForm() {
   };
 }
 
-async function showPackageForm(pkg) {
+async function showPackageForm(pkg, cpuCount) {
   const existing = document.getElementById('pkg-form-card');
   if (existing) existing.remove();
   const container = document.getElementById('packages-form-container');
-  container.innerHTML = await renderPackageFormHtml(pkg);
+  container.innerHTML = await renderPackageFormHtml(pkg, cpuCount);
   applyTranslations();
   wirePackageForm();
+}
+
+function renderSystemResourcesHtml(resources) {
+  const { reservePercent, slice, quota } = resources;
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('packages.resources_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('packages.resources_description')}</p>
+    <div style="display:flex;flex-wrap:wrap;gap:28px;">
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_reserve')}</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="number" id="sysres-reserve" min="0" max="90" value="${reservePercent}" style="width:90px;">
+          <span style="font-size:12px;color:var(--muted);">%</span>
+          <button type="button" id="sysres-apply-btn">${t('packages.apply_button')}</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;" id="sysres-hint"></div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.slice_status')}</div>
+        <div style="font-size:13px;">
+          ${slice.installed
+            ? t('packages.slice_installed', { quota: slice.cpuQuotaPercent, count: slice.cpuCount })
+            : t('packages.slice_not_installed')}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.quota_status')}</div>
+        <div style="font-size:13px;display:flex;align-items:center;gap:8px;">
+          ${quota.installed
+            ? `<span class="status-badge active">${t('packages.quota_installed')}</span>`
+            : `<span class="status-badge inactive">${t('packages.quota_not_installed')}</span><button type="button" id="quota-install-btn">${t('packages.quota_install_button')}</button>`}
+        </div>
+      </div>
+    </div>
+    <div class="action-msg" id="sysres-msg"></div>
+  `;
+}
+
+function wireSystemResourcesSection(resources, content) {
+  const cpuCount = resources.slice.cpuCount;
+  const applyBtn = document.getElementById('sysres-apply-btn');
+  const input = document.getElementById('sysres-reserve');
+  const hint = document.getElementById('sysres-hint');
+  const msgEl = document.getElementById('sysres-msg');
+
+  const updateHint = () => {
+    const reserve = parseInt(input.value, 10);
+    hint.textContent = Number.isInteger(reserve) && reserve >= 0 && reserve <= 90
+      ? t('packages.reserve_hint', { quota: Math.max(1, Math.round((100 - reserve) * cpuCount)), count: cpuCount })
+      : '';
+  };
+  input.oninput = updateHint;
+  updateHint();
+
+  applyBtn.onclick = async () => {
+    applyBtn.disabled = true;
+    msgEl.textContent = t('packages.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('PUT', '/system-resources', { reservePercent: input.value });
+      await renderPackagesTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      applyBtn.disabled = false;
+    }
+  };
+
+  const quotaBtn = document.getElementById('quota-install-btn');
+  if (quotaBtn) {
+    quotaBtn.onclick = async () => {
+      quotaBtn.disabled = true;
+      msgEl.textContent = t('packages.quota_installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/quota/install');
+        await renderPackagesTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        quotaBtn.disabled = false;
+      }
+    };
+  }
 }
 
 async function renderPackagesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const { packages } = await api('GET', '/packages');
+    const [{ packages }, resources] = await Promise.all([
+      api('GET', '/packages'),
+      api('GET', '/system-resources')
+    ]);
+    const cpuCount = resources.slice.cpuCount;
     const rows = packages.map((p) => `
       <tr>
         <td>${escapeHtml(p.name)}</td>
@@ -1632,6 +1741,7 @@ async function renderPackagesTab(content) {
         <td>${p.maxDomains}</td>
         <td>${p.maxDatabases}</td>
         <td>${p.phpMemoryLimitMb ? `${p.phpMemoryLimitMb} MB` : '-'}</td>
+        <td>${p.cpuPercent}% (${p.cpuTotalPercent}%)</td>
         <td>
           <button type="button" class="secondary" data-edit="${escapeHtml(p.id)}">${t('packages.edit_button')}</button>
           <button type="button" class="danger" data-delete="${escapeHtml(p.id)}">${t('packages.delete_button')}</button>
@@ -1641,6 +1751,9 @@ async function renderPackagesTab(content) {
 
     content.innerHTML = `
       <div class="system-info-card">
+        ${renderSystemResourcesHtml(resources)}
+      </div>
+      <div class="system-info-card" style="margin-top:16px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
           <h3 style="margin:0;font-size:15px;">${t('packages.title')}</h3>
           <button type="button" id="packages-add-btn">${t('packages.add_button')}</button>
@@ -1656,6 +1769,7 @@ async function renderPackagesTab(content) {
                   <th>${t('packages.column_domains')}</th>
                   <th>${t('packages.column_databases')}</th>
                   <th>${t('packages.column_php')}</th>
+                  <th>${t('packages.column_cpu')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -1668,13 +1782,16 @@ async function renderPackagesTab(content) {
       </div>
     `;
 
+    applyTranslations();
+    wireSystemResourcesSection(resources, content);
+
     const addBtn = document.getElementById('packages-add-btn');
-    addBtn.onclick = () => showPackageForm(null);
+    addBtn.onclick = () => showPackageForm(null, cpuCount);
 
     document.querySelectorAll('[data-edit]').forEach((btn) => {
       btn.onclick = () => {
         const pkg = packages.find((p) => p.id === btn.dataset.edit);
-        showPackageForm(pkg);
+        showPackageForm(pkg, cpuCount);
       };
     });
 

@@ -11,7 +11,9 @@ import { readJailConfig, writeJailConfig } from '../services/fail2ban.js';
 import { getPublicConfig as getTurnstilePublicConfig, saveKeys as saveTurnstileKeys, setEnabled as setTurnstileEnabled, verifyWithCloudflare } from '../services/turnstile.js';
 import { isGateEnabled as isPhpmyadminGateEnabled, setGateEnabled as setPhpmyadminGateEnabled } from '../services/phpmyadminGate.js';
 import { isGateEnabled as isAdminerGateEnabled, setGateEnabled as setAdminerGateEnabled } from '../services/adminerGate.js';
-import { listPackages, createPackage, updatePackage, deletePackage } from '../services/hostingPackages.js';
+import { listPackages, createPackage, updatePackage, deletePackage, getSystemReservePercent, setSystemReservePercent } from '../services/hostingPackages.js';
+import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
+import { getQuotaStatus, installQuotaPackage } from '../services/diskQuota.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -934,6 +936,37 @@ router.delete('/packages/:id', (req, res) => {
   try {
     deletePackage(req.params.id);
     res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Nadrzedny systemd slice (hosting.slice) - globalny sufit CPU dla
+// wszystkich pakietow razem, zeby procent CPU per-pakiet (patrz /packages
+// wyzej) nie mogl w sumie zdlawic systemu. Nie nested pod /packages/, zeby
+// nie kolidowac z /packages/:id powyzej.
+router.get('/system-resources', async (req, res) => {
+  try {
+    const [slice, quota] = await Promise.all([getSliceStatus(), getQuotaStatus()]);
+    res.json({ reservePercent: getSystemReservePercent(), slice, quota });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/system-resources', async (req, res) => {
+  try {
+    const result = await applySystemReserve(req.body?.reservePercent);
+    setSystemReservePercent(result.reservePercent);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/quota/install', async (req, res) => {
+  try {
+    res.json(await installQuotaPackage());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
