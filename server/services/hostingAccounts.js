@@ -12,6 +12,13 @@ const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../
 
 const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
 const HOSTING_PREFIX = 'srv_';
+// Katalog domowy kont hostingowych jest ZAWSZE pod /home, niezaleznie od
+// diskMountPoint (Zasoby systemowe > Mechanizm limitu dysku) - to drugie
+// to WYLACZNIE punkt montowania dla komend quota (xfs_quota/setquota),
+// ktory u czesci adminow to "/" (root, bo /home nie jest osobna
+// partycja) - mieszanie tych dwoch pojec dawalo homeDir w stylu
+// "//srv_1001" i konta bez katalogu w /home.
+const HOME_BASE_DIR = '/home';
 const HOSTING_ID_START = 1000;
 
 // Pierwszy wolny numer dla "srv_<id>" - <id> jest jednoczesnie wymuszanym
@@ -129,8 +136,8 @@ async function createAccount(body) {
     );
   }
 
-  await runScript('hosting-account-create.sh', [username, diskMountPoint]);
-  const homeDir = `${diskMountPoint}/${username}`;
+  await runScript('hosting-account-create.sh', [username, HOME_BASE_DIR]);
+  const homeDir = `${HOME_BASE_DIR}/${username}`;
 
   if (diskFsType === 'ext4') {
     await applyExt4Quota(username, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);

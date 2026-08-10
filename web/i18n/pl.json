@@ -447,7 +447,7 @@
   "packages.pkg_form_quota_active_hint": "Egzekwowane przez: {mode} na {mount} (zweryfikowane, gotowe do uzycia).",
   "packages.pkg_form_quota_unverified_hint": "Wybrany mechanizm: {mode} na {mount}, ale NIEZWERYFIKOWANY - przejdz do karty \"Zasoby systemowe\" i nacisnij Zastosuj, inaczej dodawanie kont z tym pakietem bedzie zablokowane.",
   "accounts.title": "Konta hostingowe",
-  "accounts.description": "Uzytkownicy systemowi z dostepem SSH (katalog domowy pod punktem montowania z sekcji powyzej, ~/domains -> konfiguracje domen w Caddy). Haslo tymczasowe dla kazdego nowego konta: \"PassWord!1234\" - wymagana zmiana przy pierwszym logowaniu SSH. Limit dysku z przypisanego pakietu jest nakladany automatycznie przy tworzeniu, przez wybrany tam mechanizm quota (jesli ustawiony na \"Brak\", konto powstaje bez wymuszonego limitu).",
+  "accounts.description": "Uzytkownicy systemowi z dostepem SSH (katalog domowy zawsze pod /home/<nazwa>, ~/domains -> konfiguracje domen w Caddy). Haslo tymczasowe dla kazdego nowego konta: \"PassWord!1234\" - wymagana zmiana przy pierwszym logowaniu SSH. Limit dysku z przypisanego pakietu jest nakladany automatycznie przy tworzeniu, przez mechanizm quota wybrany w sekcji powyzej (jesli ustawiony na \"Brak\", konto powstaje bez wymuszonego limitu) - punkt montowania w tamtej sekcji dotyczy WYLACZNIE mechanizmu quota, nie lokalizacji katalogu domowego.",
   "accounts.no_packages": "Najpierw dodaj przynajmniej jeden pakiet ponizej (w sekcji \"Pakiety hostingowe\"), zeby moc utworzyc konto.",
   "accounts.empty": "Brak kont.",
   "accounts.field_username": "Nazwa uzytkownika",
