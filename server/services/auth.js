@@ -1,12 +1,11 @@
 import crypto from 'crypto';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
-import { createRequire } from 'module';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const execFileAsync = promisify(execFile);
-
-const require = createRequire(import.meta.url);
-const pam = require('authenticate-pam');
+const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
 
 const SESSION_COOKIE = 'cd_session';
 const USER_SESSION_COOKIE = 'cd_user_session';
@@ -99,11 +98,20 @@ async function userHasSudoAccess(username) {
   }
 }
 
+// MUSI isc przez sudo (root) - unix_chkpwd (pomocnik pam_unix.so) pozwala
+// sprawdzic CUDZE haslo tylko procesowi root, nigdy zwyklemu userowi (jak
+// SVC_USER, ktorym dziala ta usluga) - patrz komentarz w
+// server/scripts/pam-login-check.cjs. Bez tego logowanie dzialaloby
+// PRZYPADKIEM tylko dla admina = SVC_USER (self-check), a dla kazdego
+// innego konta (hostingowego, drugiego admina) zawsze konczyloby sie
+// falszywym "Nieprawidlowy uzytkownik lub haslo".
 function pamAuthenticate(username, password) {
   return new Promise((resolve) => {
-    pam.authenticate(username, password || '', (err) => resolve(!err), {
-      serviceName: process.env.PAM_SERVICE || 'login'
-    });
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/pam-login-check.cjs`, username]);
+    child.on('error', () => resolve(false));
+    child.on('close', (code) => resolve(code === 0));
+    child.stdin.write(password || '');
+    child.stdin.end();
   });
 }
 
