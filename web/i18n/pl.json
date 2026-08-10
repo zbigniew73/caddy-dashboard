@@ -436,6 +436,20 @@
   "packages.quota_help_ext4_title": "ext4 - klasyczna quota per użytkownik systemowy:",
   "packages.quota_help_ext4_example": "1. Dodaj usrquota,grpquota w /etc/fstab (kolumna z opcjami montowania):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Przemontuj:\n   mount -o remount /\n\n3. Zbuduj baze quota:\n   quotacheck -cug /\n\n4. Wlacz quote:\n   quotaon /\n\n5. Ustaw limit dla usera (wartosci w KB - tu ok. 1 GB miekki / 1.1 GB twardy):\n   setquota -u nazwa_usera 1048576 1153434 0 0 /\n\n6. Sprawdz:\n   repquota /",
   "packages.field_disk_fs": "Mechanizm limitu dysku (globalny dla VPS)",
-  "packages.field_disk_fs_hint": "Po jednorazowym reczym setupie z przykladu powyzej (fstab + quotacheck/quotaon dla ext4, albo fstab + projekt dla XFS) panel bedzie mogl automatycznie egzekwowac diskQuotaMb pakietu przez ten mechanizm dla kazdego nowego konta.",
-  "packages.disk_fs_none": "Brak"
+  "packages.field_disk_fs_hint": "Wymaga jednorazowego recznego setupu z przykladu powyzej (fstab + quotacheck/quotaon dla ext4, albo fstab dla XFS) - dopiero potem nowe konta ponizej dostana realnie egzekwowany limit diskQuotaMb z przypisanego pakietu.",
+  "packages.disk_fs_none": "Brak",
+  "accounts.title": "Konta hostingowe",
+  "accounts.description": "Uzytkownicy systemowi (bez logowania haslem/SSH) z katalogiem domowym pod punktem montowania z sekcji powyzej. Limit dysku z przypisanego pakietu jest nakladany automatycznie przy tworzeniu, przez wybrany tam mechanizm quota (jesli ustawiony na \"Brak\", konto powstaje bez wymuszonego limitu).",
+  "accounts.no_packages": "Najpierw dodaj przynajmniej jeden pakiet ponizej (w sekcji \"Pakiety hostingowe\"), zeby moc utworzyc konto.",
+  "accounts.empty": "Brak kont.",
+  "accounts.field_username": "Nazwa uzytkownika",
+  "accounts.field_package": "Pakiet",
+  "accounts.create_button": "Utworz konto",
+  "accounts.creating": "Tworzenie...",
+  "accounts.delete_button": "Usun",
+  "accounts.confirm_delete": "Usunac konto \"{name}\"? Uzytkownik systemowy zostanie usuniety (userdel), ale katalog domowy i dane POZOSTANA na dysku.",
+  "accounts.column_username": "Nazwa uzytkownika",
+  "accounts.column_package": "Pakiet",
+  "accounts.column_homedir": "Katalog domowy",
+  "accounts.column_created": "Utworzono"
 }

@@ -1,0 +1,125 @@
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { randomUUID } from 'crypto';
+import { spawn } from 'child_process';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { listPackages, getDiskSettings } from './hostingPackages.js';
+import { applyExt4Quota, applyXfsQuota } from './diskQuota.js';
+
+const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+const DATA_PATH = path.join(DATA_DIR, 'hosting-accounts.json');
+const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
+
+const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
+
+function loadAccounts() {
+  try {
+    const parsed = JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
+    return Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAccounts(accounts) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(DATA_PATH, JSON.stringify({ accounts }, null, 2), { mode: 0o600 });
+}
+
+function runScript(scriptName, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/${scriptName}`, ...args]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      if (/password is required/i.test(stderr)) {
+        reject(Object.assign(
+          new Error(`Brak uprawnien sudo bez hasla dla ${scriptName} - sprawdz /etc/sudoers.d/caddy-dashboard`),
+          { status: 403 }
+        ));
+        return;
+      }
+      reject(Object.assign(new Error(stderr.trim() || `exit code ${code}`), { status: 500 }));
+    });
+  });
+}
+
+function listAccounts() {
+  const packages = listPackages();
+  return loadAccounts().map((a) => {
+    const pkg = packages.find((p) => p.id === a.packageId);
+    return { ...a, packageName: pkg ? pkg.name : null, diskQuotaMb: pkg ? pkg.diskQuotaMb : null };
+  });
+}
+
+// Tworzy usera systemowego (bez hasla/logowania, patrz
+// hosting-account-create.sh) i OD RAZU stosuje limit dysku pakietu przez
+// mechanizm ustawiony globalnie w getDiskSettings() (Brak/ext4/XFS). Jesli
+// mechanizm to "none", konto powstaje bez wymuszonego limitu (tak samo jak
+// pakiet pokazuje wtedy diskQuotaMode: "none").
+//
+// Jesli useradd sie powiedzie, ale nastepny krok (nalozenie quota) zawiedzie,
+// blad leci dalej i rekord konta NIE jest zapisywany w panelu - w systemie
+// zostaje jednak juz utworzony (osierocony z punktu widzenia panelu) user.
+// To swiadomy kompromis (brak automatycznego rollbacku/userdel na błąd) -
+// admin dostanie czytelny blad i moze dokonczyc/posprzatac recznie.
+async function createAccount(body) {
+  const username = String(body?.username || '').trim().toLowerCase();
+  if (!USERNAME_RE.test(username)) {
+    throw Object.assign(
+      new Error('Nieprawidlowa nazwa uzytkownika (male litery/cyfry/_/-, zaczyna sie od litery lub _, max 32 znaki).'),
+      { status: 400 }
+    );
+  }
+
+  const packageId = String(body?.packageId || '');
+  const pkg = listPackages().find((p) => p.id === packageId);
+  if (!pkg) {
+    throw Object.assign(new Error('Nie znaleziono wybranego pakietu.'), { status: 400 });
+  }
+
+  const accounts = loadAccounts();
+  if (accounts.some((a) => a.username === username)) {
+    throw Object.assign(new Error(`Konto '${username}' juz istnieje w panelu.`), { status: 409 });
+  }
+
+  const { diskFsType, diskMountPoint } = getDiskSettings();
+
+  await runScript('hosting-account-create.sh', [username, diskMountPoint]);
+  const homeDir = `${diskMountPoint}/${username}`;
+
+  if (diskFsType === 'ext4') {
+    await applyExt4Quota(username, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
+  } else if (diskFsType === 'xfs') {
+    await applyXfsQuota(username, homeDir, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
+  }
+
+  const account = {
+    id: randomUUID(), username, packageId, homeDir, diskFsType, createdAt: new Date().toISOString()
+  };
+  accounts.push(account);
+  saveAccounts(accounts);
+  return account;
+}
+
+async function deleteAccount(id) {
+  const accounts = loadAccounts();
+  const idx = accounts.findIndex((a) => a.id === id);
+  if (idx === -1) {
+    throw Object.assign(new Error('Nie znaleziono konta.'), { status: 404 });
+  }
+  const account = accounts[idx];
+  await runScript('hosting-account-delete.sh', [account.username]);
+  accounts.splice(idx, 1);
+  saveAccounts(accounts);
+  return account;
+}
+
+export { listAccounts, createAccount, deleteAccount };

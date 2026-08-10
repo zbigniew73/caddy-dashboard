@@ -1772,12 +1772,100 @@ function wireSystemResourcesSection(resources, content) {
   };
 }
 
+function renderAccountsHtml(accounts, packages) {
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('accounts.title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('accounts.description')}</p>
+    ${packages.length ? `
+      <div style="display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_username')}</label>
+          <input type="text" id="acc-form-username" style="width:180px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_package')}</label>
+          <select id="acc-form-package" style="width:180px;">
+            ${packages.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
+          </select>
+        </div>
+        <button type="button" id="acc-form-create-btn">${t('accounts.create_button')}</button>
+      </div>
+    ` : `<p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('accounts.no_packages')}</p>`}
+    <div class="action-msg" id="acc-form-msg"></div>
+    ${accounts.length ? `
+      <div style="overflow-x:auto;">
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th>${t('accounts.column_username')}</th>
+              <th>${t('accounts.column_package')}</th>
+              <th>${t('accounts.column_homedir')}</th>
+              <th>${t('accounts.column_created')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${accounts.map((a) => `
+              <tr>
+                <td>${escapeHtml(a.username)}</td>
+                <td>${escapeHtml(a.packageName || '-')}</td>
+                <td>${escapeHtml(a.homeDir)}</td>
+                <td>${escapeHtml(new Date(a.createdAt).toLocaleString())}</td>
+                <td><button type="button" class="danger" data-delete-account="${escapeHtml(a.id)}">${t('accounts.delete_button')}</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="empty-state">${t('accounts.empty')}</div>`}
+  `;
+}
+
+function wireAccountsSection(content) {
+  const createBtn = document.getElementById('acc-form-create-btn');
+  const msgEl = document.getElementById('acc-form-msg');
+
+  if (createBtn) {
+    createBtn.onclick = async () => {
+      const username = document.getElementById('acc-form-username').value;
+      const packageId = document.getElementById('acc-form-package').value;
+      createBtn.disabled = true;
+      msgEl.textContent = t('accounts.creating');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/accounts', { username, packageId });
+        await renderPackagesTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createBtn.disabled = false;
+      }
+    };
+  }
+
+  document.querySelectorAll('[data-delete-account]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('accounts.confirm_delete', { name: btn.closest('tr').children[0].textContent }))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/accounts/${btn.dataset.deleteAccount}`);
+        await renderPackagesTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 async function renderPackagesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [{ packages }, resources] = await Promise.all([
+    const [{ packages }, resources, { accounts }] = await Promise.all([
       api('GET', '/packages'),
-      api('GET', '/system-resources')
+      api('GET', '/system-resources'),
+      api('GET', '/accounts')
     ]);
     const cpuCount = resources.slice.cpuCount;
     const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : t('packages.disk_fs_none'));
@@ -1829,10 +1917,14 @@ async function renderPackagesTab(content) {
         <div class="action-msg" id="packages-msg"></div>
         <div id="packages-form-container"></div>
       </div>
+      <div class="system-info-card" style="margin-top:16px;">
+        ${renderAccountsHtml(accounts, packages)}
+      </div>
     `;
 
     applyTranslations();
     wireSystemResourcesSection(resources, content);
+    wireAccountsSection(content);
 
     const addBtn = document.getElementById('packages-add-btn');
     addBtn.onclick = () => showPackageForm(null, cpuCount);

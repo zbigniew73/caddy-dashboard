@@ -436,6 +436,20 @@
   "packages.quota_help_ext4_title": "ext4 - classic quota per system user:",
   "packages.quota_help_ext4_example": "1. Add usrquota,grpquota in /etc/fstab (mount options column):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Remount:\n   mount -o remount /\n\n3. Build the quota database:\n   quotacheck -cug /\n\n4. Turn quota on:\n   quotaon /\n\n5. Set a limit for a user (values in KB - here roughly 1 GB soft / 1.1 GB hard):\n   setquota -u username 1048576 1153434 0 0 /\n\n6. Check:\n   repquota /",
   "packages.field_disk_fs": "Disk quota mechanism (global for the VPS)",
-  "packages.field_disk_fs_hint": "After the one-time manual setup from the example above (fstab + quotacheck/quotaon for ext4, or fstab + project setup for XFS), the panel will be able to automatically enforce a package's diskQuotaMb through this mechanism for every new account.",
-  "packages.disk_fs_none": "None"
+  "packages.field_disk_fs_hint": "Requires the one-time manual setup from the example above (fstab + quotacheck/quotaon for ext4, or fstab for XFS) - only then will new accounts below actually get their package's diskQuotaMb enforced.",
+  "packages.disk_fs_none": "None",
+  "accounts.title": "Hosting accounts",
+  "accounts.description": "System users (no password/SSH login) with a home directory under the mount point from the section above. The assigned package's disk limit is applied automatically on creation, through the quota mechanism selected there (if set to \"None\", the account is created without an enforced limit).",
+  "accounts.no_packages": "Add at least one package below (in the \"Hosting packages\" section) first, so there's something to assign to a new account.",
+  "accounts.empty": "No accounts yet.",
+  "accounts.field_username": "Username",
+  "accounts.field_package": "Package",
+  "accounts.create_button": "Create account",
+  "accounts.creating": "Creating...",
+  "accounts.delete_button": "Remove",
+  "accounts.confirm_delete": "Remove account \"{name}\"? The system user will be deleted (userdel), but the home directory and data will REMAIN on disk.",
+  "accounts.column_username": "Username",
+  "accounts.column_package": "Package",
+  "accounts.column_homedir": "Home directory",
+  "accounts.column_created": "Created"
 }

@@ -17,6 +17,7 @@ import {
 } from '../services/hostingPackages.js';
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
 import { getQuotaStatus, installQuotaPackage } from '../services/diskQuota.js';
+import { listAccounts, createAccount, deleteAccount } from '../services/hostingAccounts.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -983,6 +984,34 @@ router.post('/quota/install', async (req, res) => {
 router.put('/quota/settings', (req, res) => {
   try {
     res.json(setDiskSettings(req.body || {}));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Konta hostingowe - realne Linux-usery (bez logowania) tworzone panelem,
+// z limitem dysku przypisanego pakietu nakladanym od razu przez mechanizm
+// z /quota/settings powyzej. Patrz server/services/hostingAccounts.js.
+router.get('/accounts', (req, res) => {
+  try {
+    res.json({ accounts: listAccounts() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/accounts', async (req, res) => {
+  try {
+    res.json(await createAccount(req.body));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/accounts/:id', async (req, res) => {
+  try {
+    await deleteAccount(req.params.id);
+    res.json({ success: true });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
