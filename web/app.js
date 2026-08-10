@@ -1674,6 +1674,11 @@ function renderSystemResourcesHtml(resources) {
         </div>
       </div>
     </div>
+    <div style="margin-top:16px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${t('packages.quota_help_title')}</div>
+      <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('packages.quota_help_body')}</p>
+      <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0;">${escapeHtml(t('packages.quota_help_example'))}</pre>
+    </div>
     <div class="action-msg" id="sysres-msg"></div>
   `;
 }

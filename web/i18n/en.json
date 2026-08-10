@@ -427,5 +427,8 @@
   "packages.quota_installed": "installed",
   "packages.quota_not_installed": "not installed",
   "packages.quota_install_button": "Install",
-  "packages.quota_installing": "Installing..."
+  "packages.quota_installing": "Installing...",
+  "packages.quota_help_title": "Enabling disk limits (fstab)",
+  "packages.quota_help_body": "Installing the package alone (dnf install -y quota) doesn't enforce anything yet - you need to enable quota support on the target filesystem, and that depends on the disk layout of your VPS, so we don't do it automatically. First check: findmnt -no FSTYPE,OPTIONS / (or the path where client sites live). Example for ext4:",
+  "packages.quota_help_example": "1. Add usrquota,grpquota in /etc/fstab (mount options column):\n   UUID=xxxx-xxxx  /  ext4  defaults,usrquota,grpquota  0 1\n\n2. Remount:\n   mount -o remount /\n\n3. Build the quota database:\n   quotacheck -cug /\n\n4. Turn quota on:\n   quotaon /\n\n5. Set a limit for a user (values in KB - here roughly 1 GB soft / 1.1 GB hard):\n   setquota -u username 1048576 1153434 0 0 /\n\nOn XFS (default on AlmaLinux/Rocky) use the prjquota option and the xfs_quota tool instead of usrquota/grpquota - a different mechanism (project quota) that doesn't need a separate UID per site."
 }
