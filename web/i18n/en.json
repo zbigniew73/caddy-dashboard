@@ -447,7 +447,7 @@
   "packages.pkg_form_quota_active_hint": "Enforced by: {mode} on {mount} (verified, ready to use).",
   "packages.pkg_form_quota_unverified_hint": "Selected mechanism: {mode} on {mount}, but NOT VERIFIED - go to \"System resources\" and click Apply, otherwise creating accounts with this package will be blocked.",
   "accounts.title": "Hosting accounts",
-  "accounts.description": "System users (no password/SSH login) with a home directory under the mount point from the section above. The assigned package's disk limit is applied automatically on creation, through the quota mechanism selected there (if set to \"None\", the account is created without an enforced limit).",
+  "accounts.description": "System users with SSH access (home directory under the mount point from the section above, ~/domains -> Caddy site configs). Temporary password for every new account: \"PassWord!1234\" - must be changed on first SSH login. The assigned package's disk limit is applied automatically on creation, through the quota mechanism selected there (if set to \"None\", the account is created without an enforced limit).",
   "accounts.no_packages": "Add at least one package below (in the \"Hosting packages\" section) first, so there's something to assign to a new account.",
   "accounts.empty": "No accounts yet.",
   "accounts.field_username": "Username",

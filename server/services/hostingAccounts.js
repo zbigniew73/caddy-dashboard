@@ -59,7 +59,8 @@ function listAccounts() {
   });
 }
 
-// Tworzy usera systemowego (bez hasla/logowania, patrz
+// Tworzy usera systemowego z dostepem SSH (haslo tymczasowe, wymuszona
+// zmiana przy pierwszym logowaniu, katalog stron Caddy - patrz
 // hosting-account-create.sh) i OD RAZU stosuje limit dysku pakietu przez
 // mechanizm ustawiony globalnie w getDiskSettings() (Brak/ext4/XFS). Jesli
 // mechanizm to "none", konto powstaje bez wymuszonego limitu (tak samo jak

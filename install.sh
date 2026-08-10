@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-APP_VERSION="1.20.4"
+APP_VERSION="1.21.0"
 REPO_URL="${REPO_URL:-https://github.com/zbigniew73/caddy-dashboard.git}"
 BRANCH="${BRANCH:-main}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/caddy-dashboard}"
@@ -403,11 +403,18 @@ if ! command -v caddy >/dev/null 2>&1; then
   systemctl enable --now caddy
 
   log "$(t caddy_fallback)"
+  mkdir -p /etc/caddy/sites
+  chown root:caddy /etc/caddy/sites
+  chmod 0751 /etc/caddy/sites
   cat > /etc/caddy/Caddyfile <<'EOF'
 # Default fallback for unconfigured domains
 :80, :443 {
     respond "Caddy Dashboard - No site configured for this domain" 404
 }
+
+# Per-account site configs (see server/scripts/hosting-account-create.sh) -
+# one subdirectory per hosting account, one .caddy file per domain.
+import /etc/caddy/sites/*/*.caddy
 EOF
   caddy validate --config /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
   systemctl reload caddy
