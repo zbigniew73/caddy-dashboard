@@ -41,10 +41,17 @@ if ! mountpoint -q "$MOUNTPOINT"; then
   echo "BLAD: '${MOUNTPOINT}' nie jest osobnym punktem montowania filesystemu (to zwykly katalog na innym mouncie) - xfs project quota dziala tylko na realnym mouncie. Sprawdz: findmnt '${MOUNTPOINT}'. Jesli to katalog na filesystemie root, ustaw mountpoint na '/'." >&2
   exit 1
 fi
-case "$HOMEDIR" in
-  "$MOUNTPOINT"/*|"$MOUNTPOINT") ;;
-  *) echo "BLAD: katalog domowy '${HOMEDIR}' nie lezy pod punktem montowania '${MOUNTPOINT}'." >&2; exit 1 ;;
-esac
+# Gdy MOUNTPOINT to "/" (root), KAZDA absolutna sciezka lezy pod nim -
+# trzeba to sprawdzic osobno, bo "$MOUNTPOINT"/* dla MOUNTPOINT="/" daje
+# wzorzec "//*" (podwojny slash), ktory nie dopasuje zwyklej sciezki typu
+# /home/user (bledny false-negative, HOMEDIR juz zwalidowany wyzej jako
+# zaczynajacy sie od pojedynczego "/").
+if [ "$MOUNTPOINT" != "/" ]; then
+  case "$HOMEDIR" in
+    "$MOUNTPOINT"/*|"$MOUNTPOINT") ;;
+    *) echo "BLAD: katalog domowy '${HOMEDIR}' nie lezy pod punktem montowania '${MOUNTPOINT}'." >&2; exit 1 ;;
+  esac
+fi
 
 touch /etc/projects /etc/projid
 
