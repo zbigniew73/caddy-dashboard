@@ -1825,6 +1825,14 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
           </div>
         </div>
         <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_fullname')}</label>
+          <input type="text" id="acc-form-fullname" style="width:160px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_email')}</label>
+          <input type="email" id="acc-form-email" style="width:180px;">
+        </div>
+        <div>
           <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_package')}</label>
           <select id="acc-form-package" style="width:180px;">
             ${packages.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('')}
@@ -1840,6 +1848,8 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
           <thead>
             <tr>
               <th>${t('accounts.column_username')}</th>
+              <th>${t('accounts.column_fullname')}</th>
+              <th>${t('accounts.column_email')}</th>
               <th>${t('accounts.column_package')}</th>
               <th>${t('accounts.column_homedir')}</th>
               <th>${t('accounts.column_quota')}</th>
@@ -1851,21 +1861,94 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
             ${accounts.map((a) => `
               <tr>
                 <td>${escapeHtml(a.username)}</td>
+                <td>${escapeHtml(a.fullName || '-')}</td>
+                <td>${escapeHtml(a.email || '-')}</td>
                 <td>${escapeHtml(a.packageName || '-')}</td>
                 <td>${escapeHtml(a.homeDir)}</td>
                 <td>${a.diskFsType === 'ext4' ? 'ext4' : a.diskFsType === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`}</td>
                 <td>${escapeHtml(new Date(a.createdAt).toLocaleString())}</td>
-                <td><button type="button" class="danger" data-delete-account="${escapeHtml(a.id)}">${t('accounts.delete_button')}</button></td>
+                <td>
+                  <button type="button" class="secondary" data-edit-account="${escapeHtml(a.id)}">${t('accounts.edit_button')}</button>
+                  <button type="button" class="danger" data-delete-account="${escapeHtml(a.id)}">${t('accounts.delete_button')}</button>
+                </td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
     ` : `<div class="empty-state">${t('accounts.empty')}</div>`}
+    <div id="acc-edit-form-container"></div>
   `;
 }
 
-function wireAccountsSection(content, refresh) {
+function renderAccountEditFormHtml(account, packages) {
+  return `
+    <div class="system-info-card" id="acc-edit-form-card" style="margin-top:16px;max-width:480px;">
+      <h3 style="margin:0 0 14px;font-size:15px;">${t('accounts.form_title_edit')}</h3>
+      <input type="hidden" id="acc-edit-form-id" value="${escapeHtml(account.id)}">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_username')}</label>
+      <div style="margin-bottom:10px;font-family:var(--mono);">${escapeHtml(account.username)}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_fullname')}</label>
+      <input type="text" id="acc-edit-form-fullname" value="${escapeHtml(account.fullName || '')}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_email')}</label>
+      <input type="email" id="acc-edit-form-email" value="${escapeHtml(account.email || '')}" style="width:100%;margin-bottom:10px;">
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('accounts.field_package')}</label>
+      <select id="acc-edit-form-package" style="width:100%;margin-bottom:14px;">
+        ${packages.map((p) => `<option value="${escapeHtml(p.id)}" ${p.id === account.packageId ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+      </select>
+
+      <button type="button" id="acc-edit-form-save-btn">${t('accounts.save_button')}</button>
+      <button type="button" class="secondary" id="acc-edit-form-cancel-btn">${t('accounts.cancel_button')}</button>
+      <div class="action-msg" id="acc-edit-form-msg"></div>
+    </div>
+  `;
+}
+
+function wireAccountEditForm(content, refresh) {
+  const saveBtn = document.getElementById('acc-edit-form-save-btn');
+  const cancelBtn = document.getElementById('acc-edit-form-cancel-btn');
+  if (!saveBtn) return;
+  const msgEl = document.getElementById('acc-edit-form-msg');
+
+  cancelBtn.onclick = () => {
+    document.getElementById('acc-edit-form-card').remove();
+  };
+
+  saveBtn.onclick = async () => {
+    const id = document.getElementById('acc-edit-form-id').value;
+    const body = {
+      fullName: document.getElementById('acc-edit-form-fullname').value,
+      email: document.getElementById('acc-edit-form-email').value,
+      packageId: document.getElementById('acc-edit-form-package').value
+    };
+    saveBtn.disabled = true;
+    msgEl.textContent = t('accounts.saving');
+    msgEl.className = 'action-msg';
+    try {
+      await api('PUT', `/accounts/${id}`, body);
+      await refresh(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      saveBtn.disabled = false;
+    }
+  };
+}
+
+function showAccountEditForm(account, packages, content, refresh) {
+  const existing = document.getElementById('acc-edit-form-card');
+  if (existing) existing.remove();
+  const container = document.getElementById('acc-edit-form-container');
+  container.innerHTML = renderAccountEditFormHtml(account, packages);
+  applyTranslations();
+  wireAccountEditForm(content, refresh);
+}
+
+function wireAccountsSection(content, refresh, accounts, packages) {
   const createBtn = document.getElementById('acc-form-create-btn');
   const msgEl = document.getElementById('acc-form-msg');
   const idInput = document.getElementById('acc-form-username-id');
@@ -1886,12 +1969,14 @@ function wireAccountsSection(content, refresh) {
         return;
       }
       const username = prefix + idValue;
+      const fullName = document.getElementById('acc-form-fullname').value;
+      const email = document.getElementById('acc-form-email').value;
       const packageId = document.getElementById('acc-form-package').value;
       createBtn.disabled = true;
       msgEl.textContent = t('accounts.creating');
       msgEl.className = 'action-msg';
       try {
-        await api('POST', '/accounts', { username, packageId });
+        await api('POST', '/accounts', { username, fullName, email, packageId });
         await refresh(content);
       } catch (e) {
         msgEl.textContent = e.message;
@@ -1900,6 +1985,13 @@ function wireAccountsSection(content, refresh) {
       }
     };
   }
+
+  document.querySelectorAll('[data-edit-account]').forEach((btn) => {
+    btn.onclick = () => {
+      const account = accounts.find((a) => a.id === btn.dataset.editAccount);
+      showAccountEditForm(account, packages, content, refresh);
+    };
+  });
 
   document.querySelectorAll('[data-delete-account]').forEach((btn) => {
     btn.onclick = async () => {
@@ -2025,7 +2117,7 @@ async function renderAccountsTab(content) {
     `;
 
     applyTranslations();
-    wireAccountsSection(content, renderAccountsTab);
+    wireAccountsSection(content, renderAccountsTab, accounts, packages);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

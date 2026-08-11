@@ -17,7 +17,7 @@ import {
 } from '../services/hostingPackages.js';
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
 import { getQuotaStatus, installQuotaPackage, verifyQuotaMechanism } from '../services/diskQuota.js';
-import { listAccounts, createAccount, deleteAccount, getNextHostingUsername } from '../services/hostingAccounts.js';
+import { listAccounts, createAccount, updateAccount, deleteAccount, getNextHostingUsername } from '../services/hostingAccounts.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -1038,6 +1038,14 @@ router.get('/accounts/next-username', (req, res) => {
 router.post('/accounts', async (req, res) => {
   try {
     res.json(await createAccount(req.body));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/accounts/:id', async (req, res) => {
+  try {
+    res.json(await updateAccount(req.params.id, req.body));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

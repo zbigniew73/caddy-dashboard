@@ -9,7 +9,6 @@
   "nav.main_section": "MAIN",
   "nav.system": "Dashboard",
   "nav.packages": "PACKAGES",
-  "nav.accounts": "ACCOUNTS",
   "nav.services": "SERVICES",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",
@@ -462,5 +461,14 @@
   "accounts.column_package": "Package",
   "accounts.column_homedir": "Home directory",
   "accounts.column_quota": "Quota",
-  "accounts.column_created": "Created"
+  "accounts.column_created": "Created",
+  "accounts.field_fullname": "Full name",
+  "accounts.field_email": "Email",
+  "accounts.column_fullname": "Full name",
+  "accounts.column_email": "Email",
+  "accounts.edit_button": "Edit",
+  "accounts.form_title_edit": "Edit account",
+  "accounts.save_button": "Save",
+  "accounts.cancel_button": "Cancel",
+  "accounts.saving": "Saving..."
 }

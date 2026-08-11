@@ -11,6 +11,7 @@ const DATA_PATH = path.join(DATA_DIR, 'hosting-accounts.json');
 const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
 
 const USERNAME_RE = /^[a-z_][a-z0-9_-]{0,31}$/;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const HOSTING_PREFIX = 'srv_';
 // Katalog domowy kont hostingowych jest ZAWSZE pod /home, niezaleznie od
 // diskMountPoint (Zasoby systemowe > Mechanizm limitu dysku) - to drugie
@@ -82,6 +83,15 @@ function runScript(scriptName, args) {
   });
 }
 
+function parseContactFields(body) {
+  const fullName = String(body?.fullName || '').trim();
+  const email = String(body?.email || '').trim();
+  if (email && !EMAIL_RE.test(email)) {
+    throw Object.assign(new Error('Nieprawidlowy adres e-mail.'), { status: 400 });
+  }
+  return { fullName, email };
+}
+
 function listAccounts() {
   const packages = listPackages();
   return loadAccounts().map((a) => {
@@ -125,6 +135,8 @@ async function createAccount(body) {
     throw Object.assign(new Error(`Konto '${username}' juz istnieje w panelu.`), { status: 409 });
   }
 
+  const { fullName, email } = parseContactFields(body);
+
   const { diskFsType, diskMountPoint, diskQuotaVerified } = getDiskSettings();
   if (diskFsType !== 'none' && !diskQuotaVerified) {
     throw Object.assign(
@@ -146,9 +158,57 @@ async function createAccount(body) {
   }
 
   const account = {
-    id: randomUUID(), username, packageId, homeDir, diskFsType, createdAt: new Date().toISOString()
+    id: randomUUID(), username, packageId, homeDir, diskFsType, fullName, email, createdAt: new Date().toISOString()
   };
   accounts.push(account);
+  saveAccounts(accounts);
+  return account;
+}
+
+// Edycja konta - nazwa uzytkownika i katalog domowy sa niezmienne (powiazane
+// z realnym userem systemowym), mozna zmienic dane kontaktowe oraz pakiet.
+// Zmiana pakietu przeklada sie od razu na nowy limit dysku, tym samym
+// mechanizmem i tymi samymi warunkami (weryfikacja quota) co przy tworzeniu
+// konta - patrz createAccount powyzej.
+async function updateAccount(id, body) {
+  const accounts = loadAccounts();
+  const idx = accounts.findIndex((a) => a.id === id);
+  if (idx === -1) {
+    throw Object.assign(new Error('Nie znaleziono konta.'), { status: 404 });
+  }
+  const account = accounts[idx];
+
+  const packageId = String(body?.packageId || '');
+  const pkg = listPackages().find((p) => p.id === packageId);
+  if (!pkg) {
+    throw Object.assign(new Error('Nie znaleziono wybranego pakietu.'), { status: 400 });
+  }
+
+  const { fullName, email } = parseContactFields(body);
+
+  if (packageId !== account.packageId) {
+    const { diskFsType, diskMountPoint, diskQuotaVerified } = getDiskSettings();
+    if (diskFsType !== 'none' && !diskQuotaVerified) {
+      throw Object.assign(
+        new Error(
+          `Mechanizm limitu dysku (${diskFsType.toUpperCase()} na ${diskMountPoint}) nie zostal zweryfikowany - ` +
+          `przejdz do karty "Zasoby systemowe" i nacisnij Zastosuj, az pojawi sie potwierdzenie ze quota dziala, zanim zmienisz pakiet.`
+        ),
+        { status: 409 }
+      );
+    }
+    if (diskFsType === 'ext4') {
+      await applyExt4Quota(account.username, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
+    } else if (diskFsType === 'xfs') {
+      await applyXfsQuota(account.username, account.homeDir, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
+    }
+    account.diskFsType = diskFsType;
+    account.packageId = packageId;
+  }
+
+  account.fullName = fullName;
+  account.email = email;
+  accounts[idx] = account;
   saveAccounts(accounts);
   return account;
 }
@@ -166,4 +226,4 @@ async function deleteAccount(id) {
   return account;
 }
 
-export { listAccounts, createAccount, deleteAccount, getNextHostingUsername };
+export { listAccounts, createAccount, updateAccount, deleteAccount, getNextHostingUsername };

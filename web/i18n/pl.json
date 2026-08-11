@@ -9,7 +9,6 @@
   "nav.main_section": "GŁÓWNE",
   "nav.system": "Dashboard",
   "nav.packages": "PAKIETY",
-  "nav.accounts": "KONTA",
   "nav.services": "USŁUGI",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",
@@ -462,5 +461,14 @@
   "accounts.column_package": "Pakiet",
   "accounts.column_homedir": "Katalog domowy",
   "accounts.column_quota": "Quota",
-  "accounts.column_created": "Utworzono"
+  "accounts.column_created": "Utworzono",
+  "accounts.field_fullname": "Imie i nazwisko",
+  "accounts.field_email": "E-mail",
+  "accounts.column_fullname": "Imie i nazwisko",
+  "accounts.column_email": "E-mail",
+  "accounts.edit_button": "Edytuj",
+  "accounts.form_title_edit": "Edytuj konto",
+  "accounts.save_button": "Zapisz",
+  "accounts.cancel_button": "Anuluj",
+  "accounts.saving": "Zapisywanie..."
 }
