@@ -94,12 +94,35 @@ function usageTile(label, used, limit, unit, id) {
   return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${usageTileContent(label, used, limit, unit)}</div>`;
 }
 
-// CPU/RAM sie zmieniaja z sekundy na sekunde (biezace zuzycie procesow) -
-// odswiezane co 5s. Strony/Bazy danych zmieniaja sie rzadko (trzeba
-// recznie dodac domene/baze), wiec odswiezane co 60s (co 12. tick tego
-// samego timera - jeden fetch /me na tick, bez dublowania zapytan). Oba w
-// miejscu (bez przeladowania calej zakladki), dopoki user jest na
-// dashboardzie.
+// Kafelek bez paska postepu - dla wartosci, ktore nie sa "wykorzystano /
+// limit" (np. Uptime serwera).
+function plainTileContent(label, value) {
+  return `
+    <div class="stat-label">${escapeHtml(label)}</div>
+    <div class="stat-value">${escapeHtml(value)}</div>
+  `;
+}
+
+function plainTile(label, value, id) {
+  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${plainTileContent(label, value)}</div>`;
+}
+
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${d}d ${h}h ${m}m`;
+}
+
+// CPU/RAM/Uptime sie zmieniaja z sekundy na sekunde (biezace zuzycie
+// procesow / czas dzialania serwera) - odswiezane co 5s, bez dodatkowego
+// kosztu (Uptime przychodzi w tej samej odpowiedzi /me co CPU/RAM).
+// Strony/Bazy danych/Dysk zmieniaja sie rzadko (trzeba recznie dodac
+// domene/baze/pliki), a odczyt Dysku (`du -sm` na katalogu domowym) jest
+// realnie kosztowny na kontach z duzo danymi - wiec te trzy sa
+// odswiezane co 60s (co 12. tick tego samego timera - jeden fetch /me na
+// tick, bez dublowania zapytan). Wszystko w miejscu (bez przeladowania
+// calej zakladki), dopoki user jest na dashboardzie.
 const USAGE_REFRESH_MS = 5000;
 const SITES_DB_REFRESH_EVERY_N_TICKS = 12; // 12 * 5s = 60s
 let usageRefreshTimer = null;
@@ -113,15 +136,19 @@ function startUsageRefresh() {
     try {
       const me = await api('GET', '/me');
       CURRENT_ACCOUNT = me;
+      const uptimeTile = document.getElementById('tile-uptime');
       const cpuTile = document.getElementById('tile-cpu');
       const ramTile = document.getElementById('tile-ram');
+      if (uptimeTile) uptimeTile.innerHTML = plainTileContent(t('dashboard.tile_uptime'), formatUptime(me.serverUptimeSeconds ?? 0));
       if (cpuTile) cpuTile.innerHTML = usageTileContent(t('dashboard.tile_cpu'), me.cpuUsedPercent ?? 0, me.cpuPercentLimit, '%');
       if (ramTile) ramTile.innerHTML = usageTileContent(t('dashboard.tile_ram'), me.ramUsedMb ?? 0, me.ramLimitMb, ' MB');
 
       usageRefreshTickCount += 1;
       if (usageRefreshTickCount % SITES_DB_REFRESH_EVERY_N_TICKS === 0) {
+        const diskTile = document.getElementById('tile-disk');
         const sitesTile = document.getElementById('tile-sites');
         const dbTile = document.getElementById('tile-databases');
+        if (diskTile) diskTile.innerHTML = usageTileContent(t('dashboard.tile_disk'), me.diskUsedMb ?? 0, me.diskQuotaMb, ' MB');
         if (sitesTile) sitesTile.innerHTML = usageTileContent(t('dashboard.tile_sites'), me.sitesUsed ?? 0, me.maxDomains, '');
         if (dbTile) dbTile.innerHTML = usageTileContent(t('dashboard.tile_databases'), me.databasesUsed ?? 0, me.maxDatabases, '');
       }
@@ -141,9 +168,11 @@ function stopUsageRefresh() {
 function renderDashboard(content) {
   const a = CURRENT_ACCOUNT;
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4, minmax(0, 1fr));gap:16px;">
+    <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:16px;">
+      ${plainTile(t('dashboard.tile_uptime'), formatUptime(a.serverUptimeSeconds ?? 0), 'tile-uptime')}
       ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%', 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
+      ${usageTile(t('dashboard.tile_disk'), a.diskUsedMb ?? 0, a.diskQuotaMb, ' MB', 'tile-disk')}
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
       ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '', 'tile-databases')}
     </div>

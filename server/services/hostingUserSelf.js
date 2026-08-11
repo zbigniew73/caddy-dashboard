@@ -1,5 +1,6 @@
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
@@ -118,6 +119,30 @@ function countSites(username) {
   });
 }
 
+// Realne zuzycie dysku (katalog domowy, `du -sm`) - dziala niezaleznie od
+// tego, czy limit dysku jest juz egzekwowany przez quote na danym VPS, w
+// odroznieniu od `repquota`/`xfs_quota` ktore wymagalyby wlaczonego
+// mechanizmu (patrz diskQuota.js: quota moze byc "off" - packages.quota_off_badge).
+function getDiskUsageMb(username) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/hosting-account-disk-usage.sh`, username]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(parseInt(stdout.trim(), 10) || 0);
+        return;
+      }
+      reject(Object.assign(
+        new Error(sudoErrorMessage('hosting-account-disk-usage.sh', stderr) || `exit code ${code}`), { status: 500 }
+      ));
+    });
+  });
+}
+
 // Wlasny rekord z rejestru panelu (hosting-accounts.json) - jesli konto
 // istnieje jako user systemowy, ale z jakiegos powodu nie ma wpisu w
 // rejestrze (np. utworzone recznie poza panelem), zwracamy nulle zamiast
@@ -129,9 +154,10 @@ function countSites(username) {
 // uczciwa odpowiedz to "0 z limitu pakietu", a nie zgadywanie.
 async function getOwnAccount(username) {
   const account = listAccounts().find((a) => a.username === username);
-  const [usage, sitesUsed] = await Promise.all([
+  const [usage, sitesUsed, diskUsedMb] = await Promise.all([
     getProcessUsage(username),
-    account ? countSites(username).catch(() => 0) : Promise.resolve(0)
+    account ? countSites(username).catch(() => 0) : Promise.resolve(0),
+    getDiskUsageMb(username).catch(() => 0)
   ]);
   return {
     username,
@@ -140,6 +166,8 @@ async function getOwnAccount(username) {
     homeDir: account?.homeDir || null,
     packageName: account?.packageName || null,
     diskQuotaMb: account?.diskQuotaMb ?? null,
+    diskUsedMb,
+    serverUptimeSeconds: Math.floor(os.uptime()),
     ramLimitMb: account?.ramLimitMb ?? null,
     maxDomains: account?.maxDomains ?? null,
     maxDatabases: account?.maxDatabases ?? null,
