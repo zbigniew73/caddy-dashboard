@@ -21,12 +21,18 @@
 # WLASNEGO podkatalogu (zna jego nazwe), ale nie zrobil `ls` i nie
 # zobaczyl nazw innych kont.
 #
-# ~/domains -> /etc/caddy/sites/<username>: symlink w DRUGA strone niz
-# mogloby sie wydawac naturalne - user edytuje swoje pliki z poziomu
-# wlasnego home, ale to jego WLASNA powloka/SSH rozwiazuje ten symlink,
-# wlasnymi uprawnieniami. Caddy nigdy nie dostaje zadnych praw do /home -
-# unikamy w ten sposob przyznawania uslugi sieciowej dostepu do calego
-# lancucha katalogow domowych.
+# ~/domains: PRAWDZIWY katalog na dysku (nie symlink) - user
+# laczacy sie po SSH/SFTP ma tu wrzucac realne pliki swoich stron. Wczesniejsza
+# wersja robila to jako symlink w strone /etc/caddy/sites/<username>
+# (katalog na KONFIGI Caddy, *.caddy), co bylo mylace - user zamiast
+# plikow strony widzial config Caddy'ego. Config zostaje tam gdzie byl
+# (USER_SITE_DIR ponizej), zarzadzany przez panel/root, nie przez usera.
+#
+# Zeby Caddy (dziala jako caddy:caddy) dotarl do plikow w
+# ~/domains/<domena>/public, katalog domowy MUSI dawac grupie caddy
+# prawo PRZEJSCIA (0710, execute-only, bez odczytu) - patrz nizej. Sam
+# ~/domains i wszystko pod nim (tworzone pozniej przez flow "dodaj
+# strone") to juz 0750 (grupa caddy ma r-x - moze czytac/listowac).
 #
 # Uzycie: hosting-account-create.sh <username> <home_base_dir>
 
@@ -80,17 +86,29 @@ chown "${USERNAME}:caddy" "$USER_SITE_DIR"
 chmod 0750 "$USER_SITE_DIR"
 
 USER_HOME="${HOME_BASE_DIR}/${USERNAME}"
-USER_DOMAINS_LINK="${USER_HOME}/domains"
-# /etc/skel moze zawierac pusty katalog "domains" (kopiowany przez
-# useradd -m) - podmieniamy go na symlink, ale tylko jesli jest pusty;
-# niepusty/nieoczekiwany stan zostawiamy nietkniety i po prostu nie
-# tworzymy symlinka (nie kasujemy danych na sile).
-if [ -e "$USER_DOMAINS_LINK" ] && [ ! -L "$USER_DOMAINS_LINK" ]; then
-  rmdir "$USER_DOMAINS_LINK" 2>/dev/null || true
-fi
-if [ ! -e "$USER_DOMAINS_LINK" ] && [ ! -L "$USER_DOMAINS_LINK" ]; then
-  ln -s "$USER_SITE_DIR" "$USER_DOMAINS_LINK"
-  chown -h "${USERNAME}:${USERNAME}" "$USER_DOMAINS_LINK"
-fi
 
-echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${USER_SITE_DIR})"
+# Katalog domowy sam w sobie musi dawac grupie "caddy" prawo PRZEJSCIA
+# (bez odczytu/listowania) - inaczej Caddy nie dotrze do
+# domains/<domena>/public ponizej, nawet jesli TE podkatalogi maja
+# poprawne uprawnienia. 0710 = owner rwx, grupa --x (tylko przejscie,
+# NIE ls), other brak - reszta zawartosci home (.ssh, .bashrc itp.)
+# zostaje niewidoczna/nieosiagalna dla caddy, dostepny jest tylko
+# swiadomie ustawiony podkatalog domains/.
+chown "${USERNAME}:caddy" "$USER_HOME"
+chmod 0710 "$USER_HOME"
+
+USER_DOMAINS_DIR="${USER_HOME}/domains"
+# /etc/skel moze zawierac pusty katalog "domains" (kopiowany przez
+# useradd -m) - to juz jest dokladnie to, czego potrzebujemy (prawdziwy
+# katalog), wystarczy poprawic wlasciciela/uprawnienia. Jesli zamiast
+# katalogu jest tam (z jakiegos powodu, np. stary symlink sprzed tej
+# poprawki) plik/symlink, usuwamy go i tworzymy od nowa jako katalog -
+# to miejsce ma byc zawsze prawdziwym katalogiem, nigdy symlinkiem.
+if [ -L "$USER_DOMAINS_DIR" ] || { [ -e "$USER_DOMAINS_DIR" ] && [ ! -d "$USER_DOMAINS_DIR" ]; }; then
+  rm -f "$USER_DOMAINS_DIR"
+fi
+mkdir -p "$USER_DOMAINS_DIR"
+chown "${USERNAME}:caddy" "$USER_DOMAINS_DIR"
+chmod 0750 "$USER_DOMAINS_DIR"
+
+echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${USER_SITE_DIR}, katalog na tresc stron ${USER_DOMAINS_DIR})"
