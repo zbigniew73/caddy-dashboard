@@ -309,20 +309,48 @@ const CRON_PRESETS = [
   ['daily3am', '0 3 * * *']
 ];
 
-// Gotowe szablony calych zadan (nazwa+harmonogram+polecenie na raz) -
-// pierwszy to WordPress (wylaczenie wbudowanego wp-cron.php i uruchamianie
-// go z prawdziwego crona, standardowa praktyka dla WP na wiekszy ruch).
-// "example.pl" jest CELOWO placeholderem do podmiany - po wstawieniu
-// szablonu ta czesc pola polecenia jest zaznaczona, zeby mozna ja od razu
-// nadpisac wlasna domena.
-const CRON_TEMPLATE_PLACEHOLDER_DOMAIN = 'example.pl';
-const CRON_TEMPLATES = {
-  wordpress: {
-    name: 'WordPress Cron',
-    schedule: '*/2 * * * *',
-    command: `wget -q -T 60 -O /dev/null "https://${CRON_TEMPLATE_PLACEHOLDER_DOMAIN}/wp-cron.php?doing_wp_cron"`
-  }
-};
+// Gotowe szablony calych zadan (nazwa+harmonogram+polecenie na raz).
+// WordPress/Laravel potrzebuja danych specyficznych dla konkretnej strony
+// (domena / katalog aplikacji) - te pola maja "placeholder" (fragment
+// polecenia zaznaczany po wstawieniu szablonu, do od razu nadpisania).
+// Czyszczenie logow/plikow tymczasowych jest w pelni uniwersalne (dziala
+// na WLASNYM katalogu domowym / plikach usera) - gotowe do uzycia bez
+// edycji, wiec "placeholder" jest tam null.
+function buildCronTemplates(phpPaths) {
+  const phpPath = phpPaths[0] || '/usr/local/bin/php85';
+  const homeDir = CURRENT_ACCOUNT?.homeDir || '/home/user';
+  const username = CURRENT_ACCOUNT?.username || 'user';
+  return {
+    wordpress: {
+      label: t('cron.template_wordpress'),
+      name: 'WordPress Cron',
+      schedule: '*/2 * * * *',
+      command: `wget -q -T 60 -O /dev/null "https://example.pl/wp-cron.php?doing_wp_cron"`,
+      placeholder: 'example.pl'
+    },
+    laravel: {
+      label: t('cron.template_laravel'),
+      name: t('cron.template_laravel_name'),
+      schedule: '* * * * *',
+      command: `${phpPath} ${homeDir}/example-app/artisan schedule:run >> /dev/null 2>&1`,
+      placeholder: 'example-app'
+    },
+    cleanup_logs: {
+      label: t('cron.template_cleanup_logs'),
+      name: t('cron.template_cleanup_logs_name'),
+      schedule: '0 3 * * *',
+      command: `find ${homeDir} -maxdepth 4 -type f -name "*.log" -mtime +14 -delete`,
+      placeholder: null
+    },
+    cleanup_tmp: {
+      label: t('cron.template_cleanup_tmp'),
+      name: t('cron.template_cleanup_tmp_name'),
+      schedule: '0 4 * * *',
+      command: `find /tmp -maxdepth 1 -user ${username} -type f -mtime +1 -delete`,
+      placeholder: null
+    }
+  };
+}
 
 let cronPhpPathsCache = null;
 let cronEditingId = null;
@@ -351,15 +379,16 @@ function cronFormHtml(phpPaths, editingJob) {
     ? phpPaths.map((p) => `<button type="button" class="secondary" data-cron-php-path="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')
     : `<span style="font-size:12px;color:var(--muted);">${t('cron.php_paths_none')}</span>`;
   const commandPlaceholder = `${phpPaths[0] || '/usr/local/bin/php85'} ${CURRENT_ACCOUNT?.homeDir || '/home/user'}/cron.php`;
+  const templatesHtml = Object.entries(buildCronTemplates(phpPaths))
+    .map(([key, tpl]) => `<button type="button" class="secondary" data-cron-template="${key}">${escapeHtml(tpl.label)}</button>`)
+    .join('');
 
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${editingJob ? t('cron.edit_title') : t('cron.add_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('cron.add_description')}</p>
 
     <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_templates')}</label>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
-      <button type="button" class="secondary" data-cron-template="wordpress">${t('cron.template_wordpress')}</button>
-    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${templatesHtml}</div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${t('cron.template_hint')}</div>
 
     <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_name')}</label>
@@ -411,22 +440,27 @@ function renderCronSection(jobs, phpPaths) {
   `;
 }
 
-function wireCronSection(content) {
+function wireCronSection(content, phpPaths) {
   content.querySelectorAll('[data-cron-preset]').forEach((btn) => {
     btn.onclick = () => { document.getElementById('cron-schedule').value = btn.dataset.cronPreset; };
   });
 
+  const cronTemplates = buildCronTemplates(phpPaths);
   content.querySelectorAll('[data-cron-template]').forEach((btn) => {
     btn.onclick = () => {
-      const template = CRON_TEMPLATES[btn.dataset.cronTemplate];
+      const template = cronTemplates[btn.dataset.cronTemplate];
       if (!template) return;
       document.getElementById('cron-name').value = template.name;
       document.getElementById('cron-schedule').value = template.schedule;
       const cmdInput = document.getElementById('cron-command');
       cmdInput.value = template.command;
       cmdInput.focus();
-      const domainStart = template.command.indexOf(CRON_TEMPLATE_PLACEHOLDER_DOMAIN);
-      if (domainStart >= 0) cmdInput.setSelectionRange(domainStart, domainStart + CRON_TEMPLATE_PLACEHOLDER_DOMAIN.length);
+      if (template.placeholder) {
+        const start = template.command.indexOf(template.placeholder);
+        if (start >= 0) cmdInput.setSelectionRange(start, start + template.placeholder.length);
+      } else {
+        cmdInput.setSelectionRange(cmdInput.value.length, cmdInput.value.length);
+      }
     };
   });
 
@@ -522,7 +556,7 @@ async function refreshCronTab(content) {
     ]);
     cronPhpPathsCache = phpPaths;
     content.innerHTML = renderCronSection(jobs, phpPaths);
-    wireCronSection(content);
+    wireCronSection(content, phpPaths);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
