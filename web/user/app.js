@@ -79,25 +79,58 @@ function severity(percent) {
 // Strony to realne liczenie plikow *.caddy, Bazy danych to na razie
 // zawsze 0/limit, bo nie ma jeszcze mechanizmu przypisywania baz do
 // konta - dokladniejsze metryki dojda pozniej).
-function usageTile(label, used, limit, unit) {
+function usageTileContent(label, used, limit, unit) {
   const hasLimit = typeof limit === 'number' && limit > 0;
   const percent = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const valueText = hasLimit ? `${used}${unit} / ${limit}${unit}` : `${used}${unit}`;
   return `
-    <div class="stat-tile">
-      <div class="stat-label">${escapeHtml(label)}</div>
-      <div class="stat-value">${valueText}</div>
-      <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
-    </div>
+    <div class="stat-label">${escapeHtml(label)}</div>
+    <div class="stat-value">${valueText}</div>
+    <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
   `;
+}
+
+function usageTile(label, used, limit, unit, id) {
+  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${usageTileContent(label, used, limit, unit)}</div>`;
+}
+
+// CPU/RAM sie zmieniaja z sekundy na sekunde (biezace zuzycie procesow, nie
+// stan konfiguracji) - odswiezamy tylko te dwa kafelki co 5s, w miejscu
+// (bez przeladowania calej zakladki), dopoki user jest na dashboardzie.
+// Strony/Bazy danych to wartosci "wolno zmieniajace sie" (trzeba by dodac
+// domene/baze recznie), wiec nie wymagaja pollingu.
+let usageRefreshTimer = null;
+
+function startUsageRefresh() {
+  stopUsageRefresh();
+  usageRefreshTimer = setInterval(async () => {
+    if (currentTab !== 'dashboard' || MUST_CHANGE_PASSWORD) return;
+    try {
+      const me = await api('GET', '/me');
+      CURRENT_ACCOUNT = me;
+      const cpuTile = document.getElementById('tile-cpu');
+      const ramTile = document.getElementById('tile-ram');
+      if (cpuTile) cpuTile.innerHTML = usageTileContent(t('dashboard.tile_cpu'), me.cpuUsedPercent ?? 0, me.cpuPercentLimit, '%');
+      if (ramTile) ramTile.innerHTML = usageTileContent(t('dashboard.tile_ram'), me.ramUsedMb ?? 0, me.ramLimitMb, ' MB');
+    } catch {
+      // ciche niepowodzenie odswiezenia - kolejna proba za 5s
+    }
+  }, 5000);
+}
+
+function stopUsageRefresh() {
+  if (usageRefreshTimer) {
+    clearInterval(usageRefreshTimer);
+    usageRefreshTimer = null;
+  }
 }
 
 function renderDashboard(content) {
   const a = CURRENT_ACCOUNT;
   content.innerHTML = `
     <div class="system-grid">
-      ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%')}
-      ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB')}
+      ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%', 'tile-cpu')}
+      ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '')}
       ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '')}
     </div>
@@ -194,8 +227,13 @@ function renderSettings(content) {
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
-  if (currentTab === 'settings') renderSettings(content);
-  else renderDashboard(content);
+  if (currentTab === 'settings') {
+    stopUsageRefresh();
+    renderSettings(content);
+  } else {
+    renderDashboard(content);
+    startUsageRefresh();
+  }
 }
 
 document.querySelectorAll('nav button.tab').forEach((btn) => {
