@@ -94,15 +94,20 @@ function usageTile(label, used, limit, unit, id) {
   return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${usageTileContent(label, used, limit, unit)}</div>`;
 }
 
-// CPU/RAM sie zmieniaja z sekundy na sekunde (biezace zuzycie procesow, nie
-// stan konfiguracji) - odswiezamy tylko te dwa kafelki co 5s, w miejscu
-// (bez przeladowania calej zakladki), dopoki user jest na dashboardzie.
-// Strony/Bazy danych to wartosci "wolno zmieniajace sie" (trzeba by dodac
-// domene/baze recznie), wiec nie wymagaja pollingu.
+// CPU/RAM sie zmieniaja z sekundy na sekunde (biezace zuzycie procesow) -
+// odswiezane co 5s. Strony/Bazy danych zmieniaja sie rzadko (trzeba
+// recznie dodac domene/baze), wiec odswiezane co 60s (co 12. tick tego
+// samego timera - jeden fetch /me na tick, bez dublowania zapytan). Oba w
+// miejscu (bez przeladowania calej zakladki), dopoki user jest na
+// dashboardzie.
+const USAGE_REFRESH_MS = 5000;
+const SITES_DB_REFRESH_EVERY_N_TICKS = 12; // 12 * 5s = 60s
 let usageRefreshTimer = null;
+let usageRefreshTickCount = 0;
 
 function startUsageRefresh() {
   stopUsageRefresh();
+  usageRefreshTickCount = 0;
   usageRefreshTimer = setInterval(async () => {
     if (currentTab !== 'dashboard' || MUST_CHANGE_PASSWORD) return;
     try {
@@ -112,10 +117,18 @@ function startUsageRefresh() {
       const ramTile = document.getElementById('tile-ram');
       if (cpuTile) cpuTile.innerHTML = usageTileContent(t('dashboard.tile_cpu'), me.cpuUsedPercent ?? 0, me.cpuPercentLimit, '%');
       if (ramTile) ramTile.innerHTML = usageTileContent(t('dashboard.tile_ram'), me.ramUsedMb ?? 0, me.ramLimitMb, ' MB');
+
+      usageRefreshTickCount += 1;
+      if (usageRefreshTickCount % SITES_DB_REFRESH_EVERY_N_TICKS === 0) {
+        const sitesTile = document.getElementById('tile-sites');
+        const dbTile = document.getElementById('tile-databases');
+        if (sitesTile) sitesTile.innerHTML = usageTileContent(t('dashboard.tile_sites'), me.sitesUsed ?? 0, me.maxDomains, '');
+        if (dbTile) dbTile.innerHTML = usageTileContent(t('dashboard.tile_databases'), me.databasesUsed ?? 0, me.maxDatabases, '');
+      }
     } catch {
       // ciche niepowodzenie odswiezenia - kolejna proba za 5s
     }
-  }, 5000);
+  }, USAGE_REFRESH_MS);
 }
 
 function stopUsageRefresh() {
@@ -131,8 +144,8 @@ function renderDashboard(content) {
     <div class="system-grid">
       ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%', 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
-      ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '')}
-      ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '')}
+      ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
+      ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '', 'tile-databases')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
       <div class="system-info-card">
