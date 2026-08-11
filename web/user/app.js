@@ -225,7 +225,6 @@ function renderDashboard(content) {
 // Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
 const PLACEHOLDER_TABS = {
   sites: 'nav.sites',
-  ssh: 'nav.ssh',
   backup: 'nav.backup'
 };
 
@@ -935,6 +934,150 @@ async function refreshRedisTab(content) {
   }
 }
 
+// SSH - lewy kafelek: dane polaczenia (host/port/user, realne - host to
+// publiczny IP serwera, port to AKTUALNY port SSH z panelu admina, patrz
+// getConnectionInfo w hostingUserSsh.js) + rozwijana pomoc z gotowymi
+// komendami. Prawy kafelek: zarzadzanie kluczami publicznymi -
+// standardowy ~/.ssh/authorized_keys, "Nazwa" klucza to natywny
+// komentarz OpenSSH na koncu linii, bez osobnego magazynu metadanych.
+function sshConnectionCardHtml(connection) {
+  const sshCmd = `ssh -p ${connection.port} ${connection.username}@${connection.host}`;
+  const sftpCmd = `sftp -P ${connection.port} ${connection.username}@${connection.host}`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('ssh.connection_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('ssh.connection_description')}</p>
+    <div class="info-grid">
+      <div class="info-label">${t('ssh.field_host')}</div><div class="info-value" style="font-family:var(--mono);">${escapeHtml(connection.host)}</div>
+      <div class="info-label">${t('ssh.field_port')}</div><div class="info-value" style="font-family:var(--mono);">${connection.port}</div>
+      <div class="info-label">${t('ssh.field_username')}</div><div class="info-value" style="font-family:var(--mono);">${escapeHtml(connection.username)}</div>
+    </div>
+    <button type="button" class="secondary" id="ssh-help-toggle" style="margin-top:14px;">${t('ssh.help_toggle')}</button>
+    <div id="ssh-help-content" style="display:none;margin-top:12px;font-size:13px;">
+      <div style="color:var(--muted);margin-bottom:4px;">SSH:</div>
+      <div style="font-family:var(--mono);background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;">${escapeHtml(sshCmd)}</div>
+      <div style="color:var(--muted);margin:10px 0 4px;">SFTP:</div>
+      <div style="font-family:var(--mono);background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;">${escapeHtml(sftpCmd)}</div>
+    </div>
+  `;
+}
+
+function sshKeyRow(key) {
+  const preview = key.keyData.length > 28 ? `${key.keyData.slice(0, 16)}...${key.keyData.slice(-8)}` : key.keyData;
+  return `
+    <tr>
+      <td>${escapeHtml(key.comment || '-')}</td>
+      <td>${escapeHtml(key.type)}</td>
+      <td style="font-family:var(--mono);">${escapeHtml(preview)}</td>
+      <td><button type="button" class="danger" data-ssh-key-delete="${escapeHtml(key.keyData)}">${t('ssh.delete')}</button></td>
+    </tr>
+  `;
+}
+
+function sshKeysCardHtml(keys) {
+  const rows = keys.length
+    ? keys.map(sshKeyRow).join('')
+    : `<tr><td colspan="4" style="text-align:center;color:var(--muted);">${t('ssh.keys_empty')}</td></tr>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('ssh.keys_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('ssh.keys_description')}</p>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('ssh.field_name')}</label>
+    <input type="text" id="ssh-key-name" maxlength="100" placeholder="${t('ssh.name_placeholder')}" style="margin-bottom:10px;">
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('ssh.field_public_key')}</label>
+    <textarea id="ssh-key-value" rows="3" placeholder="ssh-rsa AAAA... ${t('ssh.key_placeholder_or')} ssh-ed25519 AAAA..." style="width:100%;font-family:var(--mono);font-size:12px;resize:vertical;margin-bottom:6px;"></textarea>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${t('ssh.key_hint')}</div>
+
+    <button type="button" id="ssh-key-add-btn">${t('ssh.add_button')}</button>
+    <div class="action-msg" id="ssh-msg"></div>
+
+    <div style="overflow-x:auto;margin-top:16px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('ssh.col_name')}</th>
+            <th>${t('ssh.col_type')}</th>
+            <th>${t('ssh.col_key')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSshSection(data) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${sshConnectionCardHtml(data.connection)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${sshKeysCardHtml(data.keys)}
+      </div>
+    </div>
+  `;
+}
+
+function wireSshSection(content) {
+  const helpToggle = document.getElementById('ssh-help-toggle');
+  if (helpToggle) {
+    helpToggle.onclick = () => {
+      const helpContent = document.getElementById('ssh-help-content');
+      helpContent.style.display = helpContent.style.display === 'none' ? 'block' : 'none';
+    };
+  }
+
+  content.querySelectorAll('[data-ssh-key-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('ssh.confirm_delete'))) return;
+      const msgEl = document.getElementById('ssh-msg');
+      btn.disabled = true;
+      try {
+        await api('POST', '/ssh/keys/delete', { keyData: btn.dataset.sshKeyDelete });
+        await refreshSshTab(content);
+      } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'action-msg error'; }
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const addBtn = document.getElementById('ssh-key-add-btn');
+  if (addBtn) {
+    addBtn.onclick = async () => {
+      const name = document.getElementById('ssh-key-name').value;
+      const publicKey = document.getElementById('ssh-key-value').value;
+      const msgEl = document.getElementById('ssh-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      addBtn.disabled = true;
+      try {
+        await api('POST', '/ssh/keys', { name, publicKey });
+        await refreshSshTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        addBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function refreshSshTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('ssh.loading')}</div>`;
+  try {
+    const data = await api('GET', '/ssh');
+    content.innerHTML = renderSshSection(data);
+    wireSshSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -952,6 +1095,8 @@ function renderTab() {
     refreshDatabasesTab(content);
   } else if (currentTab === 'redis') {
     refreshRedisTab(content);
+  } else if (currentTab === 'ssh') {
+    refreshSshTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }

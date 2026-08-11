@@ -3,6 +3,7 @@ import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../serv
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
 import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
+import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 
 const router = Router();
 
@@ -124,6 +125,36 @@ router.post('/redis/stop', async (req, res) => {
 router.post('/redis/test', async (req, res) => {
   try {
     res.json(await testOwnRedis(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/ssh', async (req, res) => {
+  try {
+    const [connection, keys] = await Promise.all([
+      getConnectionInfo(req.hostingUser),
+      listSshKeys(req.hostingUser)
+    ]);
+    res.json({ connection, keys });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/ssh/keys', async (req, res) => {
+  try {
+    const { name, publicKey } = req.body || {};
+    res.json({ keys: await addSshKey(req.hostingUser, { name, publicKey }) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/ssh/keys/delete', async (req, res) => {
+  try {
+    const { keyData } = req.body || {};
+    res.json({ keys: await deleteSshKey(req.hostingUser, keyData) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
