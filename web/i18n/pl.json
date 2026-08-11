@@ -9,7 +9,7 @@
   "nav.main_section": "GŁÓWNE",
   "nav.system": "Dashboard",
   "nav.packages": "PAKIETY",
-  "nav.accounts_section": "KONTA",
+  "nav.accounts": "KONTA HOSTINGOWE",
   "nav.services": "USŁUGI",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",
