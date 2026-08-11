@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../services/hostingUserSelf.js';
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
+import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
 
 const router = Router();
 
@@ -62,6 +63,32 @@ router.put('/cron/:id', async (req, res) => {
 router.delete('/cron/:id', async (req, res) => {
   try {
     await deleteCronJob(req.hostingUser, req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/databases', async (req, res) => {
+  try {
+    res.json(await listOwnDatabases(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/databases', async (req, res) => {
+  try {
+    const { engine, nameSuffix } = req.body || {};
+    res.json(await createDatabase(req.hostingUser, { engine, nameSuffix }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/databases/:id', async (req, res) => {
+  try {
+    await deleteDatabase(req.hostingUser, req.params.id);
     res.json({ success: true });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

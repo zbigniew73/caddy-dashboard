@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
 import { listAccounts } from './hostingAccounts.js';
+import { countOwnDatabases } from './hostingUserDatabases.js';
 
 const execFileAsync = promisify(execFile);
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url)) + '/../scripts';
@@ -225,10 +226,9 @@ function getDiskUsageMb(username) {
 // rejestrze (np. utworzone recznie poza panelem), zwracamy nulle zamiast
 // bledu - panel klienta ma sie po prostu pokazac z pustymi polami.
 //
-// databasesUsed jest NA STALE 0 - w panelu nie istnieje jeszcze zaden
-// mechanizm wiazacy bazy danych z kontem hostingowym (MariaDB/PostgreSQL/
-// MongoDB sa zarzadzane globalnie w panelu admina, nie per-konto), wiec
-// uczciwa odpowiedz to "0 z limitu pakietu", a nie zgadywanie.
+// databasesUsed - od hostingUserDatabases.js (Bazy) jest to juz REALNA
+// liczba baz zalozonych przez to konto przez panel (wczesniej na stale 0,
+// bo mechanizm wiazania bazy z kontem nie istnial - teraz istnieje).
 async function getOwnAccount(username) {
   const account = listAccounts().find((a) => a.username === username);
   const [usage, sitesUsed, diskUsedMb] = await Promise.all([
@@ -236,6 +236,7 @@ async function getOwnAccount(username) {
     account ? countSites(username).catch(() => 0) : Promise.resolve(0),
     getDiskUsageMb(username).catch(() => 0)
   ]);
+  const databasesUsed = countOwnDatabases(username);
   return {
     username,
     fullName: account?.fullName || null,
@@ -256,7 +257,7 @@ async function getOwnAccount(username) {
     cpuUsedPercent: usage.cpuUsedPercent,
     ramUsedMb: usage.ramUsedMb,
     sitesUsed,
-    databasesUsed: 0
+    databasesUsed
   };
 }
 

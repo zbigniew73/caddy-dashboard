@@ -220,12 +220,12 @@ function renderDashboard(content) {
   `;
 }
 
-// Szkielet zakladek "na razie tylko szkielet" (Strony/Bazy/Cron/SSH/Backup) -
+// Szkielet zakladek "na razie tylko szkielet" (Strony/SSH/Backup/Redis) -
 // jeden rzad, dwa rowne klocki (ten sam wzorzec co Witaj+Info na
 // Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
 const PLACEHOLDER_TABS = {
   sites: 'nav.sites',
-  databases: 'nav.databases',
+  redis: 'nav.redis',
   ssh: 'nav.ssh',
   backup: 'nav.backup'
 };
@@ -593,6 +593,181 @@ async function refreshCronTab(content) {
   }
 }
 
+// Bazy danych - dwa klocki obok siebie (1 rzad, dwie rowne kolumny, ten
+// sam wzorzec co inne dwuklockowe rzedy w tym panelu):
+//   1) zarzadzanie: formularz "nowa baza" (silnik - tylko jesli wiecej niz
+//      jeden zainstalowany, ${username}_<sufiks>) + tabela istniejacych
+//      baz z podgladem hasla (oczko - maskowanie/odslanianie CZYSTO PO
+//      STRONIE KLIENTA, haslo i tak przychodzi z /api/user/databases w
+//      calosci, bo to dane WLASNEGO konta).
+//   2) statystyka: uzyto/limit (z pakietu, maxDatabases) + lista nazw baz
+//      ktore juz istnieja.
+// Baza ZAWSZE nazywa sie <username>_<sufiks> (np. srv_1001_wordpress) -
+// jeden identyfikator dla bazy I jej dedykowanego usera (patrz
+// hostingUserDatabases.js). Silniki widoczne to tylko te FAKTYCZNIE
+// zainstalowane i aktywne na serwerze (systemServices.js) - jesli admin
+// ma tylko MariaDB, user widzi/tworzy tylko MariaDB.
+const DB_ENGINE_LABELS = { mariadb: 'MariaDB', postgresql: 'PostgreSQL', mongodb: 'MongoDB' };
+const EYE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:middle;"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+function dbRow(db) {
+  const pwId = `db-pw-${db.id}`;
+  return `
+    <tr>
+      <td>${escapeHtml(DB_ENGINE_LABELS[db.engine] || db.engine)}</td>
+      <td>${escapeHtml(db.dbName)}</td>
+      <td>${escapeHtml(db.dbUser)}</td>
+      <td>
+        <span id="${pwId}" data-password="${escapeHtml(db.password)}" data-masked="true" style="font-family:var(--mono);">••••••••</span>
+        <button type="button" class="secondary" data-pw-toggle="${pwId}" title="${t('databases.toggle_password')}" style="padding:2px 6px;">${EYE_ICON_SVG}</button>
+      </td>
+      <td>${escapeHtml(db.host)}:${db.port}</td>
+      <td><button type="button" class="danger" data-db-delete="${db.id}">${t('databases.delete')}</button></td>
+    </tr>
+  `;
+}
+
+function databasesManageCardHtml(data) {
+  const { engines, items } = data;
+  const engineOptions = engines.map((e) => `<option value="${e}">${escapeHtml(DB_ENGINE_LABELS[e] || e)}</option>`).join('');
+  const singleEngine = engines.length === 1 ? engines[0] : '';
+
+  const createFormHtml = engines.length ? `
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
+      ${engines.length > 1 ? `
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('databases.field_engine')}</label>
+          <select id="db-new-engine">${engineOptions}</select>
+        </div>
+      ` : ''}
+      <div style="flex:1;min-width:180px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('databases.field_name')}</label>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <span style="color:var(--muted);font-size:13px;white-space:nowrap;font-family:var(--mono);">${escapeHtml(CURRENT_ACCOUNT?.username || '')}_</span>
+          <input type="text" id="db-new-suffix" maxlength="32" placeholder="${t('databases.name_placeholder')}" style="flex:1;">
+        </div>
+      </div>
+      <button type="button" id="db-create-btn" data-single-engine="${escapeHtml(singleEngine)}">${t('databases.create_button')}</button>
+    </div>
+    <div class="action-msg" id="db-msg"></div>
+  ` : `<div class="empty-state">${t('databases.no_engines')}</div>`;
+
+  const tableHtml = items.length ? `
+    <div style="overflow-x:auto;margin-top:14px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('databases.col_engine')}</th>
+            <th>${t('databases.col_name')}</th>
+            <th>${t('databases.col_user')}</th>
+            <th>${t('databases.col_password')}</th>
+            <th>${t('databases.col_host')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${items.map(dbRow).join('')}</tbody>
+      </table>
+    </div>
+  ` : (engines.length ? `<div class="empty-state">${t('databases.empty')}</div>` : '');
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('databases.manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('databases.manage_description')}</p>
+    ${createFormHtml}
+    ${tableHtml}
+  `;
+}
+
+function databasesStatsCardHtml(data) {
+  const { items, maxDatabases } = data;
+  const used = items.length;
+  const hasLimit = typeof maxDatabases === 'number' && maxDatabases > 0;
+  const percent = hasLimit ? Math.min(100, Math.round((used / maxDatabases) * 100)) : 0;
+  const valueText = hasLimit ? `${used} / ${maxDatabases}` : `${used}`;
+  const listHtml = items.length
+    ? `<ul style="margin:10px 0 0;padding-left:18px;font-size:13px;">${items.map((d) => `<li>${escapeHtml(d.dbName)} <span style="color:var(--muted);">(${escapeHtml(DB_ENGINE_LABELS[d.engine] || d.engine)})</span></li>`).join('')}</ul>`
+    : `<div style="font-size:13px;color:var(--muted);margin-top:10px;">${t('databases.stats_empty')}</div>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('databases.stats_title')}</h3>
+    <div class="stat-value" style="margin:6px 0 6px;">${escapeHtml(valueText)}</div>
+    <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
+    ${listHtml}
+  `;
+}
+
+function renderDatabasesSection(data) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${databasesManageCardHtml(data)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${databasesStatsCardHtml(data)}
+      </div>
+    </div>
+  `;
+}
+
+function wireDatabasesSection(content) {
+  content.querySelectorAll('[data-pw-toggle]').forEach((btn) => {
+    btn.onclick = () => {
+      const span = document.getElementById(btn.dataset.pwToggle);
+      if (!span) return;
+      const masked = span.dataset.masked !== 'false';
+      span.textContent = masked ? span.dataset.password : '••••••••';
+      span.dataset.masked = masked ? 'false' : 'true';
+    };
+  });
+
+  content.querySelectorAll('[data-db-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('databases.confirm_delete'))) return;
+      const msgEl = document.getElementById('db-msg');
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/databases/${btn.dataset.dbDelete}`);
+        await refreshDatabasesTab(content);
+      } catch (e) {
+        if (msgEl) { msgEl.textContent = e.message; msgEl.className = 'action-msg error'; }
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const createBtn = document.getElementById('db-create-btn');
+  if (createBtn) {
+    createBtn.onclick = async () => {
+      const suffixInput = document.getElementById('db-new-suffix');
+      const engineSelect = document.getElementById('db-new-engine');
+      const engine = engineSelect ? engineSelect.value : createBtn.dataset.singleEngine;
+      const msgEl = document.getElementById('db-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      createBtn.disabled = true;
+      try {
+        await api('POST', '/databases', { engine, nameSuffix: suffixInput.value.trim() });
+        await refreshDatabasesTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function refreshDatabasesTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('databases.loading')}</div>`;
+  try {
+    const data = await api('GET', '/databases');
+    content.innerHTML = renderDatabasesSection(data);
+    wireDatabasesSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -606,6 +781,8 @@ function renderTab() {
     renderSettings(content);
   } else if (currentTab === 'cron') {
     refreshCronTab(content);
+  } else if (currentTab === 'databases') {
+    refreshDatabasesTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
