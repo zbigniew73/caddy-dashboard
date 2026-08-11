@@ -1544,12 +1544,12 @@ function serviceCard(svc) {
   `;
 }
 
-const PACKAGE_PHP_MEMORY_OPTIONS_MB = [512, 1024, 2048, 4096];
+const PACKAGE_RAM_OPTIONS_MB = [512, 1024, 2048, 4096, 8192, 16384];
 
 async function renderPackageFormHtml(pkg, cpuCount, resources) {
-  const currentPhpMemory = pkg?.phpMemoryLimitMb ?? 1024;
-  const phpMemoryField = `<select id="pkg-form-php">${PACKAGE_PHP_MEMORY_OPTIONS_MB.map((mb) =>
-    `<option value="${mb}" ${currentPhpMemory === mb ? 'selected' : ''}>${mb} MB</option>`
+  const currentRam = pkg?.ramLimitMb ?? 1024;
+  const ramField = `<select id="pkg-form-ram">${PACKAGE_RAM_OPTIONS_MB.map((mb) =>
+    `<option value="${mb}" ${currentRam === mb ? 'selected' : ''}>${mb} MB</option>`
   ).join('')}</select>`;
 
   const diskFsType = resources?.diskFsType ?? 'none';
@@ -1580,8 +1580,8 @@ async function renderPackageFormHtml(pkg, cpuCount, resources) {
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_databases')}</label>
       <input type="number" id="pkg-form-databases" min="0" value="${pkg?.maxDatabases ?? 1}" style="width:100%;margin-bottom:10px;">
 
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_php')}</label>
-      <div style="margin-bottom:10px;">${phpMemoryField}</div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_ram')}</label>
+      <div style="margin-bottom:10px;">${ramField}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('packages.field_cpu')}</label>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -1629,7 +1629,7 @@ function wirePackageForm() {
       diskQuotaMb: document.getElementById('pkg-form-disk').value,
       maxDomains: document.getElementById('pkg-form-domains').value,
       maxDatabases: document.getElementById('pkg-form-databases').value,
-      phpMemoryLimitMb: document.getElementById('pkg-form-php').value,
+      ramLimitMb: document.getElementById('pkg-form-ram').value,
       cpuPercent: cpuInput.value,
       description: document.getElementById('pkg-form-description').value
     };
@@ -1851,6 +1851,7 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
               <th>${t('accounts.column_fullname')}</th>
               <th>${t('accounts.column_email')}</th>
               <th>${t('accounts.column_package')}</th>
+              <th>${t('packages.column_ram')}</th>
               <th>${t('accounts.column_homedir')}</th>
               <th>${t('accounts.column_quota')}</th>
               <th>${t('accounts.column_created')}</th>
@@ -1864,6 +1865,7 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
                 <td>${escapeHtml(a.fullName || '-')}</td>
                 <td>${escapeHtml(a.email || '-')}</td>
                 <td>${escapeHtml(a.packageName || '-')}</td>
+                <td>${a.ramLimitMb ? `${a.ramLimitMb} MB` : '-'}</td>
                 <td>${escapeHtml(a.homeDir)}</td>
                 <td>${a.diskFsType === 'ext4' ? 'ext4' : a.diskFsType === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`}</td>
                 <td>${escapeHtml(new Date(a.createdAt).toLocaleString())}</td>
@@ -2025,7 +2027,7 @@ async function renderPackagesTab(content) {
         <td>${diskModeLabel(p.diskQuotaMode)}</td>
         <td>${p.maxDomains}</td>
         <td>${p.maxDatabases}</td>
-        <td>${p.phpMemoryLimitMb ? `${p.phpMemoryLimitMb} MB` : '-'}</td>
+        <td>${p.ramLimitMb ? `${p.ramLimitMb} MB` : '-'}</td>
         <td>${p.cpuPercent}% (${p.cpuTotalPercent}%)</td>
         <td>
           <button type="button" class="secondary" data-edit="${escapeHtml(p.id)}">${t('packages.edit_button')}</button>
@@ -2054,7 +2056,7 @@ async function renderPackagesTab(content) {
                   <th>${t('packages.column_quota_mode')}</th>
                   <th>${t('packages.column_domains')}</th>
                   <th>${t('packages.column_databases')}</th>
-                  <th>${t('packages.column_php')}</th>
+                  <th>${t('packages.column_ram')}</th>
                   <th>${t('packages.column_cpu')}</th>
                   <th></th>
                 </tr>

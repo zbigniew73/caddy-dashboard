@@ -8,7 +8,11 @@ const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../
 const DATA_PATH = path.join(DATA_DIR, 'hosting-packages.json');
 
 const MAX_DESCRIPTION_LEN = 500;
-const ALLOWED_PHP_MEMORY_LIMITS_MB = [512, 1024, 2048, 4096];
+// Wczesniej "RAM na proces PHP" - teraz GLOWNY limit RAM calego konta
+// (patrz hostingAccounts.js: egzekwowany przez user-<uid>.slice, obejmuje
+// LACZNIE wszystkie procesy usera, nie tylko PHP-FPM), wiec zakres
+// rozszerzony w gore wzgledem starych wartosci per-proces.
+const ALLOWED_RAM_LIMITS_MB = [512, 1024, 2048, 4096, 8192, 16384];
 const DEFAULT_SYSTEM_RESERVE_PERCENT = 10;
 const ALLOWED_DISK_FS_TYPES = ['none', 'ext4', 'xfs'];
 const ALLOWED_DISK_MOUNT_POINTS = ['/', '/home'];
@@ -72,10 +76,10 @@ function normalizeInput(body) {
   const maxDomains = requirePositiveInt(body?.maxDomains, 'liczba domen');
   const maxDatabases = requirePositiveInt(body?.maxDatabases, 'liczba baz danych');
 
-  const phpMemoryLimitMb = requirePositiveInt(body?.phpMemoryLimitMb, 'RAM na proces PHP (MB)');
-  if (!ALLOWED_PHP_MEMORY_LIMITS_MB.includes(phpMemoryLimitMb)) {
+  const ramLimitMb = requirePositiveInt(body?.ramLimitMb, 'RAM (MB)');
+  if (!ALLOWED_RAM_LIMITS_MB.includes(ramLimitMb)) {
     throw Object.assign(
-      new Error(`Nieprawidlowa wartosc: RAM na proces PHP (dozwolone: ${ALLOWED_PHP_MEMORY_LIMITS_MB.join(', ')} MB).`),
+      new Error(`Nieprawidlowa wartosc: RAM (dozwolone: ${ALLOWED_RAM_LIMITS_MB.join(', ')} MB).`),
       { status: 400 }
     );
   }
@@ -90,7 +94,7 @@ function normalizeInput(body) {
 
   const description = String(body?.description || '').trim().slice(0, MAX_DESCRIPTION_LEN);
 
-  return { name, diskQuotaMb, maxDomains, maxDatabases, phpMemoryLimitMb, cpuPercent, description };
+  return { name, diskQuotaMb, maxDomains, maxDatabases, ramLimitMb, cpuPercent, description };
 }
 
 function withComputed(pkg, diskFsType) {
@@ -98,11 +102,17 @@ function withComputed(pkg, diskFsType) {
   // maja tego pola - domyslnie 100% jednego rdzenia, zeby lista sie nie
   // wywalala na NaN, dopoki admin nie zapisze pakietu ponownie.
   const cpuPercent = Number.isInteger(pkg.cpuPercent) ? pkg.cpuPercent : 100;
+  // Migracja nazwy pola: dawniej phpMemoryLimitMb ("RAM na proces PHP").
+  // Stare wpisy na VPS moga jeszcze miec tylko to pole - czytamy je jako
+  // fallback, dopoki admin nie zapisze pakietu ponownie pod nowa nazwa.
+  const ramLimitMb = Number.isInteger(pkg.ramLimitMb)
+    ? pkg.ramLimitMb
+    : (Number.isInteger(pkg.phpMemoryLimitMb) ? pkg.phpMemoryLimitMb : 1024);
   // diskQuotaMode jest wyliczany z GLOBALNEGO ustawienia filesystemu
   // (patrz getDiskSettings/setDiskSettings), nie jest polem pakietu -
   // wszystkie pakiety na danym VPS egzekwuja limit dysku tym samym
   // mechanizmem, bo mechanizm zalezy od filesystemu, nie od planu.
-  return { ...pkg, cpuPercent, cpuTotalPercent: cpuPercent * cpuCount(), diskQuotaMode: diskFsType };
+  return { ...pkg, cpuPercent, cpuTotalPercent: cpuPercent * cpuCount(), diskQuotaMode: diskFsType, ramLimitMb };
 }
 
 function listPackages() {

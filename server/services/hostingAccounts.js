@@ -44,6 +44,23 @@ function getNextHostingUsername() {
   return { prefix: HOSTING_PREFIX, nextId: id, username: `${HOSTING_PREFIX}${id}` };
 }
 
+// UID konta - potrzebny do egzekwowania limitu RAM (user-<uid>.slice, patrz
+// applyRamLimit ponizej). Swiatoczytelny odczyt z /etc/passwd, bez sudo -
+// ten sam wzorzec co getNextHostingUsername powyzej. Zwraca null, jesli
+// usera nie ma (nie powinno sie zdarzyc dla realnie istniejacego konta).
+function getUidForUsername(username) {
+  const passwd = readFileSync('/etc/passwd', 'utf-8');
+  for (const line of passwd.split('\n')) {
+    if (!line.trim()) continue;
+    const parts = line.split(':');
+    if (parts[0] === username) {
+      const uid = parseInt(parts[2], 10);
+      return Number.isInteger(uid) ? uid : null;
+    }
+  }
+  return null;
+}
+
 function loadAccounts() {
   try {
     const parsed = JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
@@ -83,6 +100,17 @@ function runScript(scriptName, args) {
   });
 }
 
+// Egzekwuje GLOWNY limit RAM konta (pole ramLimitMb pakietu) przez
+// user-<uid>.slice - natywny mechanizm systemd, ktory ogranicza LACZNE
+// zuzycie pamieci wszystkich procesow dzialajacych jako dany Linux user
+// (sesje SSH, a przy wlaczonym lingeringu takze uslugi w tle). To JEDEN,
+// wspolny parametr zamiast osobnego limitu pamieci w kazdej przyszlej
+// uslugsie hostowanej na koncie (PHP-FPM, cron itd.) - patrz
+// hosting-account-slice-set.sh.
+async function applyRamLimit(uid, ramLimitMb) {
+  await runScript('hosting-account-slice-set.sh', [String(uid), String(ramLimitMb)]);
+}
+
 function parseContactFields(body) {
   const fullName = String(body?.fullName || '').trim();
   const email = String(body?.email || '').trim();
@@ -96,7 +124,7 @@ function listAccounts() {
   const packages = listPackages();
   return loadAccounts().map((a) => {
     const pkg = packages.find((p) => p.id === a.packageId);
-    return { ...a, packageName: pkg ? pkg.name : null, diskQuotaMb: pkg ? pkg.diskQuotaMb : null };
+    return { ...a, packageName: pkg ? pkg.name : null, diskQuotaMb: pkg ? pkg.diskQuotaMb : null, ramLimitMb: pkg ? pkg.ramLimitMb : null };
   });
 }
 
@@ -109,6 +137,8 @@ function listAccounts() {
 // wczesniejsza pozytywna weryfikacja (POST /quota/verify, patrz
 // diskQuota.js verifyQuotaMechanism) - bez niej wpisy do /etc/projects i
 // /etc/projid (XFS) w ogole nie powstaja, funkcja odrzuca zadanie ponizej.
+// Rowniez OD RAZU naklada GLOWNY limit RAM pakietu (ramLimitMb) przez
+// user-<uid>.slice - patrz applyRamLimit powyzej.
 //
 // Jesli useradd sie powiedzie, ale nastepny krok (nalozenie quota) zawiedzie,
 // blad leci dalej i rekord konta NIE jest zapisywany w panelu - w systemie
@@ -150,6 +180,10 @@ async function createAccount(body) {
 
   await runScript('hosting-account-create.sh', [username, HOME_BASE_DIR]);
   const homeDir = `${HOME_BASE_DIR}/${username}`;
+  const uid = getUidForUsername(username);
+  if (uid === null) {
+    throw Object.assign(new Error(`Konto '${username}' utworzone, ale nie mozna ustalic jego UID (limit RAM nie zostal nalozony).`), { status: 500 });
+  }
 
   if (diskFsType === 'ext4') {
     await applyExt4Quota(username, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
@@ -157,8 +191,10 @@ async function createAccount(body) {
     await applyXfsQuota(username, homeDir, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
   }
 
+  await applyRamLimit(uid, pkg.ramLimitMb);
+
   const account = {
-    id: randomUUID(), username, packageId, homeDir, diskFsType, fullName, email, createdAt: new Date().toISOString()
+    id: randomUUID(), username, uid, packageId, homeDir, diskFsType, fullName, email, createdAt: new Date().toISOString()
   };
   accounts.push(account);
   saveAccounts(accounts);
@@ -202,6 +238,16 @@ async function updateAccount(id, body) {
     } else if (diskFsType === 'xfs') {
       await applyXfsQuota(account.username, account.homeDir, pkg.diskQuotaMb, pkg.diskQuotaMb, diskMountPoint);
     }
+
+    // Konta zalozone przed dodaniem egzekwowania RAM nie maja jeszcze
+    // zapisanego uid - dociagamy go z /etc/passwd i utrwalamy przy okazji.
+    const uid = Number.isInteger(account.uid) ? account.uid : getUidForUsername(account.username);
+    if (uid === null) {
+      throw Object.assign(new Error(`Nie mozna ustalic UID konta '${account.username}' (limit RAM nie zostal zaktualizowany).`), { status: 500 });
+    }
+    await applyRamLimit(uid, pkg.ramLimitMb);
+    account.uid = uid;
+
     account.diskFsType = diskFsType;
     account.packageId = packageId;
   }
@@ -220,7 +266,13 @@ async function deleteAccount(id) {
     throw Object.assign(new Error('Nie znaleziono konta.'), { status: 404 });
   }
   const account = accounts[idx];
+  // UID trzeba znac PRZED userdel - po usunieciu konta wpis znika z
+  // /etc/passwd i nie da sie go juz odczytac.
+  const uid = Number.isInteger(account.uid) ? account.uid : getUidForUsername(account.username);
   await runScript('hosting-account-delete.sh', [account.username]);
+  if (uid !== null) {
+    await runScript('hosting-account-slice-remove.sh', [String(uid)]);
+  }
   accounts.splice(idx, 1);
   saveAccounts(accounts);
   return account;
