@@ -147,8 +147,8 @@ function renderDashboard(content) {
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
       ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '', 'tile-databases')}
     </div>
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;margin-top:16px;">
-      <div class="system-info-card">
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;margin-top:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         <h3 style="margin:0 0 4px;font-size:15px;">${t('dashboard.welcome_title', { user: escapeHtml(a.username) })}</h3>
         <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('dashboard.welcome_description')}</p>
         <div class="info-grid">
@@ -160,7 +160,7 @@ function renderDashboard(content) {
           <div class="info-label">${t('dashboard.field_quota')}</div><div class="info-value">${a.diskQuotaMb ? `${a.diskQuotaMb} MB` : '-'}</div>
         </div>
       </div>
-      <div class="system-info-card">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
       </div>
     </div>
