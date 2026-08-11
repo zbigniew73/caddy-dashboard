@@ -348,6 +348,13 @@ function buildCronTemplates(phpPaths) {
       schedule: '0 4 * * *',
       command: `find /tmp -maxdepth 1 -user ${username} -type f -mtime +1 -delete`,
       placeholder: null
+    },
+    cleanup_home_tmp: {
+      label: t('cron.template_cleanup_home_tmp'),
+      name: t('cron.template_cleanup_home_tmp_name'),
+      schedule: '0 4 * * *',
+      command: `[ -d "${homeDir}/tmp" ] && find "${homeDir}/tmp" -maxdepth 1 -type f -mtime +1 -delete`,
+      placeholder: null
     }
   };
 }
