@@ -141,7 +141,7 @@ function stopUsageRefresh() {
 function renderDashboard(content) {
   const a = CURRENT_ACCOUNT;
   content.innerHTML = `
-    <div class="system-grid">
+    <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:16px;">
       ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%', 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
