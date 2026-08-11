@@ -225,7 +225,6 @@ function renderDashboard(content) {
 // Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
 const PLACEHOLDER_TABS = {
   sites: 'nav.sites',
-  redis: 'nav.redis',
   ssh: 'nav.ssh',
   backup: 'nav.backup'
 };
@@ -768,6 +767,174 @@ async function refreshDatabasesTab(content) {
   }
 }
 
+// Redis - prywatna instancja per konto (1 na usera), unix-socket-only
+// (bez TCP - patrz hosting-user-redis-apply.sh, bezpieczenstwo na
+// wspoldzielonym VPS), maks 256MB (stale, nie do zmiany przez usera),
+// haslo NAPRAWDE opcjonalne (dostep juz jest ograniczony uprawnieniami
+// systemu plikow do socketu). Dwa klocki (ten sam wzorzec co Bazy):
+// lewy = start/stop + haslo, prawy = statystyka + test polaczenia.
+function bytesToMb(bytes) {
+  return typeof bytes === 'number' ? Math.round((bytes / 1024 / 1024) * 10) / 10 : null;
+}
+
+function redisManageCardHtml(status) {
+  if (!status.available) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('redis.manage_title')}</h3>
+      <div class="empty-state">${t('redis.not_available')}</div>
+    `;
+  }
+
+  const statusBadge = `<span class="status-badge ${status.running ? 'active' : 'inactive'}">${status.running ? t('redis.status_running') : t('redis.status_stopped')}</span>`;
+  const toggleButtonHtml = status.running
+    ? `<button type="button" class="danger" id="redis-stop-btn">${t('redis.stop_button')}</button>`
+    : `<button type="button" id="redis-start-btn">${t('redis.start_button')}</button>`;
+
+  const passwordSectionHtml = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin:14px 0 8px;">
+      <input type="checkbox" id="redis-pw-enable" ${status.passwordEnabled ? 'checked' : ''}>
+      ${t('redis.field_enable_password')}
+    </label>
+    <div id="redis-pw-fields" style="display:${status.passwordEnabled ? 'block' : 'none'};margin-bottom:10px;">
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="redis-pw-value" value="${escapeHtml(status.password || '')}" style="flex:1;font-family:var(--mono);">
+        <button type="button" class="secondary" id="redis-pw-generate-btn">${t('redis.generate_button')}</button>
+      </div>
+    </div>
+    <button type="button" id="redis-pw-save-btn">${t('redis.save_button')}</button>
+    <div class="action-msg" id="redis-msg"></div>
+  `;
+
+  const connectionInfoHtml = status.running ? `
+    <div class="info-grid" style="margin-top:14px;">
+      <div class="info-label">${t('redis.field_socket')}</div><div class="info-value" style="font-family:var(--mono);word-break:break-all;">${escapeHtml(status.socketPath)}</div>
+    </div>
+  ` : '';
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('redis.manage_title')} ${statusBadge}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('redis.manage_description')}</p>
+    ${toggleButtonHtml}
+    ${connectionInfoHtml}
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    ${passwordSectionHtml}
+  `;
+}
+
+function redisStatsCardHtml(status) {
+  const usedMb = bytesToMb(status.usedMemoryBytes);
+  const valueText = status.running
+    ? (usedMb !== null ? `${usedMb} MB / ${status.maxMemoryMb} MB` : `- / ${status.maxMemoryMb} MB`)
+    : `0 MB / ${status.maxMemoryMb} MB`;
+  const percent = status.running && usedMb !== null ? Math.min(100, Math.round((usedMb / status.maxMemoryMb) * 100)) : 0;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('redis.stats_title')}</h3>
+    <div class="stat-value" style="margin:6px 0 6px;">${escapeHtml(valueText)}</div>
+    <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
+    <button type="button" class="secondary" id="redis-test-btn" style="margin-top:14px;" ${status.running ? '' : 'disabled'}>${t('redis.test_button')}</button>
+    <div class="action-msg" id="redis-test-msg"></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('redis.contact_admin_hint')}</div>
+  `;
+}
+
+function renderRedisSection(status) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${redisManageCardHtml(status)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${redisStatsCardHtml(status)}
+      </div>
+    </div>
+  `;
+}
+
+function wireRedisSection(content) {
+  const pwEnableCheckbox = document.getElementById('redis-pw-enable');
+  if (pwEnableCheckbox) {
+    pwEnableCheckbox.onchange = () => {
+      const fields = document.getElementById('redis-pw-fields');
+      if (fields) fields.style.display = pwEnableCheckbox.checked ? 'block' : 'none';
+    };
+  }
+
+  const pwGenerateBtn = document.getElementById('redis-pw-generate-btn');
+  if (pwGenerateBtn) {
+    pwGenerateBtn.onclick = () => { document.getElementById('redis-pw-value').value = generatePassword(); };
+  }
+
+  const startBtn = document.getElementById('redis-start-btn');
+  const stopBtn = document.getElementById('redis-stop-btn');
+  const saveBtn = document.getElementById('redis-pw-save-btn');
+  const msgEl = document.getElementById('redis-msg');
+
+  const applyStart = async () => {
+    const enablePassword = document.getElementById('redis-pw-enable').checked;
+    const password = document.getElementById('redis-pw-value')?.value || '';
+    msgEl.textContent = t('redis.applying');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/redis/start', { enablePassword, password });
+      await refreshRedisTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    }
+  };
+
+  if (startBtn) startBtn.onclick = applyStart;
+  if (saveBtn) saveBtn.onclick = applyStart;
+
+  if (stopBtn) {
+    stopBtn.onclick = async () => {
+      stopBtn.disabled = true;
+      msgEl.textContent = t('redis.stopping');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/redis/stop');
+        await refreshRedisTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        stopBtn.disabled = false;
+      }
+    };
+  }
+
+  const testBtn = document.getElementById('redis-test-btn');
+  if (testBtn) {
+    testBtn.onclick = async () => {
+      const testMsgEl = document.getElementById('redis-test-msg');
+      testBtn.disabled = true;
+      testMsgEl.textContent = t('redis.testing');
+      testMsgEl.className = 'action-msg';
+      try {
+        await api('POST', '/redis/test');
+        testMsgEl.textContent = t('redis.test_success');
+        testMsgEl.className = 'action-msg success';
+      } catch (e) {
+        testMsgEl.textContent = e.message;
+        testMsgEl.className = 'action-msg error';
+      } finally {
+        testBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function refreshRedisTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('redis.loading')}</div>`;
+  try {
+    const status = await api('GET', '/redis');
+    content.innerHTML = renderRedisSection(status);
+    wireRedisSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -783,6 +950,8 @@ function renderTab() {
     refreshCronTab(content);
   } else if (currentTab === 'databases') {
     refreshDatabasesTab(content);
+  } else if (currentTab === 'redis') {
+    refreshRedisTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }

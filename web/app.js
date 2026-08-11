@@ -3367,13 +3367,113 @@ function wireRedisPerformanceSection() {
   };
 }
 
+// Lista kont hostingowych, ktore SAME zalozyly sobie prywatna instancje
+// Redis z panelu klienta (/user/ - Redis, server/services/hostingUserRedis.js)
+// - NIE lista wszystkich kont, tylko tych faktycznie korzystajacych.
+// Nowy, oddzielny rzad pod istniejacym rzedem status+wydajnosc (nie w tej
+// samej kolumnie) - jeden kafelek do przegladu/edycji limitu RAM per
+// user, drugi informacyjno/statystyczny.
+function redisInstancesListCardHtml(instances) {
+  const rows = instances.length
+    ? instances.map((i) => `
+        <tr>
+          <td>${escapeHtml(i.username)}</td>
+          <td><span class="status-badge ${i.running ? 'active' : 'inactive'}">${i.running ? t('services.active') : t('services.inactive')}</span></td>
+          <td>${i.maxMemoryMb} MB</td>
+          <td><button type="button" class="secondary" data-redis-edit="${escapeHtml(i.username)}" data-redis-current="${i.maxMemoryMb}">${t('redisadmin.edit_button')}</button></td>
+        </tr>
+      `).join('')
+    : `<tr><td colspan="4" style="text-align:center;color:var(--muted);">${t('redisadmin.empty')}</td></tr>`;
+
+  return `
+    <h3 style="margin:0 0 12px;font-size:15px;">${t('redisadmin.list_title')}</h3>
+    <div style="overflow-x:auto;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('redisadmin.col_user')}</th>
+            <th>${t('redisadmin.col_status')}</th>
+            <th>${t('redisadmin.col_maxmemory')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function redisInstancesStatsCardHtml(instances) {
+  const runningCount = instances.filter((i) => i.running).length;
+  const totalMb = instances.reduce((sum, i) => sum + i.maxMemoryMb, 0);
+
+  return `
+    <h3 style="margin:0 0 12px;font-size:15px;">${t('redisadmin.stats_title')}</h3>
+    <div class="info-grid">
+      <div class="info-label">${t('redisadmin.stats_total')}</div><div class="info-value">${instances.length}</div>
+      <div class="info-label">${t('redisadmin.stats_running')}</div><div class="info-value">${runningCount}</div>
+      <div class="info-label">${t('redisadmin.stats_total_mb')}</div><div class="info-value">${totalMb} MB</div>
+    </div>
+  `;
+}
+
+async function renderRedisInstancesRow() {
+  try {
+    const instances = await api('GET', '/redis-instances');
+    return `
+      <div id="redis-instances-row" style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
+        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+          ${redisInstancesListCardHtml(instances)}
+        </div>
+        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+          ${redisInstancesStatsCardHtml(instances)}
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    return `<div id="redis-instances-row" class="system-info-card" style="margin-top:16px;"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function refreshRedisInstancesRow() {
+  const row = document.getElementById('redis-instances-row');
+  if (!row) return;
+  row.outerHTML = await renderRedisInstancesRow();
+  wireRedisInstancesSection();
+}
+
+function wireRedisInstancesSection() {
+  document.querySelectorAll('[data-redis-edit]').forEach((btn) => {
+    btn.onclick = async () => {
+      const username = btn.dataset.redisEdit;
+      const input = window.prompt(t('redisadmin.prompt_maxmemory', { user: username }), btn.dataset.redisCurrent);
+      if (input === null) return;
+      const mb = parseInt(input, 10);
+      if (!Number.isInteger(mb) || mb < 1) {
+        window.alert(t('redisadmin.invalid_maxmemory'));
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await api('PUT', `/redis-instances/${username}/max-memory`, { maxMemoryMb: mb });
+        await refreshRedisInstancesRow();
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
 async function wrapRedisExtras(serviceHtml) {
   const perfHtml = await renderRedisPerformanceSection();
+  const instancesRowHtml = await renderRedisInstancesRow();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
       <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
       <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
     </div>
+    ${instancesRowHtml}
   `;
 }
 
@@ -3832,7 +3932,7 @@ function wireServiceActions(key) {
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }
-        if (key === 'redis' && svc.found) wireRedisPerformanceSection();
+        if (key === 'redis' && svc.found) { wireRedisPerformanceSection(); wireRedisInstancesSection(); }
         if (phpMatch && svc.found) {
           wirePhpSettingsSection(phpMatch[1]);
           wirePhpOpcacheSection(phpMatch[1]);
@@ -3903,7 +4003,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'mariadb' && svc.found) { wireMariadbPerformanceSection(); wireMariadbTestDbSection(); }
     if (key === 'postgresql' && svc.found) { wirePostgresqlPerformanceSection(); wirePostgresqlTestDbSection(); }
     if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }
-    if (key === 'redis' && svc.found) wireRedisPerformanceSection();
+    if (key === 'redis' && svc.found) { wireRedisPerformanceSection(); wireRedisInstancesSection(); }
     if (phpMatch && svc.found) {
       wirePhpSettingsSection(phpMatch[1]);
       wirePhpOpcacheSection(phpMatch[1]);

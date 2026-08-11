@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../services/hostingUserSelf.js';
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
 import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
+import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 
 const router = Router();
 
@@ -90,6 +91,39 @@ router.delete('/databases/:id', async (req, res) => {
   try {
     await deleteDatabase(req.hostingUser, req.params.id);
     res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/redis', async (req, res) => {
+  try {
+    res.json(await getOwnRedisStatus(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/redis/start', async (req, res) => {
+  try {
+    const { enablePassword, password } = req.body || {};
+    res.json(await startOwnRedis(req.hostingUser, { enablePassword: !!enablePassword, password }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/redis/stop', async (req, res) => {
+  try {
+    res.json(await stopOwnRedis(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/redis/test', async (req, res) => {
+  try {
+    res.json(await testOwnRedis(req.hostingUser));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

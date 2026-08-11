@@ -5,6 +5,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
 import { getCronJobsSummary } from '../services/cronJobs.js';
+import { listAllRedisInstances, adminSetMaxMemoryMb } from '../services/hostingUserRedis.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
@@ -444,6 +445,22 @@ router.get('/ssh/port', async (req, res) => {
 router.get('/cron/jobs-count', async (req, res) => {
   try {
     res.json(await getCronJobsSummary());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/redis-instances', async (req, res) => {
+  try {
+    res.json(await listAllRedisInstances());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/redis-instances/:username/max-memory', async (req, res) => {
+  try {
+    res.json(await adminSetMaxMemoryMb(req.params.username, req.body?.maxMemoryMb));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
