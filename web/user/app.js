@@ -94,18 +94,14 @@ function usageTile(label, used, limit, unit, id) {
   return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${usageTileContent(label, used, limit, unit)}</div>`;
 }
 
-// Kafelek CPU ma dodatkowa linie z nazwa procesora serwera i liczba
-// rdzeni PRZYDZIELONYCH PRZEZ PAKIET (nie fizycznych rdzeni serwera) -
-// patrz cpuModel/cpuCoresAllocated w hostingUserSelf.js. Ta linia sie nie
-// zmienia miedzy odswieżeniami (model/pakiet nie zmienia sie co 5s), ale
-// i tak przychodzi w kazdej odpowiedzi /me (tani odczyt, bez sudo), wiec
-// prosciej jest zawsze ja renderowac tu, zamiast osobno cache'owac.
-function cpuTileContent(used, limit, model, cores) {
-  const detailParts = [];
-  if (model) detailParts.push(model);
-  if (typeof cores === 'number') detailParts.push(`${cores} vCPU`);
-  const detailHtml = detailParts.length
-    ? `<div style="font-size:11px;color:var(--muted);margin:-4px 0 6px;">${escapeHtml(detailParts.join(' · '))}</div>`
+// Kafelek CPU ma dodatkowa linie z nazwa procesora serwera - patrz
+// cpuModel w hostingUserSelf.js. Ta linia sie nie zmienia miedzy
+// odswieżeniami, ale i tak przychodzi w kazdej odpowiedzi /me (tani
+// odczyt, bez sudo), wiec prosciej jest zawsze ja renderowac tu, zamiast
+// osobno cache'owac.
+function cpuTileContent(used, limit, model) {
+  const detailHtml = model
+    ? `<div style="font-size:11px;color:var(--muted);margin:-4px 0 6px;">${escapeHtml(model)}</div>`
     : '';
   const hasLimit = typeof limit === 'number' && limit > 0;
   const percent = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
@@ -118,8 +114,8 @@ function cpuTileContent(used, limit, model, cores) {
   `;
 }
 
-function cpuTile(used, limit, model, cores, id) {
-  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${cpuTileContent(used, limit, model, cores)}</div>`;
+function cpuTile(used, limit, model, id) {
+  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${cpuTileContent(used, limit, model)}</div>`;
 }
 
 // Kafelek bez paska postepu - dla wartosci, ktore nie sa "wykorzystano /
@@ -168,7 +164,7 @@ function startUsageRefresh() {
       const cpuTileEl = document.getElementById('tile-cpu');
       const ramTile = document.getElementById('tile-ram');
       if (uptimeTile) uptimeTile.innerHTML = plainTileContent(t('dashboard.tile_uptime'), formatUptime(me.serverUptimeSeconds ?? 0));
-      if (cpuTileEl) cpuTileEl.innerHTML = cpuTileContent(me.cpuUsedPercent ?? 0, me.cpuPercentLimit, me.cpuModel, me.cpuCoresAllocated);
+      if (cpuTileEl) cpuTileEl.innerHTML = cpuTileContent(me.cpuUsedPercent ?? 0, me.cpuPercentLimit, me.cpuModel);
       if (ramTile) ramTile.innerHTML = usageTileContent(t('dashboard.tile_ram'), me.ramUsedMb ?? 0, me.ramLimitMb, ' MB');
 
       usageRefreshTickCount += 1;
@@ -198,7 +194,7 @@ function renderDashboard(content) {
   content.innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:16px;">
       ${plainTile(t('dashboard.tile_uptime'), formatUptime(a.serverUptimeSeconds ?? 0), 'tile-uptime')}
-      ${cpuTile(a.cpuUsedPercent ?? 0, a.cpuPercentLimit, a.cpuModel, a.cpuCoresAllocated, 'tile-cpu')}
+      ${cpuTile(a.cpuUsedPercent ?? 0, a.cpuPercentLimit, a.cpuModel, 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
       ${usageTile(t('dashboard.tile_disk'), a.diskUsedMb ?? 0, a.diskQuotaMb, ' MB', 'tile-disk')}
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}

@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
 import { listAccounts } from './hostingAccounts.js';
-import { cpuCount } from './hostingPackages.js';
 
 const execFileAsync = promisify(execFile);
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url)) + '/../scripts';
@@ -73,66 +72,103 @@ async function changeOwnPassword(username, currentPassword, newPassword) {
   await setSystemPassword(username, newPassword);
 }
 
-// Biezace zuzycie CPU/RAM konta - suma po WSZYSTKICH procesach usera z `ps`
-// (kolumny %cpu/rss), bez sudo (odczyt /proc jest publiczny na typowej
-// instalacji). Brak procesow (user aktualnie nie ma zadnej sesji SSH) to
-// normalny stan, nie blad - `ps` wtedy zwraca kod 1 i pusty wynik, co
-// oddajemy jako zera, a nie wyjatek.
-// UWAGA: kolumna `ps -o %cpu` to NIE biezace obciazenie - to srednia
-// zuzycia CPU liczona OD STARTU PROCESU (czas CPU / czas zycia procesu).
-// Dla dlugo dzialajacej sesji SSH (bash) ta wartosc jest praktycznie
-// zawsze bliska 0%, nawet gdy user cos realnie obciaza w danej chwili -
-// kafelek CPU na Dashboardzie z tego powodu "nie reagowal" (zgloszone
-// przez usera). Zamiast tego liczymy realna delte: sumujemy `cputimes`
-// (kumulatywny czas CPU w SEKUNDACH, rozszerzenie GNU ps - `ps -o
-// cputimes`) wszystkich procesow usera TERAZ, porownujemy z poprzednia
-// probka (in-memory cache per username) i dzielimy przez rzeczywisty
-// uplyw czasu miedzy probkami - dokladnie tak jak liczy to `top`/`htop`.
+// RAM: suma RSS po WSZYSTKICH procesach usera z `ps -o rss`, bez sudo
+// (dziala niezawodnie - potwierdzone, RAM zawsze pokazywal sie poprawnie).
+// Brak procesow (user aktualnie nie ma zadnej sesji SSH) to normalny stan,
+// nie blad - `ps` wtedy zwraca kod 1 i pusty wynik, co oddajemy jako zera.
 //
-// Pierwsza wersja tej poprawki czytala /proc/<pid>/stat BEZPOSREDNIO
-// (fs.readFile) zamiast przez `ps` - dzialalo to w testach (ten sam
-// user), ale na prawdziwym VPS user serwisowy panelu (cdadmin) nie moglo
-// w ten sposob odczytac /proc procesow NALEZACYCH DO INNEGO USERA
-// (konto hostingowe), wiec CPU dalej pokazywalo 0% (zgloszone ponownie
-// przez usera - "w konsoli top -u srv_1001 dziala, w panelu nadal nic").
-// Naprawione przez oparcie sie WYLACZNIE na `ps` (ten sam kanal dostepu,
-// ktory juz dziala dla RSS/RAM), zamiast na bezposrednim dostepie do
-// /proc.
+// CPU: liczymy realna delte czasu CPU miedzy dwoma probkami (dokladnie
+// jak `top`/`htop`), NIE `ps -o %cpu` - ta kolumna to srednia OD STARTU
+// PROCESU, dla dlugo dzialajacej sesji SSH prawie zawsze bliska 0% mimo
+// realnego obciazenia (pierwsze zgloszenie usera: "nonstop 0%").
+//
+// Zrodlo danych o czasie CPU przeszlo DWIE iteracje:
+//  1) bezposredni odczyt /proc/<pid>/stat (fs.readFile) jako serwisowy
+//     user panelu (cdadmin, NIE root) - precyzja tikow zegara (1/100s),
+//     ale niepewny dostep do /proc procesow NALEZACYCH DO INNEGO USERA
+//     (konto hostingowe) na kazdym VPS.
+//  2) `ps -u <user> -o cputimes` (calkowite sekundy CPU, rozszerzenie GNU
+//     ps) - kanal dostepu na 100% sprawdzony (ten sam co RSS/RAM), ale
+//     `cputimes` obcina do PELNYCH SEKUND. Przy niskim obciazeniu (user
+//     zglosil realne wartosci z `top` rzedu 0.3-0.6%) delta miedzy
+//     probkami co 5s prawie zawsze wychodzi 0 sekund - kafelek dalej
+//     "nie reagowal" mimo ze dane byly poprawnie dostepne, po prostu za
+//     malo precyzyjne.
+// Rozwiazanie: wracamy do precyzji /proc/<pid>/stat (tiki zegara), ale
+// czytamy je PRZEZ SUDO/ROOT (hosting-user-cpu-ticks.sh) zamiast liczyc
+// na niepewne uprawnienia serwisowego usera do cudzego /proc - ten sam,
+// juz wielokrotnie sprawdzony wzorzec co reszta danych cross-user w tym
+// projekcie (hosting-account-disk-usage.sh, hosting-account-sites-count.sh
+// itd.), wiec dziala niezaleznie od konfiguracji /proc (np. hidepid) na
+// danym VPS.
 //
 // Pierwsza probka po starcie panelu (lub po restarcie serwisu) nie ma z
 // czym sie porownac, wiec zwraca 0% - kolejne odswiezenie (Dashboard
 // odpytuje co 5s) juz pokazuje realna wartosc.
-const cpuSampleCache = new Map(); // username -> { totalCpuSeconds, timestampMs }
+const cpuSampleCache = new Map(); // username -> { totalTicks, timestampMs }
+let clkTckCache = null;
+
+async function getClockTicksPerSecond() {
+  if (clkTckCache) return clkTckCache;
+  try {
+    const { stdout } = await execFileAsync('getconf', ['CLK_TCK']);
+    clkTckCache = parseInt(stdout.trim(), 10) || 100;
+  } catch {
+    clkTckCache = 100; // standardowa wartosc na Linuksie, gdyby getconf zawiodl
+  }
+  return clkTckCache;
+}
+
+function getCpuTicks(username) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/hosting-user-cpu-ticks.sh`, username]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(parseInt(stdout.trim(), 10) || 0);
+        return;
+      }
+      reject(Object.assign(
+        new Error(sudoErrorMessage('hosting-user-cpu-ticks.sh', stderr) || `exit code ${code}`), { status: 500 }
+      ));
+    });
+  });
+}
 
 async function getProcessUsage(username) {
+  let rssKb = 0;
   try {
-    const { stdout } = await execFileAsync('ps', ['-u', username, '--no-headers', '-o', 'rss,cputimes'], { timeout: 5000 });
-    let rssKb = 0;
-    let totalCpuSeconds = 0;
+    const { stdout } = await execFileAsync('ps', ['-u', username, '--no-headers', '-o', 'rss'], { timeout: 5000 });
     for (const line of stdout.trim().split('\n')) {
       const trimmed = line.trim();
-      if (!trimmed) continue;
-      const [rss, cputimes] = trimmed.split(/\s+/);
-      rssKb += parseInt(rss, 10) || 0;
-      totalCpuSeconds += parseInt(cputimes, 10) || 0;
+      if (trimmed) rssKb += parseInt(trimmed, 10) || 0;
     }
+  } catch {
+    rssKb = 0;
+  }
 
+  try {
+    const [totalTicks, clkTck] = await Promise.all([getCpuTicks(username), getClockTicksPerSecond()]);
     const nowMs = Date.now();
     const prev = cpuSampleCache.get(username);
-    cpuSampleCache.set(username, { totalCpuSeconds, timestampMs: nowMs });
+    cpuSampleCache.set(username, { totalTicks, timestampMs: nowMs });
 
     let cpuUsedPercent = 0;
     if (prev) {
       const deltaSeconds = (nowMs - prev.timestampMs) / 1000;
       if (deltaSeconds > 0) {
-        const deltaCpuSeconds = Math.max(0, totalCpuSeconds - prev.totalCpuSeconds);
-        cpuUsedPercent = (deltaCpuSeconds / deltaSeconds) * 100;
+        const deltaTicks = Math.max(0, totalTicks - prev.totalTicks);
+        cpuUsedPercent = (deltaTicks / clkTck / deltaSeconds) * 100;
       }
     }
 
     return { cpuUsedPercent: Math.round(cpuUsedPercent * 10) / 10, ramUsedMb: Math.round(rssKb / 1024) };
   } catch {
-    return { cpuUsedPercent: 0, ramUsedMb: 0 };
+    return { cpuUsedPercent: 0, ramUsedMb: Math.round(rssKb / 1024) };
   }
 }
 
@@ -214,15 +250,8 @@ async function getOwnAccount(username) {
     maxDatabases: account?.maxDatabases ?? null,
     cpuPercentLimit: account?.cpuPercent ?? null,
     // Nazwa procesora serwera (os.cpus() - dziala bez sudo, to samo co
-    // system.cpu.model w panelu admina) + liczba rdzeni PRZYDZIELONYCH
-    // PRZEZ PAKIET, nie fizycznych rdzeni serwera. cpuPercent pakietu
-    // (1-100) to procent JEDNEGO rdzenia; cpuCount() (hostingPackages.js)
-    // to liczba fizycznych rdzeni serwera - iloczyn/100 daje realny
-    // ekwiwalent rdzeni (np. cpuPercent=50 na 4-rdzeniowym serwerze =
-    // 2 rdzenie), zgodnie z tym samym przelicznikiem co
-    // packages.cpuTotalPercent w panelu admina.
+    // system.cpu.model w panelu admina).
     cpuModel: (os.cpus()[0]?.model || '').trim() || null,
-    cpuCoresAllocated: account?.cpuPercent ? Math.round((account.cpuPercent * cpuCount()) / 100 * 10) / 10 : null,
     createdAt: account?.createdAt || null,
     cpuUsedPercent: usage.cpuUsedPercent,
     ramUsedMb: usage.ramUsedMb,
