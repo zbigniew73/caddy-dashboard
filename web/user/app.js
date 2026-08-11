@@ -205,21 +205,26 @@ function generatePassword() {
 
 function renderSettings(content) {
   content.innerHTML = `
-    <div class="system-info-card" style="max-width:420px;">
-      <h3 style="margin:0 0 4px;font-size:15px;">${t('settings.password_title')}</h3>
-      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${MUST_CHANGE_PASSWORD ? t('settings.password_forced_hint') : t('settings.password_description')}</p>
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_current')}</label>
-      <input type="password" id="pwd-current" autocomplete="current-password" style="margin-bottom:10px;">
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_new')}</label>
-      <div style="display:flex;gap:8px;margin-bottom:4px;">
-        <input type="password" id="pwd-new" autocomplete="new-password" style="flex:1;">
-        <button type="button" class="secondary" id="pwd-generate-btn">${t('settings.generate_button')}</button>
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0 0 4px;font-size:15px;">${t('settings.password_title')}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${MUST_CHANGE_PASSWORD ? t('settings.password_forced_hint') : t('settings.password_description')}</p>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_current')}</label>
+        <input type="password" id="pwd-current" autocomplete="current-password" style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_new')}</label>
+        <div style="display:flex;gap:8px;margin-bottom:4px;">
+          <input type="password" id="pwd-new" autocomplete="new-password" style="flex:1;">
+          <button type="button" class="secondary" id="pwd-generate-btn">${t('settings.generate_button')}</button>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${t('settings.password_hint')}</div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_confirm')}</label>
+        <input type="password" id="pwd-confirm" autocomplete="new-password" style="margin-bottom:14px;">
+        <button type="button" id="pwd-save-btn">${t('settings.save_button')}</button>
+        <div class="action-msg" id="pwd-msg"></div>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">${t('settings.password_hint')}</div>
-      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_confirm')}</label>
-      <input type="password" id="pwd-confirm" autocomplete="new-password" style="margin-bottom:14px;">
-      <button type="button" id="pwd-save-btn">${t('settings.save_button')}</button>
-      <div class="action-msg" id="pwd-msg"></div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
+      </div>
     </div>
   `;
 
