@@ -167,6 +167,30 @@ function renderDashboard(content) {
   `;
 }
 
+// Szkielet zakladek "na razie tylko szkielet" (Strony/Bazy/Cron/SSH/Backup) -
+// jeden rzad, dwa rowne klocki (ten sam wzorzec co Witaj+Info na
+// Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
+const PLACEHOLDER_TABS = {
+  sites: 'nav.sites',
+  databases: 'nav.databases',
+  cron: 'nav.cron',
+  ssh: 'nav.ssh',
+  backup: 'nav.backup'
+};
+
+function renderPlaceholderTab(content, titleKey) {
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0;font-size:15px;">${t(titleKey)}</h3>
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
+      </div>
+    </div>
+  `;
+}
+
 function generatePassword() {
   const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   const lower = 'abcdefghijkmnopqrstuvwxyz';
@@ -240,12 +264,16 @@ function renderSettings(content) {
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
-  if (currentTab === 'settings') {
-    stopUsageRefresh();
-    renderSettings(content);
-  } else {
+  if (currentTab === 'dashboard') {
     renderDashboard(content);
     startUsageRefresh();
+    return;
+  }
+  stopUsageRefresh();
+  if (currentTab === 'settings') {
+    renderSettings(content);
+  } else if (PLACEHOLDER_TABS[currentTab]) {
+    renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
 }
 
