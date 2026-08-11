@@ -4,6 +4,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
+import { getCronJobsCount } from '../services/cronJobs.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
@@ -438,6 +439,14 @@ router.post('/fail2ban/config', async (req, res) => {
 
 router.get('/ssh/port', async (req, res) => {
   res.json({ port: await getCurrentSshPort() });
+});
+
+router.get('/cron/jobs-count', async (req, res) => {
+  try {
+    res.json({ count: await getCronJobsCount() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 router.post('/ssh/port', async (req, res) => {

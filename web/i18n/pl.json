@@ -17,6 +17,7 @@
   "nav.runtime-manager": "R MANAGER",
   "nav.caddy": "CADDY",
   "nav.install_section": "INSTALATOR",
+  "cron.jobs_count_label": "Ilość wszystkich zadań cron",
   "services.loading": "Wczytywanie...",
   "services.empty": "Brak skonfigurowanych usług",
   "services.not_installed_detail": "Usługa nie jest zainstalowana w systemie",

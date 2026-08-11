@@ -2776,6 +2776,30 @@ async function wrapSshExtras(serviceHtml) {
   `;
 }
 
+async function renderCronJobsCountSection() {
+  try {
+    const { count } = await api('GET', '/cron/jobs-count');
+    return `
+      <div class="system-info-card">
+        <div class="stat-label">${t('cron.jobs_count_label')}</div>
+        <div class="stat-value" style="margin-bottom:0;">${count}</div>
+      </div>
+    `;
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function wrapCronExtras(serviceHtml) {
+  const countHtml = await renderCronJobsCountSection();
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${countHtml}</div>
+    </div>
+  `;
+}
+
 async function renderMariadbPerformanceSection() {
   let ramInfo;
   try {
@@ -3776,6 +3800,7 @@ function wireServiceActions(key) {
         const phpMatch = /^php(\d{2})$/.exec(key);
         let html = serviceDetailHtml(svc);
         if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
+        if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
         if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
         if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
@@ -3846,6 +3871,7 @@ async function renderServiceDetailTab(key, content) {
     const phpMatch = /^php(\d{2})$/.exec(key);
     let html = serviceDetailHtml(svc);
     if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
+    if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
     if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
     if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
