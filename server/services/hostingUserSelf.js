@@ -1,6 +1,7 @@
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
 import os from 'os';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
@@ -77,19 +78,81 @@ async function changeOwnPassword(username, currentPassword, newPassword) {
 // instalacji). Brak procesow (user aktualnie nie ma zadnej sesji SSH) to
 // normalny stan, nie blad - `ps` wtedy zwraca kod 1 i pusty wynik, co
 // oddajemy jako zera, a nie wyjatek.
+// UWAGA: kolumna `ps -o %cpu` to NIE biezace obciazenie - to srednia
+// zuzycia CPU liczona OD STARTU PROCESU (czas CPU / czas zycia procesu).
+// Dla dlugo dzialajacej sesji SSH (bash) ta wartosc jest praktycznie
+// zawsze bliska 0%, nawet gdy user cos realnie obciaza w danej chwili -
+// kafelek CPU na Dashboardzie z tego powodu "nie reagowal" (zgloszone
+// przez usera). Zamiast tego liczymy realna delte: sumujemy czas CPU
+// (utime+stime w tikach zegara, pole 14/15 z /proc/<pid>/stat) wszystkich
+// procesow usera TERAZ, porownujemy z poprzednia probka (in-memory cache
+// per username) i dzielimy przez rzeczywisty uplyw czasu miedzy probkami
+// - dokladnie tak jak liczy to `top`/`htop`. Pierwsza probka po starcie
+// panelu (lub po restarcie serwisu) nie ma z czym sie porownac, wiec
+// zwraca 0% - kolejne odswiezenie (Dashboard odpytuje co 5s) juz pokazuje
+// realna wartosc.
+const cpuSampleCache = new Map(); // username -> { totalTicks, timestampMs }
+let clkTckCache = null;
+
+async function getClockTicksPerSecond() {
+  if (clkTckCache) return clkTckCache;
+  try {
+    const { stdout } = await execFileAsync('getconf', ['CLK_TCK']);
+    clkTckCache = parseInt(stdout.trim(), 10) || 100;
+  } catch {
+    clkTckCache = 100; // standardowa wartosc na Linuksie, gdyby getconf zawiodl
+  }
+  return clkTckCache;
+}
+
+async function getTotalCpuTicks(pids) {
+  let total = 0;
+  await Promise.all(pids.map(async (pid) => {
+    try {
+      const stat = await fs.promises.readFile(`/proc/${pid}/stat`, 'utf8');
+      // Nazwa procesu (pole 2) jest w nawiasach i moze zawierac spacje -
+      // pola licza sie dopiero PO ostatnim ")" w linii.
+      const afterComm = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+      // afterComm[0] to pole 3 (state) - utime to pole 14, stime pole 15.
+      total += (parseInt(afterComm[11], 10) || 0) + (parseInt(afterComm[12], 10) || 0);
+    } catch {
+      // proces mogl zakonczyc sie miedzy `ps` a odczytem /proc/<pid>/stat - pomijamy
+    }
+  }));
+  return total;
+}
+
 async function getProcessUsage(username) {
   try {
-    const { stdout } = await execFileAsync('ps', ['-u', username, '--no-headers', '-o', '%cpu,rss'], { timeout: 5000 });
-    let cpuPercent = 0;
+    const [{ stdout }, clkTck] = await Promise.all([
+      execFileAsync('ps', ['-u', username, '--no-headers', '-o', 'pid,rss'], { timeout: 5000 }),
+      getClockTicksPerSecond()
+    ]);
     let rssKb = 0;
+    const pids = [];
     for (const line of stdout.trim().split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      const [cpu, rss] = trimmed.split(/\s+/);
-      cpuPercent += parseFloat(cpu) || 0;
+      const [pid, rss] = trimmed.split(/\s+/);
+      if (pid) pids.push(pid);
       rssKb += parseInt(rss, 10) || 0;
     }
-    return { cpuUsedPercent: Math.round(cpuPercent * 10) / 10, ramUsedMb: Math.round(rssKb / 1024) };
+
+    const totalTicks = await getTotalCpuTicks(pids);
+    const nowMs = Date.now();
+    const prev = cpuSampleCache.get(username);
+    cpuSampleCache.set(username, { totalTicks, timestampMs: nowMs });
+
+    let cpuUsedPercent = 0;
+    if (prev) {
+      const deltaSeconds = (nowMs - prev.timestampMs) / 1000;
+      if (deltaSeconds > 0) {
+        const deltaTicks = Math.max(0, totalTicks - prev.totalTicks);
+        cpuUsedPercent = (deltaTicks / clkTck / deltaSeconds) * 100;
+      }
+    }
+
+    return { cpuUsedPercent: Math.round(cpuUsedPercent * 10) / 10, ramUsedMb: Math.round(rssKb / 1024) };
   } catch {
     return { cpuUsedPercent: 0, ramUsedMb: 0 };
   }
