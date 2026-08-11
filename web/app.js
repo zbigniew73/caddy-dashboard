@@ -2778,11 +2778,25 @@ async function wrapSshExtras(serviceHtml) {
 
 async function renderCronJobsCountSection() {
   try {
-    const { count } = await api('GET', '/cron/jobs-count');
+    const { total, byUser } = await api('GET', '/cron/jobs-count');
+    const rows = byUser.length
+      ? byUser.map((u) => `<tr><td>${escapeHtml(u.username)}</td><td>${u.count}</td></tr>`).join('')
+      : `<tr><td colspan="2" style="text-align:center;color:var(--muted);">${t('cron.jobs_count_empty')}</td></tr>`;
     return `
       <div class="system-info-card">
         <div class="stat-label">${t('cron.jobs_count_label')}</div>
-        <div class="stat-value" style="margin-bottom:0;">${count}</div>
+        <div class="stat-value">${total}</div>
+        <div style="overflow-x:auto;overflow-y:auto;max-height:220px;">
+          <table class="firewall-table">
+            <thead>
+              <tr>
+                <th>${t('cron.jobs_count_col_user')}</th>
+                <th>${t('cron.jobs_count_col_count')}</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       </div>
     `;
   } catch (e) {

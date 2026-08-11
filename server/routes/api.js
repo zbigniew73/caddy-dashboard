@@ -4,7 +4,7 @@ import fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getServiceDef, getServiceStatus, listServices, runServiceAction, installService, rebootSystem } from '../services/systemServices.js';
-import { getCronJobsCount } from '../services/cronJobs.js';
+import { getCronJobsSummary } from '../services/cronJobs.js';
 import { checkForUpdate, applyUpdate } from '../services/update.js';
 import { getCurrentSshPort, setSshPort } from '../services/sshConfig.js';
 import { listFirewallEntries, addFirewallPort, updateFirewallPortDescription, removeFirewallEntry } from '../services/firewall.js';
@@ -443,7 +443,7 @@ router.get('/ssh/port', async (req, res) => {
 
 router.get('/cron/jobs-count', async (req, res) => {
   try {
-    res.json({ count: await getCronJobsCount() });
+    res.json(await getCronJobsSummary());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
