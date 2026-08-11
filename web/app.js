@@ -342,6 +342,10 @@ async function renderTab() {
     await renderPackagesTab(content);
     return;
   }
+  if (currentTab === 'accounts') {
+    await renderAccountsTab(content);
+    return;
+  }
   if (currentTab === 'services') {
     await renderServicesTab(content);
     return;
@@ -1861,7 +1865,7 @@ function renderAccountsHtml(accounts, packages, nextUsername) {
   `;
 }
 
-function wireAccountsSection(content) {
+function wireAccountsSection(content, refresh) {
   const createBtn = document.getElementById('acc-form-create-btn');
   const msgEl = document.getElementById('acc-form-msg');
   const idInput = document.getElementById('acc-form-username-id');
@@ -1888,7 +1892,7 @@ function wireAccountsSection(content) {
       msgEl.className = 'action-msg';
       try {
         await api('POST', '/accounts', { username, packageId });
-        await renderPackagesTab(content);
+        await refresh(content);
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
@@ -1903,7 +1907,7 @@ function wireAccountsSection(content) {
       btn.disabled = true;
       try {
         await api('DELETE', `/accounts/${btn.dataset.deleteAccount}`);
-        await renderPackagesTab(content);
+        await refresh(content);
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
@@ -1916,11 +1920,9 @@ function wireAccountsSection(content) {
 async function renderPackagesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [{ packages }, resources, { accounts }, nextUsername] = await Promise.all([
+    const [{ packages }, resources] = await Promise.all([
       api('GET', '/packages'),
-      api('GET', '/system-resources'),
-      api('GET', '/accounts'),
-      api('GET', '/accounts/next-username')
+      api('GET', '/system-resources')
     ]);
     const cpuCount = resources.slice.cpuCount;
     const diskModeLabel = (mode) => (mode === 'ext4' ? 'ext4' : mode === 'xfs' ? 'XFS' : `<span class="status-badge inactive">${t('packages.quota_off_badge')}</span>`);
@@ -1972,14 +1974,10 @@ async function renderPackagesTab(content) {
         <div class="action-msg" id="packages-msg"></div>
         <div id="packages-form-container"></div>
       </div>
-      <div class="system-info-card" style="margin-top:16px;">
-        ${renderAccountsHtml(accounts, packages, nextUsername)}
-      </div>
     `;
 
     applyTranslations();
     wireSystemResourcesSection(resources, content);
-    wireAccountsSection(content);
 
     const addBtn = document.getElementById('packages-add-btn');
     addBtn.onclick = () => showPackageForm(null, cpuCount, resources);
@@ -2006,6 +2004,28 @@ async function renderPackagesTab(content) {
         }
       };
     });
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function renderAccountsTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const [{ packages }, { accounts }, nextUsername] = await Promise.all([
+      api('GET', '/packages'),
+      api('GET', '/accounts'),
+      api('GET', '/accounts/next-username')
+    ]);
+
+    content.innerHTML = `
+      <div class="system-info-card">
+        ${renderAccountsHtml(accounts, packages, nextUsername)}
+      </div>
+    `;
+
+    applyTranslations();
+    wireAccountsSection(content, renderAccountsTab);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
