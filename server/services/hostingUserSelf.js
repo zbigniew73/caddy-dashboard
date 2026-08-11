@@ -135,6 +135,8 @@ async function getOwnAccount(username) {
   ]);
   return {
     username,
+    fullName: account?.fullName || null,
+    email: account?.email || null,
     homeDir: account?.homeDir || null,
     packageName: account?.packageName || null,
     diskQuotaMb: account?.diskQuotaMb ?? null,

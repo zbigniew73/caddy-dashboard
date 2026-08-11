@@ -101,14 +101,21 @@ function renderDashboard(content) {
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '')}
       ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '')}
     </div>
-    <div class="system-info-card" style="margin-top:16px;">
-      <h3 style="margin:0 0 4px;font-size:15px;">${t('dashboard.welcome_title', { user: escapeHtml(a.username) })}</h3>
-      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('dashboard.welcome_description')}</p>
-      <div class="info-grid">
-        <div class="info-label">${t('dashboard.field_username')}</div><div class="info-value">${escapeHtml(a.username)}</div>
-        <div class="info-label">${t('dashboard.field_homedir')}</div><div class="info-value">${escapeHtml(a.homeDir || '-')}</div>
-        <div class="info-label">${t('dashboard.field_package')}</div><div class="info-value">${escapeHtml(a.packageName || '-')}</div>
-        <div class="info-label">${t('dashboard.field_quota')}</div><div class="info-value">${a.diskQuotaMb ? `${a.diskQuotaMb} MB` : '-'}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+      <div class="system-info-card">
+        <h3 style="margin:0 0 4px;font-size:15px;">${t('dashboard.welcome_title', { user: escapeHtml(a.username) })}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('dashboard.welcome_description')}</p>
+        <div class="info-grid">
+          <div class="info-label">${t('dashboard.field_username')}</div><div class="info-value">${escapeHtml(a.username)}</div>
+          <div class="info-label">${t('dashboard.field_fullname')}</div><div class="info-value">${escapeHtml(a.fullName || '-')}</div>
+          <div class="info-label">${t('dashboard.field_email')}</div><div class="info-value">${escapeHtml(a.email || '-')}</div>
+          <div class="info-label">${t('dashboard.field_homedir')}</div><div class="info-value">${escapeHtml(a.homeDir || '-')}</div>
+          <div class="info-label">${t('dashboard.field_package')}</div><div class="info-value">${escapeHtml(a.packageName || '-')}</div>
+          <div class="info-label">${t('dashboard.field_quota')}</div><div class="info-value">${a.diskQuotaMb ? `${a.diskQuotaMb} MB` : '-'}</div>
+        </div>
+      </div>
+      <div class="system-info-card">
+        <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
       </div>
     </div>
   `;
