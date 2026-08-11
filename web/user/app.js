@@ -173,7 +173,6 @@ function renderDashboard(content) {
 const PLACEHOLDER_TABS = {
   sites: 'nav.sites',
   databases: 'nav.databases',
-  cron: 'nav.cron',
   ssh: 'nav.ssh',
   backup: 'nav.backup'
 };
@@ -266,6 +265,205 @@ function renderSettings(content) {
   };
 }
 
+// Cron - CRUD na prawdziwym crontabie konta (server/services/hostingUserCron.js).
+// Kazde zadanie to 2 linie w crontabie (komentarz-znacznik + linia
+// harmonogram+polecenie) - zobacz komentarz w hostingUserCron.js. Karta
+// formularza + tabela zadan, pelna szerokosc (nie wzorzec 2-kolumnowy -
+// za duzo tresci na polowe szerokosci, ten sam wybor co tabela FIREWALL
+// w panelu admina).
+const CRON_PRESETS = [
+  ['every5', '*/5 * * * *'],
+  ['hourly', '0 * * * *'],
+  ['daily', '0 0 * * *'],
+  ['weekly', '0 0 * * 0'],
+  ['monthly', '0 0 1 * *'],
+  ['daily3am', '0 3 * * *']
+];
+
+let cronPhpPathsCache = null;
+let cronEditingId = null;
+
+function cronJobRow(job) {
+  return `
+    <tr>
+      <td>${escapeHtml(job.name || '-')}</td>
+      <td>${escapeHtml(job.schedule)}</td>
+      <td style="white-space:normal;word-break:break-all;">${escapeHtml(job.command)}</td>
+      <td><span class="status-badge ${job.enabled ? 'active' : 'inactive'}">${job.enabled ? t('cron.status_active') : t('cron.status_inactive')}</span></td>
+      <td style="white-space:normal;">
+        <button type="button" class="secondary" data-cron-edit="${job.id}">${t('cron.edit')}</button>
+        <button type="button" class="secondary" data-cron-toggle="${job.id}" data-cron-enabled="${job.enabled}">${job.enabled ? t('cron.disable') : t('cron.enable')}</button>
+        <button type="button" class="danger" data-cron-delete="${job.id}">${t('cron.delete')}</button>
+      </td>
+    </tr>
+  `;
+}
+
+function cronFormHtml(phpPaths, editingJob) {
+  const presetsHtml = CRON_PRESETS.map(([key, value]) =>
+    `<button type="button" class="secondary" data-cron-preset="${escapeHtml(value)}">${t('cron.preset_' + key)}</button>`
+  ).join('');
+  const phpPathsHtml = phpPaths.length
+    ? phpPaths.map((p) => `<button type="button" class="secondary" data-cron-php-path="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')
+    : `<span style="font-size:12px;color:var(--muted);">${t('cron.php_paths_none')}</span>`;
+  const commandPlaceholder = `${phpPaths[0] || '/usr/local/bin/php85'} ${CURRENT_ACCOUNT?.homeDir || '/home/user'}/cron.php`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${editingJob ? t('cron.edit_title') : t('cron.add_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('cron.add_description')}</p>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_name')}</label>
+    <input type="text" id="cron-name" maxlength="100" placeholder="${t('cron.name_placeholder')}" value="${escapeHtml(editingJob?.name || '')}" style="margin-bottom:10px;">
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_schedule')}</label>
+    <input type="text" id="cron-schedule" placeholder="*/5 * * * *" value="${escapeHtml(editingJob?.schedule || '')}" style="font-family:var(--mono);margin-bottom:6px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${t('cron.schedule_hint')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${presetsHtml}</div>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_command')}</label>
+    <input type="text" id="cron-command" placeholder="${escapeHtml(commandPlaceholder)}" value="${escapeHtml(editingJob?.command || '')}" style="font-family:var(--mono);margin-bottom:6px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">${t('cron.command_hint')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${phpPathsHtml}</div>
+
+    <button type="button" id="cron-submit-btn">${editingJob ? t('cron.save_button') : t('cron.add_button')}</button>
+    ${editingJob ? `<button type="button" class="secondary" id="cron-cancel-btn">${t('cron.cancel_button')}</button>` : ''}
+    <div class="action-msg" id="cron-msg"></div>
+  `;
+}
+
+function renderCronSection(jobs, phpPaths) {
+  const editingJob = cronEditingId ? jobs.find((j) => j.id === cronEditingId) : null;
+  const rows = jobs.length
+    ? jobs.map(cronJobRow).join('')
+    : `<tr><td colspan="5" style="text-align:center;color:var(--muted);">${t('cron.empty')}</td></tr>`;
+
+  return `
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+      ${cronFormHtml(phpPaths, editingJob)}
+    </div>
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <h3 style="margin:0 0 12px;font-size:15px;">${t('cron.jobs_title')}</h3>
+      <div style="overflow-x:auto;">
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th>${t('cron.col_name')}</th>
+              <th>${t('cron.col_schedule')}</th>
+              <th>${t('cron.col_command')}</th>
+              <th>${t('cron.col_status')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function wireCronSection(content) {
+  content.querySelectorAll('[data-cron-preset]').forEach((btn) => {
+    btn.onclick = () => { document.getElementById('cron-schedule').value = btn.dataset.cronPreset; };
+  });
+
+  content.querySelectorAll('[data-cron-php-path]').forEach((btn) => {
+    btn.onclick = () => {
+      const cmdInput = document.getElementById('cron-command');
+      const path = btn.dataset.cronPhpPath;
+      const rest = cmdInput.value.trim();
+      cmdInput.value = rest ? `${path} ${rest}` : `${path} `;
+      cmdInput.focus();
+    };
+  });
+
+  content.querySelectorAll('[data-cron-edit]').forEach((btn) => {
+    btn.onclick = () => {
+      cronEditingId = btn.dataset.cronEdit;
+      refreshCronTab(content);
+    };
+  });
+
+  const cancelBtn = document.getElementById('cron-cancel-btn');
+  if (cancelBtn) {
+    cancelBtn.onclick = () => {
+      cronEditingId = null;
+      refreshCronTab(content);
+    };
+  }
+
+  content.querySelectorAll('[data-cron-toggle]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.cronToggle;
+      const enabled = btn.dataset.cronEnabled === 'true';
+      const msgEl = document.getElementById('cron-msg');
+      btn.disabled = true;
+      try {
+        await api('PUT', `/cron/${id}`, { enabled: !enabled });
+        await refreshCronTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-cron-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('cron.confirm_delete'))) return;
+      const msgEl = document.getElementById('cron-msg');
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/cron/${btn.dataset.cronDelete}`);
+        await refreshCronTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const submitBtn = document.getElementById('cron-submit-btn');
+  submitBtn.onclick = async () => {
+    const name = document.getElementById('cron-name').value;
+    const schedule = document.getElementById('cron-schedule').value.trim();
+    const command = document.getElementById('cron-command').value.trim();
+    const msgEl = document.getElementById('cron-msg');
+    msgEl.textContent = '';
+    msgEl.className = 'action-msg';
+    submitBtn.disabled = true;
+    try {
+      if (cronEditingId) {
+        await api('PUT', `/cron/${cronEditingId}`, { name, schedule, command });
+        cronEditingId = null;
+      } else {
+        await api('POST', '/cron', { name, schedule, command });
+      }
+      await refreshCronTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      submitBtn.disabled = false;
+    }
+  };
+}
+
+async function refreshCronTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('cron.loading')}</div>`;
+  try {
+    const [jobs, phpPaths] = await Promise.all([
+      api('GET', '/cron'),
+      cronPhpPathsCache ? Promise.resolve(cronPhpPathsCache) : api('GET', '/cron/php-paths')
+    ]);
+    cronPhpPathsCache = phpPaths;
+    content.innerHTML = renderCronSection(jobs, phpPaths);
+    wireCronSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -277,6 +475,8 @@ function renderTab() {
   stopUsageRefresh();
   if (currentTab === 'settings') {
     renderSettings(content);
+  } else if (currentTab === 'cron') {
+    refreshCronTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
@@ -286,6 +486,7 @@ document.querySelectorAll('nav button.tab').forEach((btn) => {
   btn.onclick = () => {
     if (MUST_CHANGE_PASSWORD && btn.dataset.tab !== 'settings') return;
     currentTab = btn.dataset.tab;
+    cronEditingId = null;
     renderTab();
   };
 });
