@@ -146,8 +146,8 @@
   nav button.tab .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
 
   .nav-separator { height: 1px; background: var(--border); margin: 10px 20px; }
-  .nav-section-label { padding: 4px 20px; font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-  .nav-section-label-user-main { font-weight: 400; color: var(--accent); }
+  .nav-section-label { padding: 4px 20px; font-size: 15px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .nav-section-label-user-main { color: var(--accent); }
   #nav-main-label { color: var(--accent); }
   #nav-install-label { color: var(--danger); }
   nav button.tab.install-pending { color: var(--accent); }

@@ -16,7 +16,7 @@
   "nav.cron": "CRON",
   "nav.runtime-manager": "R MANAGER",
   "nav.caddy": "CADDY",
-  "nav.install_section": "Install",
+  "nav.install_section": "INSTALATOR",
   "services.loading": "Wczytywanie...",
   "services.empty": "Brak skonfigurowanych usług",
   "services.not_installed_detail": "Usługa nie jest zainstalowana w systemie",

@@ -309,6 +309,21 @@ const CRON_PRESETS = [
   ['daily3am', '0 3 * * *']
 ];
 
+// Gotowe szablony calych zadan (nazwa+harmonogram+polecenie na raz) -
+// pierwszy to WordPress (wylaczenie wbudowanego wp-cron.php i uruchamianie
+// go z prawdziwego crona, standardowa praktyka dla WP na wiekszy ruch).
+// "example.pl" jest CELOWO placeholderem do podmiany - po wstawieniu
+// szablonu ta czesc pola polecenia jest zaznaczona, zeby mozna ja od razu
+// nadpisac wlasna domena.
+const CRON_TEMPLATE_PLACEHOLDER_DOMAIN = 'example.pl';
+const CRON_TEMPLATES = {
+  wordpress: {
+    name: 'WordPress Cron',
+    schedule: '*/2 * * * *',
+    command: `wget -q -T 60 -O /dev/null "https://${CRON_TEMPLATE_PLACEHOLDER_DOMAIN}/wp-cron.php?doing_wp_cron"`
+  }
+};
+
 let cronPhpPathsCache = null;
 let cronEditingId = null;
 
@@ -340,6 +355,12 @@ function cronFormHtml(phpPaths, editingJob) {
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${editingJob ? t('cron.edit_title') : t('cron.add_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('cron.add_description')}</p>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_templates')}</label>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
+      <button type="button" class="secondary" data-cron-template="wordpress">${t('cron.template_wordpress')}</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${t('cron.template_hint')}</div>
 
     <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('cron.field_name')}</label>
     <input type="text" id="cron-name" maxlength="100" placeholder="${t('cron.name_placeholder')}" value="${escapeHtml(editingJob?.name || '')}" style="margin-bottom:10px;">
@@ -393,6 +414,20 @@ function renderCronSection(jobs, phpPaths) {
 function wireCronSection(content) {
   content.querySelectorAll('[data-cron-preset]').forEach((btn) => {
     btn.onclick = () => { document.getElementById('cron-schedule').value = btn.dataset.cronPreset; };
+  });
+
+  content.querySelectorAll('[data-cron-template]').forEach((btn) => {
+    btn.onclick = () => {
+      const template = CRON_TEMPLATES[btn.dataset.cronTemplate];
+      if (!template) return;
+      document.getElementById('cron-name').value = template.name;
+      document.getElementById('cron-schedule').value = template.schedule;
+      const cmdInput = document.getElementById('cron-command');
+      cmdInput.value = template.command;
+      cmdInput.focus();
+      const domainStart = template.command.indexOf(CRON_TEMPLATE_PLACEHOLDER_DOMAIN);
+      if (domainStart >= 0) cmdInput.setSelectionRange(domainStart, domainStart + CRON_TEMPLATE_PLACEHOLDER_DOMAIN.length);
+    };
   });
 
   content.querySelectorAll('[data-cron-php-path]').forEach((btn) => {
