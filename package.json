@@ -1,7 +1,7 @@
 {
   "name": "caddy-dashboard",
-  "version": "1.24.11",
-  "description": "Nowe podejscie do panelu zarzadzania uslugami na serwerze AlmaLinux/Rocky Linux 9/10 (Caddy reverse proxy).",
+  "version": "1.24.12",
+  "description": "Nowe podejscie do panelu zarzadzania uslugami na serwerze AlmaLinux 9/10 | Rocky Linux 9/10 (Caddy reverse proxy).",
   "type": "module",
   "main": "server/index.js",
   "scripts": {
