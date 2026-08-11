@@ -8,8 +8,11 @@ const router = Router();
 // mogl operowac na koncie innego.
 router.get('/me', async (req, res) => {
   try {
-    const mustChangePassword = await getMustChangePassword(req.hostingUser);
-    res.json({ ...getOwnAccount(req.hostingUser), mustChangePassword });
+    const [account, mustChangePassword] = await Promise.all([
+      getOwnAccount(req.hostingUser),
+      getMustChangePassword(req.hostingUser)
+    ]);
+    res.json({ ...account, mustChangePassword });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

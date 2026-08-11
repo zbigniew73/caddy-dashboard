@@ -71,18 +71,82 @@ async function changeOwnPassword(username, currentPassword, newPassword) {
   await setSystemPassword(username, newPassword);
 }
 
+// Biezace zuzycie CPU/RAM konta - suma po WSZYSTKICH procesach usera z `ps`
+// (kolumny %cpu/rss), bez sudo (odczyt /proc jest publiczny na typowej
+// instalacji). Brak procesow (user aktualnie nie ma zadnej sesji SSH) to
+// normalny stan, nie blad - `ps` wtedy zwraca kod 1 i pusty wynik, co
+// oddajemy jako zera, a nie wyjatek.
+async function getProcessUsage(username) {
+  try {
+    const { stdout } = await execFileAsync('ps', ['-u', username, '--no-headers', '-o', '%cpu,rss'], { timeout: 5000 });
+    let cpuPercent = 0;
+    let rssKb = 0;
+    for (const line of stdout.trim().split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const [cpu, rss] = trimmed.split(/\s+/);
+      cpuPercent += parseFloat(cpu) || 0;
+      rssKb += parseInt(rss, 10) || 0;
+    }
+    return { cpuUsedPercent: Math.round(cpuPercent * 10) / 10, ramUsedMb: Math.round(rssKb / 1024) };
+  } catch {
+    return { cpuUsedPercent: 0, ramUsedMb: 0 };
+  }
+}
+
+// Liczba stron (plikow *.caddy) konta - katalog nalezy do
+// <username>:caddy (0750), panel dziala jako osobny user serwisowy bez
+// dostepu do niego, wiec liczenie idzie przez skrypt sudo (root), patrz
+// hosting-account-sites-count.sh.
+function countSites(username) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/hosting-account-sites-count.sh`, username]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve(parseInt(stdout.trim(), 10) || 0);
+        return;
+      }
+      reject(Object.assign(
+        new Error(sudoErrorMessage('hosting-account-sites-count.sh', stderr) || `exit code ${code}`), { status: 500 }
+      ));
+    });
+  });
+}
+
 // Wlasny rekord z rejestru panelu (hosting-accounts.json) - jesli konto
 // istnieje jako user systemowy, ale z jakiegos powodu nie ma wpisu w
 // rejestrze (np. utworzone recznie poza panelem), zwracamy nulle zamiast
 // bledu - panel klienta ma sie po prostu pokazac z pustymi polami.
-function getOwnAccount(username) {
+//
+// databasesUsed jest NA STALE 0 - w panelu nie istnieje jeszcze zaden
+// mechanizm wiazacy bazy danych z kontem hostingowym (MariaDB/PostgreSQL/
+// MongoDB sa zarzadzane globalnie w panelu admina, nie per-konto), wiec
+// uczciwa odpowiedz to "0 z limitu pakietu", a nie zgadywanie.
+async function getOwnAccount(username) {
   const account = listAccounts().find((a) => a.username === username);
+  const [usage, sitesUsed] = await Promise.all([
+    getProcessUsage(username),
+    account ? countSites(username).catch(() => 0) : Promise.resolve(0)
+  ]);
   return {
     username,
     homeDir: account?.homeDir || null,
     packageName: account?.packageName || null,
     diskQuotaMb: account?.diskQuotaMb ?? null,
-    createdAt: account?.createdAt || null
+    ramLimitMb: account?.ramLimitMb ?? null,
+    maxDomains: account?.maxDomains ?? null,
+    maxDatabases: account?.maxDatabases ?? null,
+    cpuPercentLimit: account?.cpuPercent ?? null,
+    createdAt: account?.createdAt || null,
+    cpuUsedPercent: usage.cpuUsedPercent,
+    ramUsedMb: usage.ramUsedMb,
+    sitesUsed,
+    databasesUsed: 0
   };
 }
 

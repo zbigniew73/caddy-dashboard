@@ -124,7 +124,15 @@ function listAccounts() {
   const packages = listPackages();
   return loadAccounts().map((a) => {
     const pkg = packages.find((p) => p.id === a.packageId);
-    return { ...a, packageName: pkg ? pkg.name : null, diskQuotaMb: pkg ? pkg.diskQuotaMb : null, ramLimitMb: pkg ? pkg.ramLimitMb : null };
+    return {
+      ...a,
+      packageName: pkg ? pkg.name : null,
+      diskQuotaMb: pkg ? pkg.diskQuotaMb : null,
+      ramLimitMb: pkg ? pkg.ramLimitMb : null,
+      maxDomains: pkg ? pkg.maxDomains : null,
+      maxDatabases: pkg ? pkg.maxDatabases : null,
+      cpuPercent: pkg ? pkg.cpuPercent : null
+    };
   });
 }
 

@@ -68,10 +68,40 @@ let CURRENT_ACCOUNT = null;
 let MUST_CHANGE_PASSWORD = false;
 let currentTab = 'dashboard';
 
+function severity(percent) {
+  if (percent >= 90) return 'critical';
+  if (percent >= 70) return 'warning';
+  return 'good';
+}
+
+// Kafelek "wykorzystano / limit z pakietu" - szkielet na teraz (patrz
+// server/services/hostingUserSelf.js: CPU/RAM to realny odczyt z `ps`,
+// Strony to realne liczenie plikow *.caddy, Bazy danych to na razie
+// zawsze 0/limit, bo nie ma jeszcze mechanizmu przypisywania baz do
+// konta - dokladniejsze metryki dojda pozniej).
+function usageTile(label, used, limit, unit) {
+  const hasLimit = typeof limit === 'number' && limit > 0;
+  const percent = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const valueText = hasLimit ? `${used}${unit} / ${limit}${unit}` : `${used}${unit}`;
+  return `
+    <div class="stat-tile">
+      <div class="stat-label">${escapeHtml(label)}</div>
+      <div class="stat-value">${valueText}</div>
+      <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
+    </div>
+  `;
+}
+
 function renderDashboard(content) {
   const a = CURRENT_ACCOUNT;
   content.innerHTML = `
-    <div class="system-info-card">
+    <div class="system-grid">
+      ${usageTile(t('dashboard.tile_cpu'), a.cpuUsedPercent ?? 0, a.cpuPercentLimit, '%')}
+      ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB')}
+      ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '')}
+      ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '')}
+    </div>
+    <div class="system-info-card" style="margin-top:16px;">
       <h3 style="margin:0 0 4px;font-size:15px;">${t('dashboard.welcome_title', { user: escapeHtml(a.username) })}</h3>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('dashboard.welcome_description')}</p>
       <div class="info-grid">
