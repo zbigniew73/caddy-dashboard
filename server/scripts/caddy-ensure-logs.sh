@@ -3,21 +3,29 @@
 # Sprawdza/naprawia uprawnienia katalogu logow Caddy i wszystkich plikow
 # logow (globalny /var/log/caddy/caddy.log z bloku wydajnosci - patrz
 # server/services/caddyPerformance.js - oraz per-domena
-# /var/log/caddy/<domena>.log tworzone przez hosting-user-site.sh).
+# /var/log/caddy/<domena>.log tworzone przez hosting-user-site.sh), a takze
+# samego pliku domyslnego fallbacku /etc/caddy/sites/default.caddy (patrz
+# install.sh) - jesli go brakuje, tworzy go od nowa; jesli istnieje, tylko
+# poprawia wlasciciela/uprawnienia (tresci NIE dotyka, na wypadek recznych
+# zmian).
 #
 # Powod istnienia: `caddy validate`/`caddy adapt` faktycznie PROWIZJONUJE
 # config (w tym modul loggera) i dziala jako root (sudo), wiec to WLASNIE
 # ono, nie usluga Caddy (caddy:caddy), moze jako pierwsze utworzyc plik
 # loga (root:root, 0600) - wtedy prawdziwa usluga Caddy nie ma juz prawa go
-# otworzyc do zapisu, dopoki ktos recznie nie poprawi wlasciciela. Ten
-# skrypt to recznie wywolywana naprawa (przycisk w panelu: Uslugi -> Caddy)
-# na wypadek gdyby cokolwiek (reinstalacja, reczna edycja Caddyfile, stary
-# stan sprzed wprowadzenia tych zabezpieczen) zostawilo logi w zlym stanie -
+# otworzyc do zapisu, dopoki ktos recznie nie poprawi wlasciciela. Ten sam
+# problem (plik nalezacy do root, bez grupy caddy) moze dotknac
+# default.caddy, jesli ktos utworzy/edytuje go recznie jako root bez
+# `chown root:caddy` - usluga Caddy nie jest w grupie root, wiec bez bitu
+# grupowego (0640, grupa caddy) nie odczyta pliku przy `import
+# /etc/caddy/sites/*.caddy`. Ten skrypt to recznie wywolywana naprawa
+# (przycisk w panelu: Uslugi -> Caddy) na wypadek gdyby cokolwiek
+# (reinstalacja, reczna edycja Caddyfile, stary stan sprzed wprowadzenia
+# tych zabezpieczen) zostawilo logi/default.caddy w zlym stanie -
 # idempotentna, bez efektow ubocznych jesli wszystko juz jest poprawne.
 #
-# "default" (plik default.caddy - domyslny fallback dla nieskonfigurowanych
-# domen, patrz install.sh) jest celowo pomijany - nie ma wlasnego bloku
-# `log` per-domena, wiec nie ma tez wlasnego pliku loga.
+# "default" jest pomijany przy naprawie LOGOW - default.caddy nie ma
+# wlasnego bloku `log` per-domena, wiec nie ma tez wlasnego pliku loga.
 #
 # Uzycie: caddy-ensure-logs.sh (bez argumentow, dziala jako root)
 
@@ -25,11 +33,24 @@ set -uo pipefail
 
 LOG_DIR="/var/log/caddy"
 SITES_DIR="/etc/caddy/sites"
+DEFAULT_SITE_FILE="${SITES_DIR}/default.caddy"
 FIXED=0
 
 mkdir -p "$LOG_DIR" || { echo "BLAD: nie udalo sie utworzyc ${LOG_DIR}." >&2; exit 1; }
 chown caddy:caddy "$LOG_DIR"
 chmod 0755 "$LOG_DIR"
+
+if [ -d "$SITES_DIR" ]; then
+  if [ ! -f "$DEFAULT_SITE_FILE" ]; then
+    cat > "$DEFAULT_SITE_FILE" <<'EOF'
+:80, :443 {
+	respond "Caddy Dashboard - No site configured for this domain" 404
+}
+EOF
+  fi
+  chown root:caddy "$DEFAULT_SITE_FILE"
+  chmod 0640 "$DEFAULT_SITE_FILE"
+fi
 
 ensure_log_file() {
   local file="$1"
@@ -55,4 +76,4 @@ if [ -d "$SITES_DIR" ]; then
   shopt -u nullglob
 fi
 
-echo "OK: katalog logow ${LOG_DIR} i ${FIXED} plik(i) logow sprawdzone/naprawione."
+echo "OK: katalog logow ${LOG_DIR}, ${FIXED} plik(i) logow oraz ${DEFAULT_SITE_FILE} sprawdzone/naprawione."

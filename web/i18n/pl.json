@@ -367,7 +367,7 @@
   "caddyperf.applying": "Sprawdzam i zapisuję konfigurację...",
   "caddyperf.confirm_apply": "Zapisać nowe ustawienia wydajności Caddy? Konfiguracja zostanie zweryfikowana (caddy fmt + validate) przed zapisem, a Caddy przeładowany dopiero po pozytywnej weryfikacji.",
 
-  "caddylogs.description": "Sprawdza i naprawia właściciela/uprawnienia katalogu /var/log/caddy oraz wszystkich plików logów (globalny caddy.log i logi per-domena, np. test.20z.eu.log) - przydatne, gdy Caddy nie może zapisywać logów.",
+  "caddylogs.description": "Sprawdza i naprawia właściciela/uprawnienia katalogu /var/log/caddy oraz wszystkich plików logów (globalny caddy.log i logi per-domena, np. test.20z.eu.log), a także pliku domyślnego fallbacku /etc/caddy/sites/default.caddy (tworzy go, jeśli brakuje) - przydatne, gdy Caddy nie może zapisywać logów albo nie widzi domyślnej strony.",
   "caddylogs.ensure_button": "Utwórz/sprawdź logi Caddy",
   "caddylogs.ensuring": "Sprawdzam i naprawiam uprawnienia logów...",
   "caddylogs.ensure_success": "Logi Caddy sprawdzone.",
