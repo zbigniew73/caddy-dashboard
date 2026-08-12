@@ -59,34 +59,46 @@ async function listOwnSites(username) {
   };
 }
 
-// Kanoniczna wersja domeny (ta, ktora faktycznie serwuje pliki) dostaje
-// blok z root/file_server, druga wersja to tylko 301 na kanoniczna - Caddy
-// automatycznie wystawia certyfikaty ACME dla OBU nazw (kazda jest osobnym
-// site-blockiem), wiec przekierowanie tez dziala po HTTPS bez dodatkowej
-// konfiguracji.
+// Dla naprawy uprawnien (caddy-ensure-logs.sh) - kto jest wlascicielem
+// ktorej domeny, zeby przywrocic chown <username>:caddy na pliku
+// /etc/caddy/sites/<domena>.caddy(.disabled), gdyby ktos recznie
+// (np. jako root przez SSH) zepsul wlasciciela pliku.
+function listSiteOwners() {
+  return loadData().map((s) => ({ username: s.accountUsername, domain: s.domain }));
+}
+
+// Obie wersje domeny (apex i www) w JEDNYM site-blocku (adres to lista
+// hostow rozdzielona przecinkiem) - matcher named (@apex/@www) lapie
+// TYLKO niekanoniczna wersje i przekierowuje ja na kanoniczna, reszta
+// dyrektyw (root/file_server/log) obsluguje juz oba hosty naraz. Caddy
+// nadal automatycznie wystawia certyfikaty ACME dla OBU nazw wypisanych
+// w adresie site-blocku, wiec przekierowanie dziala tez po HTTPS bez
+// dodatkowej konfiguracji.
 // Log NIE idzie do ~/domains/<domena>/logs - Caddy (caddy:caddy) nie ma
 // prawa zapisu do katalogu domowego usera bez dodatkowych sztuczek z
 // uprawnieniami grupy. Zamiast tego wspolny, systemowy /var/log/caddy/
 // (wlasciciel caddy:caddy - Caddy pisze tam bez przeszkod), jeden plik na
-// domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji).
+// domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji) - zawsze
+// nazwany po APEKSIE (bez www), niezaleznie od kierunku przekierowania.
 function buildSiteBlock(homeDir, domain, redirectMode) {
   const wwwDomain = `www.${domain}`;
-  const canonical = redirectMode === 'apex-to-www' ? wwwDomain : domain;
-  const other = redirectMode === 'apex-to-www' ? domain : wwwDomain;
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
 
-  return `${canonical} {
+  const [addresses, matcherName, matchedHost, canonical] = redirectMode === 'apex-to-www'
+    ? [`${wwwDomain}, ${domain}`, '@apex', domain, wwwDomain]
+    : [`${domain}, ${wwwDomain}`, '@www', wwwDomain, domain];
+
+  return `${addresses} {
+	${matcherName} host ${matchedHost}
+	redir ${matcherName} https://${canonical}{uri} 301
+	header -X-Powered-By
 	root * ${publicRoot}
 	file_server
-	encode gzip
 	log {
 		output file ${logFile}
+		format json
 	}
-}
-
-${other} {
-	redir https://${canonical}{uri} permanent
 }
 `;
 }
@@ -209,4 +221,4 @@ async function deleteSite(username, id) {
   saveData(all.filter((s) => s.id !== id));
 }
 
-export { listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite };
+export { listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners };

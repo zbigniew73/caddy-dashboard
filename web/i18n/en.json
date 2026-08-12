@@ -367,7 +367,7 @@
   "caddyperf.applying": "Checking and saving the configuration...",
   "caddyperf.confirm_apply": "Save the new Caddy performance settings? The config will be verified (caddy fmt + validate) before writing, and Caddy only reloaded after it passes.",
 
-  "caddylogs.description": "Checks and fixes the owner/permissions of /var/log/caddy and every log file (the global caddy.log and per-domain logs, e.g. test.20z.eu.log), plus the default fallback file /etc/caddy/sites/default.caddy (recreates it if missing) - useful when Caddy can't write its logs or isn't serving the default fallback.",
+  "caddylogs.description": "Checks and fixes the owner/permissions of /var/log/caddy and every log file (the global caddy.log and per-domain logs, e.g. test.example.com.log), the default fallback file /etc/caddy/sites/default.caddy (recreates it if missing), each site's config file /etc/caddy/sites/<domain>.caddy (restores ownership to its hosting account so it can be edited, with the caddy group kept for read access), and each ~/domains/<domain>/{public,tmp} directory (owner:caddy + SGID, so newly uploaded files keep inheriting the caddy group) - useful when Caddy can't write its logs, isn't serving the default fallback, a site owner can no longer edit their config, or Caddy stops seeing a site's files.",
   "caddylogs.ensure_button": "Create/check Caddy logs",
   "caddylogs.ensuring": "Checking and fixing log permissions...",
   "caddylogs.ensure_success": "Caddy logs checked.",

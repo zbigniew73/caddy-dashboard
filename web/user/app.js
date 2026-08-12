@@ -1088,10 +1088,6 @@ async function refreshSshTab(content) {
 const SITE_TEMPLATE_LABELS = { html: () => t('sites.template_html') };
 let siteEditingId = null;
 
-function siteRedirectLabel(redirectMode) {
-  return redirectMode === 'apex-to-www' ? t('sites.redirect_apex_to_www') : t('sites.redirect_www_to_apex');
-}
-
 function siteRedirectRadios(name, selected) {
   return `
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
@@ -1127,7 +1123,7 @@ function siteRow(item) {
   return `
     <tr>
       <td>${escapeHtml(item.domain)}</td>
-      <td>${escapeHtml(templateLabel)}<div style="font-size:11px;color:var(--muted);">${escapeHtml(siteRedirectLabel(item.redirectMode))}</div></td>
+      <td>${escapeHtml(templateLabel)}</td>
       <td>${statusBadge}</td>
       <td style="white-space:nowrap;">
         <button type="button" class="secondary" data-site-edit="${item.id}">${t('sites.edit')}</button>

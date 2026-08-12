@@ -130,7 +130,14 @@ case "$ACTION" in
       DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
       mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp"
       chown -R "${USERNAME}:caddy" "$DOMAIN_DIR"
-      find "$DOMAIN_DIR" -type d -exec chmod 0750 {} \;
+      # 2750 = 0750 + SGID - bez SGID nowe pliki/podkatalogi, ktore
+      # wlasciciel wgra pozniej przez SSH/SFTP, dziedziczylyby JEGO
+      # prywatna grupe (np. srv_1001), nie caddy - i Caddy (dziala jako
+      # caddy:caddy, bez bitu "other" na tych katalogach) przestalby je
+      # widziec. SGID na katalogu wymusza, ze kazdy nowy plik/podkatalog
+      # utworzony w srodku dziedziczy grupe RODZICA (caddy), a nowe
+      # podkatalogi dodatkowo dziedzicza sam bit SGID (propagacja w dol).
+      find "$DOMAIN_DIR" -type d -exec chmod 2750 {} \;
       if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
         cat > "${DOMAIN_DIR}/public/index.html" <<HTML
 <!doctype html>
