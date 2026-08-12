@@ -111,6 +111,20 @@ case "$ACTION" in
     chown caddy:caddy /var/log/caddy
     chmod 0755 /var/log/caddy
 
+    # Sam PLIK loga MUSI byc utworzony (i naleziec do caddy:caddy) TU, ZANIM
+    # cokolwiek go otworzy - `caddy validate`/`caddy adapt` ponizej faktycznie
+    # PROWIZJONUJE config (w tym modul loggera), a skoro caly ten skrypt
+    # dziala jako root (sudo), to WLASNIE `caddy validate` jako pierwszy
+    # tworzy plik loga i zostaje jego wlascicielem (root:root, 0600) - wtedy
+    # prawdziwa usluga Caddy (dziala jako caddy:caddy) nie ma juz prawa go
+    # otworzyc do zapisu. Otwarcie JUZ ISTNIEJACEGO pliku (nawet przez root)
+    # NIE zmienia jego wlasciciela, wiec wystarczy utworzyc go z poprawnym
+    # chown/chmod raz, zanim caddy-cokolwiek go dotknie.
+    LOG_FILE="/var/log/caddy/${DOMAIN}.log"
+    [ -f "$LOG_FILE" ] || : > "$LOG_FILE"
+    chown caddy:caddy "$LOG_FILE"
+    chmod 0644 "$LOG_FILE"
+
     if [ "$IS_NEW" = "1" ]; then
       USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
       DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
