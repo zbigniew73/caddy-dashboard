@@ -4,7 +4,7 @@
 # (/etc/caddy/sites/<username>/<domain>.caddy) - ten sam wzorzec
 # walidacja-przed-podmiana-z-rollbackiem co caddy-set-performance.sh, tylko
 # celem jest plik PER-STRONA (importowany przez glowny Caddyfile przez
-# `import /etc/caddy/sites/srv_*/*.caddy`), a nie sam Caddyfile.
+# `import /etc/caddy/sites/*/*.caddy`), a nie sam Caddyfile.
 #
 # "Zatrzymana" strona = plik ma rozszerzenie .caddy.disabled (NIE pasuje do
 # glob *.caddy, wiec Caddy go w ogole nie importuje) - `caddy validate`

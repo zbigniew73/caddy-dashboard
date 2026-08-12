@@ -16,8 +16,7 @@
 #
 # Katalog stron: /etc/caddy/sites/<username> (owner=user, group=caddy,
 # 0750) - Caddy (dziala jako caddy:caddy) czyta stamtad *.caddy przez
-# `import /etc/caddy/sites/srv_*/*.caddy` w glownym Caddyfile (ograniczone
-# do konwencji nazewnictwa kont panelu - patrz install.sh). Top-level
+# `import /etc/caddy/sites/*/*.caddy` w glownym Caddyfile. Top-level
 # /etc/caddy/sites ma o+x BEZ o+r, zeby kazdy user mogl wejsc TYLKO do
 # WLASNEGO podkatalogu (zna jego nazwe), ale nie zrobil `ls` i nie
 # zobaczyl nazw innych kont.
