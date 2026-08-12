@@ -23,9 +23,11 @@
 #                                strony (aktywny/zatrzymany - edycja NIE
 #                                zmienia stanu). Przy PIERWSZYM utworzeniu
 #                                (brak obu plikow) zaklada tez
-#                                ~<username>/domains/<domain>/{public,tmp,logs}
+#                                ~<username>/domains/<domain>/{public,tmp}
 #                                z placeholderem index.html (tylko jesli
-#                                public/ jest puste).
+#                                public/ jest puste). Logi Caddy ida do
+#                                wspolnego /var/log/caddy/<domain>.log, nie
+#                                pod ~/domains.
 # enable <username> <domain>  - <domain>.caddy.disabled -> <domain>.caddy
 # disable <username> <domain> - <domain>.caddy -> <domain>.caddy.disabled
 # delete <username> <domain>  - usuwa .caddy/.caddy.disabled. Dane strony
@@ -93,25 +95,28 @@ case "$ACTION" in
       TARGET_FILE="$DISABLED_FILE"
     fi
 
-    # Katalogi na tresc strony (w tym logs/) MUSZA istniec ZANIM Caddy
-    # dostanie nowy config - `systemctl reload` faktycznie laduje config do
-    # dzialajacej instancji (w odroznieniu od statycznego `caddy validate`
-    # ponizej), co otwiera writer loga z `output file .../logs/access.log`.
-    # Caddy dziala jako caddy:caddy i NIE ma prawa zapisu do ~/domains
-    # (0750, grupa caddy ma tylko r-x) - jesli katalog nie istnieje, reload
-    # wywala sie z "mkdir ...: permission denied". Musi wiec powstac
-    # WCZESNIEJ, tutaj, przez ten skrypt (root).
+    # Katalogi na tresc strony MUSZA istniec ZANIM Caddy dostanie nowy
+    # config - `systemctl reload` faktycznie laduje config do dzialajacej
+    # instancji (w odroznieniu od statycznego `caddy validate` ponizej).
+    # Log NIE idzie do ~/domains/<domena>/logs (usuniete - Caddy jako
+    # caddy:caddy i tak nie ma tam prawa zapisu bez dodatkowych sztuczek z
+    # uprawnieniami), tylko do wspolnego /var/log/caddy/ (patrz nizej) -
+    # zostaja wiec tylko public/ i tmp/.
+    #
+    # /var/log/caddy powinien juz istniec i byc caddy:caddy z pakietu
+    # Caddy - `mkdir -p`+chown ponizej to tylko zabezpieczenie (idempotentne,
+    # bez efektow ubocznych jesli juz jest poprawnie ustawiony), na wypadek
+    # gdyby pakiet tego nie zrobil.
+    mkdir -p /var/log/caddy
+    chown caddy:caddy /var/log/caddy
+    chmod 0755 /var/log/caddy
+
     if [ "$IS_NEW" = "1" ]; then
       USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
       DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
-      mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp" "${DOMAIN_DIR}/logs"
+      mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp"
       chown -R "${USERNAME}:caddy" "$DOMAIN_DIR"
       find "$DOMAIN_DIR" -type d -exec chmod 0750 {} \;
-      # logs/ to jedyny podkatalog, do ktorego Caddy faktycznie MUSI pisac
-      # (tworzy/rotuje access.log) - 0750 daje grupie caddy tylko r-x, wiec
-      # bez tego override'u `mkdir`/`open O_CREATE` na plik loga i tak
-      # dostanie permission denied mimo ze sam katalog juz istnieje.
-      chmod 0770 "${DOMAIN_DIR}/logs"
       if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
         cat > "${DOMAIN_DIR}/public/index.html" <<HTML
 <!doctype html>

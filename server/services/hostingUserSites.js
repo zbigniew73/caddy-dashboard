@@ -64,12 +64,17 @@ async function listOwnSites(username) {
 // automatycznie wystawia certyfikaty ACME dla OBU nazw (kazda jest osobnym
 // site-blockiem), wiec przekierowanie tez dziala po HTTPS bez dodatkowej
 // konfiguracji.
+// Log NIE idzie do ~/domains/<domena>/logs - Caddy (caddy:caddy) nie ma
+// prawa zapisu do katalogu domowego usera bez dodatkowych sztuczek z
+// uprawnieniami grupy. Zamiast tego wspolny, systemowy /var/log/caddy/
+// (wlasciciel caddy:caddy - Caddy pisze tam bez przeszkod), jeden plik na
+// domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji).
 function buildSiteBlock(homeDir, domain, redirectMode) {
   const wwwDomain = `www.${domain}`;
   const canonical = redirectMode === 'apex-to-www' ? wwwDomain : domain;
   const other = redirectMode === 'apex-to-www' ? domain : wwwDomain;
   const publicRoot = `${homeDir}/domains/${domain}/public`;
-  const logFile = `${homeDir}/domains/${domain}/logs/access.log`;
+  const logFile = `/var/log/caddy/${domain}.log`;
 
   return `${canonical} {
 	root * ${publicRoot}
