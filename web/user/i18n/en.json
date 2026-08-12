@@ -115,6 +115,8 @@
   "sites.compression_title": "Compression",
   "sites.compression_gzip": "gzip",
   "sites.compression_zstd": "zstd",
+  "sites.security_title": "Security",
+  "sites.security_checkbox": "Security headers (HSTS, CSP, X-Frame-Options, Referrer-Policy, ...)",
   "sites.check_button": "Check",
   "sites.activate_button": "Activate",
   "sites.checking": "Checking...",

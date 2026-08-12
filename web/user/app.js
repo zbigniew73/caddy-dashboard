@@ -1159,11 +1159,73 @@ function applyCompressionToText(text, { gzip, zstd }) {
   return lines.join('\n');
 }
 
+// Blok naglowkow bezpieczenstwa - ZAWSZE ostatnia sekcja w configu (PO
+// log{...}, tuz przed zamykajacym "}" calego site-blocku). Textualna
+// pozycja w pliku nie ma znaczenia dla Caddy (adapter caddyfile i tak
+// sortuje dyrektywy wg wlasnej, kanonicznej kolejnosci wykonania,
+// niezaleznie od kolejnosci w zrodle), wiec to czysto kosmetyczne -
+// "ostatnia sekcja" ulatwia czytanie configu userowi. Dwie oddzielne
+// dyrektywy `header` w jednym bloku (ta ponizej + istniejace juz
+// `header -X-Powered-By` blizej gory z buildSiteBlock) sa poprawna
+// skladnia - Caddy wykonuje obie.
+// Znaczniki BEGIN/END (jak w caddy-set-performance.sh) - nie samo
+// dopasowanie tresci `header {...}` - bo user moze miec WLASNY,
+// niezwiazany blok header w configu; markery pozwalaja jednoznacznie
+// wlaczyc/wylaczyc/wykryc TYLKO nasz wstrzykniety fragment.
+const SECURITY_MARK_START = '# BEGIN caddy-dashboard-security';
+const SECURITY_MARK_END = '# END caddy-dashboard-security';
+
+function securityBlockLines() {
+  return [
+    `\t${SECURITY_MARK_START}`,
+    '\t# Bezpieczenstwo',
+    '\theader {',
+    '\t\tStrict-Transport-Security "max-age=63072000; includeSubDomains; preload"',
+    '\t\tContent-Security-Policy "upgrade-insecure-requests"',
+    '\t\tPermissions-Policy "geolocation=(self), microphone=(), camera=(), payment=()"',
+    '\t\tReferrer-Policy "strict-origin-when-cross-origin"',
+    '\t\tX-Content-Type-Options "nosniff"',
+    '\t\tX-Frame-Options "SAMEORIGIN"',
+    '\t\tCross-Origin-Opener-Policy "same-origin-allow-popups"',
+    '\t\tCross-Origin-Embedder-Policy "unsafe-none"',
+    '\t\tX-XSS-Protection "1; mode=block"',
+    '\t\tContent-Language "pl-PL"',
+    '\t}',
+    `\t${SECURITY_MARK_END}`
+  ];
+}
+
+function detectSecurity(text) {
+  return String(text || '').includes(SECURITY_MARK_START);
+}
+
+function applySecurityToText(text, enabled) {
+  const lines = String(text || '').split('\n');
+  const startIdx = lines.findIndex((l) => l.includes(SECURITY_MARK_START));
+  const endIdx = lines.findIndex((l) => l.includes(SECURITY_MARK_END));
+  const stripped = (startIdx !== -1 && endIdx !== -1 && endIdx >= startIdx)
+    ? lines.slice(0, startIdx).concat(lines.slice(endIdx + 1))
+    : lines;
+
+  if (!enabled) return stripped.join('\n');
+
+  let closeIdx = -1;
+  for (let i = stripped.length - 1; i >= 0; i--) {
+    if (stripped[i].trim() === '}') { closeIdx = i; break; }
+  }
+  const blockLines = securityBlockLines();
+  if (closeIdx === -1) return stripped.concat(blockLines).join('\n');
+  const withBlock = stripped.slice();
+  withBlock.splice(closeIdx, 0, ...blockLines);
+  return withBlock.join('\n');
+}
+
 // Pelnoszerokosciowa karta POD dwukolumnowa siatka (nie w prawym kafelku
 // "Twoje strony" i nie jako wiersz tabeli) - patrz renderSitesSection.
 function siteConfigEditorHtml(item) {
   const loading = siteEditingContent === null;
   const compression = loading ? { gzip: false, zstd: false } : detectCompression(siteEditingContent);
+  const security = loading ? false : detectSecurity(siteEditingContent);
   const textareaValue = loading ? '' : siteEditingContent;
 
   return `
@@ -1181,6 +1243,13 @@ function siteConfigEditorHtml(item) {
             ${t('sites.compression_zstd')}
           </label>
         </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.security_title')}</label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+          <input type="checkbox" id="site-edit-security-${item.id}" ${security ? 'checked' : ''}>
+          ${t('sites.security_checkbox')}
+        </label>
       </div>
       <textarea id="site-edit-config-${item.id}" rows="16" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(textareaValue)}</textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
@@ -1367,6 +1436,14 @@ function wireSitesSection(content) {
       const zstdCb = document.getElementById(`site-edit-zstd-${id}`);
       const textarea = document.getElementById(`site-edit-config-${id}`);
       textarea.value = applyCompressionToText(textarea.value, { gzip: gzipCb.checked, zstd: zstdCb.checked });
+    };
+  });
+
+  content.querySelectorAll('[id^="site-edit-security-"]').forEach((cb) => {
+    cb.onchange = () => {
+      const id = cb.id.replace(/^site-edit-security-/, '');
+      const textarea = document.getElementById(`site-edit-config-${id}`);
+      textarea.value = applySecurityToText(textarea.value, cb.checked);
     };
   });
 

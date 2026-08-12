@@ -115,6 +115,8 @@
   "sites.compression_title": "Kompresja",
   "sites.compression_gzip": "gzip",
   "sites.compression_zstd": "zstd",
+  "sites.security_title": "Bezpieczenstwo",
+  "sites.security_checkbox": "Naglowki bezpieczenstwa (HSTS, CSP, X-Frame-Options, Referrer-Policy, ...)",
   "sites.check_button": "Sprawdz",
   "sites.activate_button": "Aktywuj",
   "sites.checking": "Sprawdzam...",
