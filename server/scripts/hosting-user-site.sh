@@ -85,6 +85,23 @@ case "$ACTION" in
       exit 1
     fi
 
+    # Walidacja SAMEGO bloku strony jako niezaleznego Caddyfile (adapt +
+    # validate) - ZANIM cokolwiek trafi na docelowa sciezke, ktora Caddy
+    # faktycznie importuje. `caddy adapt` wychwytuje bledy skladni/schematu,
+    # ktorych samo `caddy fmt` (formatowanie) nie widzi; nizej, PO podmianie
+    # pliku, jest jeszcze druga walidacja - calego $CADDYFILE - ktora lapie
+    # bledy MIEDZY plikami (np. dwie strony z ta sama domena).
+    if ! caddy adapt --config "$TMP" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: nowy config strony nie przeszedl adaptacji: $(cat "$ERR_LOG")" >&2
+      rm -f "$TMP" "$ERR_LOG"
+      exit 1
+    fi
+    if ! caddy validate --config "$TMP" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: nowy config strony nie przeszedl samodzielnej walidacji: $(cat "$ERR_LOG")" >&2
+      rm -f "$TMP" "$ERR_LOG"
+      exit 1
+    fi
+
     IS_NEW=1
     TARGET_FILE="$ACTIVE_FILE"
     if [ -f "$ACTIVE_FILE" ]; then
@@ -160,6 +177,12 @@ HTML
     chown "${USERNAME}:caddy" "$TARGET_FILE"
     chmod 0640 "$TARGET_FILE"
 
+    if ! caddy adapt --config "$CADDYFILE" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: caly Caddyfile (po podmianie strony) nie przeszedl adaptacji: $(cat "$ERR_LOG")" >&2
+      if [ -n "$BACKUP" ]; then cp -p "$BACKUP" "$TARGET_FILE"; rm -f "$BACKUP"; else rm -f "$TARGET_FILE"; fi
+      rm -f "$ERR_LOG"
+      exit 1
+    fi
     if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >"$ERR_LOG" 2>&1; then
       echo "BLAD: nowy config strony nie przeszedl walidacji: $(cat "$ERR_LOG")" >&2
       if [ -n "$BACKUP" ]; then cp -p "$BACKUP" "$TARGET_FILE"; rm -f "$BACKUP"; else rm -f "$TARGET_FILE"; fi
@@ -196,6 +219,12 @@ HTML
     fi
     mv -f "$DISABLED_FILE" "$ACTIVE_FILE"
     ERR_LOG="$(mktemp)"
+    if ! caddy adapt --config "$CADDYFILE" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: config strony nie przeszedl adaptacji, nie mozna wlaczyc: $(cat "$ERR_LOG")" >&2
+      mv -f "$ACTIVE_FILE" "$DISABLED_FILE"
+      rm -f "$ERR_LOG"
+      exit 1
+    fi
     if ! caddy validate --config "$CADDYFILE" --adapter caddyfile >"$ERR_LOG" 2>&1; then
       echo "BLAD: config strony nie przeszedl walidacji, nie mozna wlaczyc: $(cat "$ERR_LOG")" >&2
       mv -f "$ACTIVE_FILE" "$DISABLED_FILE"

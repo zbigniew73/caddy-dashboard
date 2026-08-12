@@ -434,7 +434,9 @@ EOF
 EOF
   chown root:caddy /etc/caddy/sites/default.caddy
   chmod 0640 /etc/caddy/sites/default.caddy
-  caddy validate --config /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
+  caddy fmt --overwrite /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
+  caddy adapt --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null || die "$(t err_caddyfile_invalid)"
+  caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile || die "$(t err_caddyfile_invalid)"
   systemctl reload caddy
 else
   log "$(t caddy_already)"

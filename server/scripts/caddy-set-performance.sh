@@ -2,10 +2,11 @@
 #
 # Wstawia/zamienia zarzadzany blok globalnych opcji wydajnosci Caddy na
 # poczatku Caddyfile (tresc bloku, z markerami, czytana ze stdin). Formatuje
-# (caddy fmt) i waliduje (caddy validate) na kopii roboczej PRZED dotknieciem
-# prawdziwego pliku - jesli walidacja sie nie powiedzie, oryginalny Caddyfile
-# w ogole nie jest ruszany. Po udanym zapisie przeladowuje caddy; przy
-# niepowodzeniu przeladowania przywraca poprzednia wersje pliku.
+# (caddy fmt), adaptuje (caddy adapt) i waliduje (caddy validate) na kopii
+# roboczej PRZED dotknieciem prawdziwego pliku - jesli ktorykolwiek z tych
+# krokow sie nie powiedzie, oryginalny Caddyfile w ogole nie jest ruszany.
+# Po udanym zapisie przeladowuje caddy; przy niepowodzeniu przeladowania
+# przywraca poprzednia wersje pliku.
 
 set -uo pipefail
 
@@ -51,6 +52,11 @@ STRIPPED="$(printf '%s\n' "$CURRENT" | awk -v s="$MARK_START" -v e="$MARK_END" '
 
 if ! caddy fmt --overwrite "$TMP" >"$ERR_LOG" 2>&1; then
   echo "BLAD: caddy fmt nie powiodlo sie: $(cat "$ERR_LOG")" >&2
+  exit 1
+fi
+
+if ! caddy adapt --config "$TMP" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+  echo "BLAD: nowy Caddyfile nie przeszedl adaptacji: $(cat "$ERR_LOG")" >&2
   exit 1
 fi
 
