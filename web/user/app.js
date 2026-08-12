@@ -1077,19 +1077,24 @@ async function refreshSshTab(content) {
   }
 }
 
-// Strony - dwa klocki (ten sam wzorzec co Bazy/Redis/SSH):
+// Strony - dwa klocki obok siebie (ten sam wzorzec co Bazy/Redis/SSH) +
+// TRZECI, pelnoszerokosciowy klocek POD nimi, ktory pojawia sie tylko
+// podczas edycji (patrz renderSitesSection/siteConfigEditorHtml):
 //   1) lewy: formularz "dodaj strone" - domena ZAWSZE bez www. (kierunek
-//      przekierowania www<->apex to osobne pole, patrz
+//      przekierowania www<->apex to osobne pole, wybor klikany - radio,
+//      NIE rozwijalna lista - patrz siteRedirectRadios/siteTemplateRadios;
 //      hostingUserSites.js: buildSiteBlock). Szablony PHP/WordPress sa na
 //      razie SZKIELETEM - wybieralne, ale generuja ten sam statyczny blok
 //      co HTML (patrz komentarz przy TEMPLATES w hostingUserSites.js).
 //   2) prawy: lista istniejacych stron z akcjami (Start/Stop, Usun -
 //      NIEODWRACALNIE kasuje tez pliki w ~/domains, patrz
 //      hosting-user-site.sh) + licznik uzyto/limit z pakietu (maxDomains)
-//      na gorze, jak w Bazach. Edytuj otwiera DODATKOWY wiersz pod dana
-//      strona (nie zastepuje jej, jak dawniej) z pelnym edytorem surowego
-//      configu Caddy (get/check/apply w hosting-user-site.sh) - sekcja
-//      kompresji na gorze tylko wstrzykuje/usuwa linie `encode` w tresci
+//      na gorze, jak w Bazach.
+//   3) dolny (pelna szerokosc, NIE w prawym kafelku, NIE wiersz tabeli) -
+//      pokazuje sie po kliknieciu "Edytuj" na ktorejs stronie: pelny
+//      edytor surowego configu Caddy (get/check/apply w
+//      hosting-user-site.sh) - sekcja kompresji na gorze tylko
+//      wstrzykuje/usuwa linie `encode` (przed `file_server`) w tresci
 //      edytora, reszte tresci user edytuje recznie.
 const SITE_TEMPLATE_LABELS = {
   html: () => t('sites.template_html'),
@@ -1112,9 +1117,21 @@ function siteRedirectRadios(name, selected) {
   `;
 }
 
-// Encode dyrektywa Caddy zawsze na PIERWSZEJ linii WEWNATRZ bloku (zaraz
-// po otwierajacym "{" pierwszej linii tresci) - gzip zawsze przed zstd,
-// gdy oba wybrane (wymog: "gzip zawsze pierwszy jak wystepuja 2").
+function siteTemplateRadios(name, selected) {
+  return ['html', 'php', 'wordpress'].map((key) => `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
+      ${SITE_TEMPLATE_LABELS[key]()}
+    </label>
+  `).join('');
+}
+
+// Encode dyrektywa Caddy idzie PRZED file_server (np. root / encode /
+// file_server) - nie na samej gorze bloku, bo tam sa jeszcze
+// matcher/redir/header - gzip zawsze przed zstd, gdy oba wybrane (wymog:
+// "gzip zawsze pierwszy jak wystepuja 2"). Brak linii file_server (user
+// recznie usunal/przebudowal config) - awaryjnie wstawiamy zaraz po
+// otwierajacym "{" pierwszej linii tresci.
 function detectCompression(text) {
   const m = /^[ \t]*encode\s+(.+)$/m.exec(text || '');
   if (!m) return { gzip: false, zstd: false };
@@ -1130,48 +1147,49 @@ function applyCompressionToText(text, { gzip, zstd }) {
   if (!parts.length) return stripped;
 
   const lines = stripped.split('\n');
-  const openIdx = lines.findIndex((l) => l.includes('{'));
   const encodeLine = `\tencode ${parts.join(' ')}`;
+  const fileServerIdx = lines.findIndex((l) => /^[ \t]*file_server\b/.test(l));
+  if (fileServerIdx !== -1) {
+    lines.splice(fileServerIdx, 0, encodeLine);
+    return lines.join('\n');
+  }
+  const openIdx = lines.findIndex((l) => l.includes('{'));
   if (openIdx === -1) return `${encodeLine}\n${stripped}`;
   lines.splice(openIdx + 1, 0, encodeLine);
   return lines.join('\n');
 }
 
-function siteConfigEditorRowHtml(item) {
+// Pelnoszerokosciowa karta POD dwukolumnowa siatka (nie w prawym kafelku
+// "Twoje strony" i nie jako wiersz tabeli) - patrz renderSitesSection.
+function siteConfigEditorHtml(item) {
   const loading = siteEditingContent === null;
   const compression = loading ? { gzip: false, zstd: false } : detectCompression(siteEditingContent);
   const textareaValue = loading ? '' : siteEditingContent;
 
   return `
-    <tr>
-      <td colspan="4">
-        <div style="display:flex;flex-direction:column;gap:10px;padding:10px 0;">
-          <strong>${t('sites.config_title', { domain: escapeHtml(item.domain) })}</strong>
-          ${loading ? `<div class="empty-state">${t('sites.config_loading')}</div>` : `
-            <div>
-              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.compression_title')}</label>
-              <div style="display:flex;gap:16px;flex-wrap:wrap;">
-                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
-                  <input type="checkbox" id="site-edit-gzip-${item.id}" ${compression.gzip ? 'checked' : ''}>
-                  ${t('sites.compression_gzip')}
-                </label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
-                  <input type="checkbox" id="site-edit-zstd-${item.id}" ${compression.zstd ? 'checked' : ''}>
-                  ${t('sites.compression_zstd')}
-                </label>
-              </div>
-            </div>
-            <textarea id="site-edit-config-${item.id}" rows="14" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(textareaValue)}</textarea>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" data-site-check="${item.id}">${t('sites.check_button')}</button>
-              <button type="button" data-site-activate="${item.id}">${t('sites.activate_button')}</button>
-              <button type="button" class="secondary" data-site-cancel-edit="1">${t('sites.cancel_button')}</button>
-            </div>
-            <div class="action-msg" id="site-edit-msg-${item.id}"></div>
-          `}
+    <h3 style="margin:0 0 10px;font-size:15px;">${t('sites.config_title', { domain: escapeHtml(item.domain) })}</h3>
+    ${loading ? `<div class="empty-state">${t('sites.config_loading')}</div>` : `
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.compression_title')}</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+            <input type="checkbox" id="site-edit-gzip-${item.id}" ${compression.gzip ? 'checked' : ''}>
+            ${t('sites.compression_gzip')}
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+            <input type="checkbox" id="site-edit-zstd-${item.id}" ${compression.zstd ? 'checked' : ''}>
+            ${t('sites.compression_zstd')}
+          </label>
         </div>
-      </td>
-    </tr>
+      </div>
+      <textarea id="site-edit-config-${item.id}" rows="16" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(textareaValue)}</textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <button type="button" data-site-check="${item.id}">${t('sites.check_button')}</button>
+        <button type="button" data-site-activate="${item.id}">${t('sites.activate_button')}</button>
+        <button type="button" class="secondary" data-site-cancel-edit="1">${t('sites.cancel_button')}</button>
+      </div>
+      <div class="action-msg" id="site-edit-msg-${item.id}"></div>
+    `}
   `;
 }
 
@@ -1179,7 +1197,7 @@ function siteRow(item) {
   const statusBadge = `<span class="status-badge ${item.enabled ? 'active' : 'inactive'}">${item.enabled ? t('sites.status_running') : t('sites.status_stopped')}</span>`;
   const templateLabel = (SITE_TEMPLATE_LABELS[item.template] || (() => item.template))();
 
-  const displayRow = `
+  return `
     <tr>
       <td>${escapeHtml(item.domain)}</td>
       <td>${escapeHtml(templateLabel)}</td>
@@ -1193,8 +1211,6 @@ function siteRow(item) {
       </td>
     </tr>
   `;
-
-  return siteEditingId === item.id ? displayRow + siteConfigEditorRowHtml(item) : displayRow;
 }
 
 function sitesManageCardHtml(data) {
@@ -1217,11 +1233,7 @@ function sitesManageCardHtml(data) {
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
-        <select id="site-new-template">
-          <option value="html">${t('sites.template_html')}</option>
-          <option value="php">${t('sites.template_php')}</option>
-          <option value="wordpress">${t('sites.template_wordpress')}</option>
-        </select>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteTemplateRadios('site-new-template', 'html')}</div>
       </div>
       <div><button type="button" id="site-create-btn">${t('sites.add_button')}</button></div>
     </div>
@@ -1267,6 +1279,7 @@ function sitesListCardHtml(data) {
 }
 
 function renderSitesSection(data) {
+  const editingItem = siteEditingId ? data.items.find((i) => i.id === siteEditingId) : null;
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
@@ -1276,6 +1289,11 @@ function renderSitesSection(data) {
         ${sitesListCardHtml(data)}
       </div>
     </div>
+    ${editingItem ? `
+      <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
+        ${siteConfigEditorHtml(editingItem)}
+      </div>
+    ` : ''}
   `;
 }
 
@@ -1396,7 +1414,7 @@ function wireSitesSection(content) {
   if (createBtn) {
     createBtn.onclick = async () => {
       const domainInput = document.getElementById('site-new-domain');
-      const templateSelect = document.getElementById('site-new-template');
+      const templateSelected = content.querySelector('input[name="site-new-template"]:checked');
       const selected = content.querySelector('input[name="site-new-redirect"]:checked');
       const msgEl = document.getElementById('site-msg');
       msgEl.textContent = '';
@@ -1406,7 +1424,7 @@ function wireSitesSection(content) {
         await api('POST', '/sites', {
           domain: domainInput.value.trim(),
           redirectMode: selected ? selected.value : 'www-to-apex',
-          template: templateSelect ? templateSelect.value : 'html'
+          template: templateSelected ? templateSelected.value : 'html'
         });
         await refreshSitesTab(content);
       } catch (e) {
