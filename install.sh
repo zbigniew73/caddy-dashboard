@@ -400,6 +400,11 @@ if ! command -v caddy >/dev/null 2>&1; then
   dnf_retry install 'dnf-command(copr)' -y
   dnf_retry copr enable @caddy/caddy -y
   dnf_retry install -y caddy
+
+  mkdir -p /var/log/caddy
+  chown caddy:caddy /var/log/caddy
+  chmod 0755 /var/log/caddy
+
   systemctl enable --now caddy
 
   log "$(t caddy_fallback)"
@@ -407,19 +412,28 @@ if ! command -v caddy >/dev/null 2>&1; then
   chown root:caddy /etc/caddy/sites
   chmod 0751 /etc/caddy/sites
   cat > /etc/caddy/Caddyfile <<'EOF'
-# Default fallback for unconfigured domains
-:80, :443 {
-    respond "Caddy Dashboard - No site configured for this domain" 404
-}
-
 # Per-site configs (see server/scripts/hosting-user-site.sh) - one flat
 # .caddy file per domain, owned by that hosting account's username. FLAT on
 # purpose: Caddy's `import` allows only ONE wildcard per pattern
 # (sites/*/*.caddy has two and gets rejected by `caddy adapt`/`caddy
 # validate`), and per-file ownership (not directory structure) already
 # provides the isolation between accounts - see hosting-account-create.sh.
+#
+# Default fallback for unconfigured domains lives in
+# /etc/caddy/sites/default.caddy (own file, not inline here) so it is
+# imported the same way as every real site block - keeping it out of this
+# file avoids a bare, host-less `:80, :443 {}` block sitting above the
+# import, which caused matching problems against the real per-domain
+# blocks.
 import /etc/caddy/sites/*.caddy
 EOF
+  cat > /etc/caddy/sites/default.caddy <<'EOF'
+:80, :443 {
+	respond "Caddy Dashboard - No site configured for this domain" 404
+}
+EOF
+  chown root:caddy /etc/caddy/sites/default.caddy
+  chmod 0640 /etc/caddy/sites/default.caddy
   caddy validate --config /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
   systemctl reload caddy
 else

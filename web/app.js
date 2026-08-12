@@ -2752,13 +2752,46 @@ async function renderCaddyfileViewerSection() {
   }
 }
 
+function renderCaddyLogsSection() {
+  return `
+    <div class="system-info-card" style="margin-top:16px;">
+      <p style="margin:0 0 10px;color:var(--muted);font-size:13px;">${t('caddylogs.description')}</p>
+      <div class="service-actions">
+        <button type="button" id="caddy-logs-ensure-btn">${t('caddylogs.ensure_button')}</button>
+      </div>
+      <div class="action-msg" id="caddy-logs-msg"></div>
+    </div>
+  `;
+}
+
+function wireCaddyLogsSection() {
+  const btn = document.getElementById('caddy-logs-ensure-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('caddy-logs-msg');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    msgEl.textContent = t('caddylogs.ensuring');
+    msgEl.className = 'action-msg';
+    try {
+      const result = await api('POST', '/caddy/logs/ensure');
+      msgEl.textContent = result.message || t('caddylogs.ensure_success');
+      msgEl.className = 'action-msg success';
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+    } finally {
+      btn.disabled = false;
+    }
+  };
+}
+
 async function wrapCaddyExtras(serviceHtml) {
   const turnstileHtml = await renderTurnstileSection();
   const perfHtml = await renderCaddyPerformanceSection();
   const caddyfileHtml = await renderCaddyfileViewerSection();
   return `
     <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}${renderCaddyLogsSection()}</div>
       <div style="flex:1 1 0;min-width:320px;">${turnstileHtml}</div>
     </div>
     <div style="margin-top:16px;">${perfHtml}</div>
@@ -3928,7 +3961,7 @@ function wireServiceActions(key) {
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
         if (key === 'fail2ban' && svc.found) wireFail2banSection();
-        if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
+        if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); wireCaddyLogsSection(); }
         if (key === 'mariadb' && svc.found) wireMariadbPerformanceSection();
         if (key === 'postgresql' && svc.found) wirePostgresqlPerformanceSection();
         if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }
@@ -3999,7 +4032,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
     if (key === 'fail2ban' && svc.found) wireFail2banSection();
-    if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); }
+    if (key === 'caddy' && svc.found) { wireTurnstileSection(); wireCaddyPerformanceSection(); wireCaddyLogsSection(); }
     if (key === 'mariadb' && svc.found) { wireMariadbPerformanceSection(); wireMariadbTestDbSection(); }
     if (key === 'postgresql' && svc.found) { wirePostgresqlPerformanceSection(); wirePostgresqlTestDbSection(); }
     if (key === 'mongodb' && svc.found) { wireMongodbPerformanceSection(); wireMongodbTestDbSection(); }

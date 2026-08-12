@@ -21,6 +21,7 @@ import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js'
 import { getQuotaStatus, installQuotaPackage, verifyQuotaMechanism } from '../services/diskQuota.js';
 import { listAccounts, createAccount, updateAccount, deleteAccount, getNextHostingUsername } from '../services/hostingAccounts.js';
 import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
+import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
@@ -531,6 +532,14 @@ router.post('/caddy/performance', async (req, res) => {
 router.get('/caddy/caddyfile', async (req, res) => {
   try {
     res.json({ content: await readCaddyfile() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/caddy/logs/ensure', async (req, res) => {
+  try {
+    res.json(await ensureCaddyLogs());
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

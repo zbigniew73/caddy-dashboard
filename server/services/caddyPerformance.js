@@ -21,9 +21,14 @@ function profileBlock(key) {
   return `{
 	admin localhost:2019
 	grace_period 20s
-	# Default to error-only logging in production to minimize I/O overhead.
 	log {
-		level ERROR
+		output file /var/log/caddy/caddy.log {
+			roll_size 10MiB
+			roll_keep 5
+			roll_keep_for 168h
+		}
+		format json
+		level WARN
 	}
 	servers {
 		timeouts {

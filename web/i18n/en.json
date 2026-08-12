@@ -367,6 +367,11 @@
   "caddyperf.applying": "Checking and saving the configuration...",
   "caddyperf.confirm_apply": "Save the new Caddy performance settings? The config will be verified (caddy fmt + validate) before writing, and Caddy only reloaded after it passes.",
 
+  "caddylogs.description": "Checks and fixes the owner/permissions of /var/log/caddy and every log file (the global caddy.log and per-domain logs, e.g. test.20z.eu.log) - useful when Caddy can't write its logs.",
+  "caddylogs.ensure_button": "Create/check Caddy logs",
+  "caddylogs.ensuring": "Checking and fixing log permissions...",
+  "caddylogs.ensure_success": "Caddy logs checked.",
+
   "caddyfile.title": "Current Caddyfile configuration",
   "system.loading": "Loading...",
   "system.hostname": "Hostname",
