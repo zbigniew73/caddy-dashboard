@@ -2,7 +2,10 @@ import { Router } from 'express';
 import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../services/hostingUserSelf.js';
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
 import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
-import { listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite } from '../services/hostingUserSites.js';
+import {
+  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite,
+  getSiteConfig, checkSiteConfig, updateSiteConfig
+} from '../services/hostingUserSites.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 
@@ -93,6 +96,32 @@ router.put('/sites/:id', async (req, res) => {
   try {
     const { redirectMode } = req.body || {};
     res.json(await updateSiteRedirect(req.hostingUser, req.params.id, redirectMode));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/sites/:id/config', async (req, res) => {
+  try {
+    res.json(await getSiteConfig(req.hostingUser, req.params.id));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/sites/:id/config/check', async (req, res) => {
+  try {
+    const { content } = req.body || {};
+    res.json(await checkSiteConfig(req.hostingUser, req.params.id, content));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/sites/:id/config', async (req, res) => {
+  try {
+    const { content } = req.body || {};
+    res.json(await updateSiteConfig(req.hostingUser, req.params.id, content));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

@@ -28,14 +28,29 @@
 #                                public/ jest puste). Logi Caddy ida do
 #                                wspolnego /var/log/caddy/<domain>.log, nie
 #                                pod ~/domains.
+# check <username> <domain>   - tresc bloku Caddy na stdin, TYLKO fmt +
+#                                adapt + validate (jako niezalezny
+#                                Caddyfile) - NIC nie zapisuje na dysk, nie
+#                                przeladowuje Caddy. Do przycisku "Sprawdz"
+#                                w edytorze configu strony w panelu -
+#                                pozwala userowi zwalidowac zmiany PRZED
+#                                ich zastosowaniem (`apply`).
+# get <username> <domain>     - wypisuje na stdout surowa tresc aktualnego
+#                                pliku strony (aktywnego lub zatrzymanego,
+#                                cokolwiek istnieje) - do zaladowania
+#                                edytora configu w panelu.
 # enable <username> <domain>  - <domain>.caddy.disabled -> <domain>.caddy
 # disable <username> <domain> - <domain>.caddy -> <domain>.caddy.disabled
-# delete <username> <domain>  - usuwa .caddy/.caddy.disabled. Dane strony
-#                                na dysku (~/domains/<domain>) ZOSTAJA - ta
-#                                sama filozofia co hosting-account-delete.sh
-#                                (panel nie kasuje bezpowrotnie plikow usera).
+# delete <username> <domain>  - usuwa .caddy/.caddy.disabled ORAZ CALY
+#                                katalog ~<username>/domains/<domain>
+#                                (rekurencyjnie, NIEODWRACALNIE) - swiadoma
+#                                zmiana wzgledem hosting-account-delete.sh
+#                                (ktory kasuje tylko KONTO, nie pliki) -
+#                                przycisk "Usun" w panelu usera ma kasowac
+#                                strone calkowicie, w jednym kroku;
+#                                potwierdzenie w UI musi to jasno mowic.
 #
-# Uzycie: hosting-user-site.sh <apply|enable|disable|delete> <username> <domain>
+# Uzycie: hosting-user-site.sh <apply|check|get|enable|disable|delete> <username> <domain>
 
 set -uo pipefail
 
@@ -208,6 +223,47 @@ HTML
     echo "OK: config strony ${DOMAIN} zapisany."
     ;;
 
+  check)
+    NEW_BLOCK="$(cat)"
+    if [ -z "$NEW_BLOCK" ]; then
+      echo "BLAD: pusta tresc konfiguracji strony." >&2
+      exit 1
+    fi
+
+    TMP="$(mktemp)"
+    ERR_LOG="$(mktemp)"
+    printf '%s\n' "$NEW_BLOCK" > "$TMP"
+
+    if ! caddy fmt --overwrite "$TMP" >"$ERR_LOG" 2>&1; then
+      echo "BLAD: caddy fmt nie powiodlo sie: $(cat "$ERR_LOG")" >&2
+      rm -f "$TMP" "$ERR_LOG"
+      exit 1
+    fi
+    if ! caddy adapt --config "$TMP" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: config nie przeszedl adaptacji: $(cat "$ERR_LOG")" >&2
+      rm -f "$TMP" "$ERR_LOG"
+      exit 1
+    fi
+    if ! caddy validate --config "$TMP" --adapter caddyfile >"$ERR_LOG" 2>&1; then
+      echo "BLAD: config nie przeszedl walidacji: $(cat "$ERR_LOG")" >&2
+      rm -f "$TMP" "$ERR_LOG"
+      exit 1
+    fi
+    rm -f "$TMP" "$ERR_LOG"
+    echo "OK: config przeszedl fmt+adapt+validate (samodzielnie, jako niezalezny Caddyfile) - NIE zastosowano, to tylko sprawdzenie."
+    ;;
+
+  get)
+    if [ -f "$ACTIVE_FILE" ]; then
+      cat "$ACTIVE_FILE"
+    elif [ -f "$DISABLED_FILE" ]; then
+      cat "$DISABLED_FILE"
+    else
+      echo "BLAD: nie znaleziono konfiguracji strony ${DOMAIN}." >&2
+      exit 1
+    fi
+    ;;
+
   enable)
     if [ ! -f "$DISABLED_FILE" ]; then
       if [ -f "$ACTIVE_FILE" ]; then
@@ -294,11 +350,23 @@ HTML
       rm -f "$ERR_LOG"
     fi
     rm -f "$BACKUP"
-    echo "OK: konfiguracja strony ${DOMAIN} usunieta (pliki w ~/domains/${DOMAIN} POZOSTALY nietkniete)."
+
+    # Usuwamy TEZ pliki strony na dysku - swiadoma zmiana (wczesniej panel
+    # celowo ich nie ruszal). NIEODWRACALNE - potwierdzenie w UI (panel
+    # usera) musi to jasno komunikowac PRZED wywolaniem tej akcji.
+    # ${VAR:?} = zabezpieczenie przed `rm -rf` na pustej sciezce, gdyby
+    # USER_HOME z jakiegos powodu wyszedl pusty (DOMAIN jest juz
+    # zwalidowany regexem wyzej, ale defense-in-depth kosztuje zero).
+    USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
+    if [ -n "$USER_HOME" ]; then
+      rm -rf "${USER_HOME:?}/domains/${DOMAIN:?}"
+    fi
+
+    echo "OK: konfiguracja i pliki strony ${DOMAIN} usuniete (~/domains/${DOMAIN} skasowany)."
     ;;
 
   *)
-    echo "BLAD: nieznana akcja: '${ACTION}' (apply|enable|disable|delete)" >&2
+    echo "BLAD: nieznana akcja: '${ACTION}' (apply|check|get|enable|disable|delete)" >&2
     exit 1
     ;;
 esac

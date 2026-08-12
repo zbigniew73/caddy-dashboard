@@ -15,7 +15,11 @@ const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../
 // zostac zsynchronizowana recznie - jeden string, dwa jezyki).
 const DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 const REDIRECT_MODES = ['www-to-apex', 'apex-to-www'];
-const TEMPLATES = ['html'];
+// 'php' i 'wordpress' sa na razie SZKIELETEM - wybieralne w UI/API, ale
+// buildSiteBlock ponizej generuje dla nich dokladnie ten sam statyczny
+// blok co dla 'html' (brak jeszcze php_fastcgi/puli PHP-FPM per konto ani
+// instalatora WordPressa - to osobna, wieksza praca).
+const TEMPLATES = ['html', 'php', 'wordpress'];
 
 function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
@@ -126,6 +130,27 @@ function runSiteScript(action, username, domain, stdinContent) {
   });
 }
 
+// Jak runSiteScript, ale zwraca stdout - dla akcji 'get'/'check', ktore
+// (w odroznieniu od apply/enable/disable/delete) maja tresc do oddania
+// wywolujacemu, nie tylko sukces/porazke.
+function runSiteScriptCapture(action, username, domain, stdinContent) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', SCRIPT_PATH, action, username, domain]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) { resolve(stdout); return; }
+      const message = sudoErrorMessage(stderr);
+      reject(Object.assign(new Error(message || `exit code ${code}`), { status: message ? 403 : 500 }));
+    });
+    if (stdinContent !== undefined) child.stdin.write(stdinContent);
+    child.stdin.end();
+  });
+}
+
 function validateDomain(domain) {
   const value = String(domain || '').trim().toLowerCase();
   if (value.startsWith('www.')) {
@@ -201,6 +226,41 @@ async function updateSiteRedirect(username, id, redirectMode) {
   return toPublic(record);
 }
 
+// Trojka do edytora "caly config" w panelu usera (Strony -> Twoje strony
+// -> Edytuj): get zaladowuje aktualna tresc, check ja waliduje BEZ
+// zapisu/reloadu (przycisk "Sprawdz"), update faktycznie ja zapisuje
+// (przycisk "Aktywuj" - to ta sama akcja `apply`, ktora tworzy/edytuje
+// strone, tylko tresc pochodzi od usera, nie z buildSiteBlock). Zmiana
+// redirectMode/template w rekordzie NIE jest tu przeliczana z tresci -
+// zostaja jak byly (to juz tylko metadane, bez wplywu na wyswietlanie -
+// patrz siteRow w panelu).
+async function getSiteConfig(username, id) {
+  const all = loadData();
+  const record = findOwnRecord(all, username, id);
+  const content = await runSiteScriptCapture('get', username, record.domain);
+  return { content };
+}
+
+async function checkSiteConfig(username, id, content) {
+  const all = loadData();
+  const record = findOwnRecord(all, username, id);
+  if (typeof content !== 'string' || !content.trim()) {
+    throw badRequest('Pusta tresc konfiguracji.');
+  }
+  const message = (await runSiteScriptCapture('check', username, record.domain, content)).trim();
+  return { ok: true, message };
+}
+
+async function updateSiteConfig(username, id, content) {
+  const all = loadData();
+  const record = findOwnRecord(all, username, id);
+  if (typeof content !== 'string' || !content.trim()) {
+    throw badRequest('Pusta tresc konfiguracji.');
+  }
+  await runSiteScript('apply', username, record.domain, content);
+  return toPublic(record);
+}
+
 async function toggleSite(username, id, enable) {
   const all = loadData();
   const record = findOwnRecord(all, username, id);
@@ -221,4 +281,7 @@ async function deleteSite(username, id) {
   saveData(all.filter((s) => s.id !== id));
 }
 
-export { listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners };
+export {
+  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners,
+  getSiteConfig, checkSiteConfig, updateSiteConfig
+};
