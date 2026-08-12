@@ -3,8 +3,10 @@
 # Zarzadza plikiem konfiguracji Caddy pojedynczej strony konta hostingowego
 # (/etc/caddy/sites/<username>/<domain>.caddy) - ten sam wzorzec
 # walidacja-przed-podmiana-z-rollbackiem co caddy-set-performance.sh, tylko
-# celem jest plik PER-STRONA (importowany przez glowny Caddyfile przez
-# `import /etc/caddy/sites/*/*.caddy`), a nie sam Caddyfile.
+# celem jest plik PER-STRONA (importowany przez podkatalog konta, ktory z
+# kolei jest importowany do glownego Caddyfile przez stub
+# <username>.caddyimport - patrz hosting-account-create.sh, Caddy `import`
+# dopuszcza tylko jeden wildcard w calym wzorcu), a nie sam Caddyfile.
 #
 # "Zatrzymana" strona = plik ma rozszerzenie .caddy.disabled (NIE pasuje do
 # glob *.caddy, wiec Caddy go w ogole nie importuje) - `caddy validate`

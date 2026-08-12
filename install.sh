@@ -412,12 +412,13 @@ if ! command -v caddy >/dev/null 2>&1; then
     respond "Caddy Dashboard - No site configured for this domain" 404
 }
 
-# Per-account site configs (see server/scripts/hosting-account-create.sh) -
-# one subdirectory per hosting account, one .caddy file per domain. NOT
-# limited to srv_* - hosting-account usernames aren't enforced to that
-# prefix (see USERNAME_RE in hostingAccounts.js), so a narrower glob could
-# silently stop serving accounts with a custom username.
-import /etc/caddy/sites/*/*.caddy
+# Per-account site configs (see server/scripts/hosting-account-create.sh).
+# Caddy's `import` allows only ONE wildcard per pattern (sites/*/*.caddy
+# would have two and gets rejected by `caddy adapt`/`caddy validate`), so
+# this is a flat two-level fan-out instead of one nested glob: each hosting
+# account gets a <username>.caddyimport stub here (single wildcard) that
+# itself imports that account's own subdirectory (also single wildcard).
+import /etc/caddy/sites/*.caddyimport
 EOF
   caddy validate --config /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
   systemctl reload caddy

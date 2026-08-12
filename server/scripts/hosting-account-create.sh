@@ -15,10 +15,13 @@
 # logowaniu", dziala niezaleznie od globalnej polityki PASS_MAX_DAYS).
 #
 # Katalog stron: /etc/caddy/sites/<username> (owner=user, group=caddy,
-# 0750) - Caddy (dziala jako caddy:caddy) czyta stamtad *.caddy przez
-# `import /etc/caddy/sites/*/*.caddy` w glownym Caddyfile. Top-level
-# /etc/caddy/sites ma o+x BEZ o+r, zeby kazdy user mogl wejsc TYLKO do
-# WLASNEGO podkatalogu (zna jego nazwe), ale nie zrobil `ls` i nie
+# 0750) - Caddy (dziala jako caddy:caddy) czyta stamtad *.caddy. Caddy
+# `import` dopuszcza tylko JEDEN wildcard w calym wzorcu, wiec glowny
+# Caddyfile (patrz install.sh) importuje plaski
+# `/etc/caddy/sites/*.caddyimport` (jeden stub per konto, tworzony nizej),
+# a kazdy stub robi drugi poziom importu do WLASNEGO podkatalogu konta.
+# Top-level /etc/caddy/sites ma o+x BEZ o+r, zeby kazdy user mogl wejsc
+# TYLKO do WLASNEGO podkatalogu (zna jego nazwe), ale nie zrobil `ls` i nie
 # zobaczyl nazw innych kont.
 #
 # ~/domains: PRAWDZIWY katalog na dysku (nie symlink) - user
@@ -84,6 +87,19 @@ USER_SITE_DIR="${SITES_BASE_DIR}/${USERNAME}"
 mkdir -p "$USER_SITE_DIR"
 chown "${USERNAME}:caddy" "$USER_SITE_DIR"
 chmod 0750 "$USER_SITE_DIR"
+
+# Caddy `import` dopuszcza TYLKO JEDEN wildcard w calym wzorcu - glowny
+# Caddyfile (patrz install.sh) importuje wiec PLASKI katalog *.caddyimport,
+# jeden stub na konto, tworzony tutaj raz przy zakladaniu konta. Kazdy stub
+# robi DRUGI poziom importu do WLASNEGO podkatalogu konta (tez jeden
+# wildcard) - dzieki temu glowny Caddyfile nigdy nie wymaga edycji ani przy
+# nowym koncie, ani przy nowej stronie. Stub nalezy do root:caddy (NIE do
+# usera) - hosting user nie powinien miec mozliwosci zmiany dokad wskazuje
+# import.
+IMPORT_STUB="${SITES_BASE_DIR}/${USERNAME}.caddyimport"
+echo "import ${USER_SITE_DIR}/*.caddy" > "$IMPORT_STUB"
+chown root:caddy "$IMPORT_STUB"
+chmod 0640 "$IMPORT_STUB"
 
 USER_HOME="${HOME_BASE_DIR}/${USERNAME}"
 
