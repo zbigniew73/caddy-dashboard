@@ -224,7 +224,6 @@ function renderDashboard(content) {
 // jeden rzad, dwa rowne klocki (ten sam wzorzec co Witaj+Info na
 // Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
 const PLACEHOLDER_TABS = {
-  sites: 'nav.sites',
   backup: 'nav.backup'
 };
 
@@ -1078,6 +1077,248 @@ async function refreshSshTab(content) {
   }
 }
 
+// Strony - dwa klocki (ten sam wzorzec co Bazy/Redis/SSH):
+//   1) lewy: formularz "dodaj strone" - domena ZAWSZE bez www. (kierunek
+//      przekierowania www<->apex to osobne pole, patrz
+//      hostingUserSites.js: buildSiteBlock), na razie jeden szablon (HTML
+//      statyczny) - kolejne szablony dojda pozniej.
+//   2) prawy: lista istniejacych stron z akcjami (Edytuj = tylko kierunek
+//      przekierowania w tej wersji, Start/Stop, Usun) + licznik uzyto/limit
+//      z pakietu (maxDomains) na gorze, jak w Bazach.
+const SITE_TEMPLATE_LABELS = { html: () => t('sites.template_html') };
+let siteEditingId = null;
+
+function siteRedirectLabel(redirectMode) {
+  return redirectMode === 'apex-to-www' ? t('sites.redirect_apex_to_www') : t('sites.redirect_www_to_apex');
+}
+
+function siteRedirectRadios(name, selected) {
+  return `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="www-to-apex" ${selected === 'apex-to-www' ? '' : 'checked'}>
+      ${t('sites.redirect_www_to_apex')}
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="apex-to-www" ${selected === 'apex-to-www' ? 'checked' : ''}>
+      ${t('sites.redirect_apex_to_www')}
+    </label>
+  `;
+}
+
+function siteRow(item) {
+  const statusBadge = `<span class="status-badge ${item.enabled ? 'active' : 'inactive'}">${item.enabled ? t('sites.status_running') : t('sites.status_stopped')}</span>`;
+  const templateLabel = (SITE_TEMPLATE_LABELS[item.template] || (() => item.template))();
+
+  if (siteEditingId === item.id) {
+    return `
+      <tr>
+        <td colspan="4">
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:6px 0;">
+            <strong>${escapeHtml(item.domain)}</strong>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">${siteRedirectRadios(`site-edit-redirect-${item.id}`, item.redirectMode)}</div>
+            <button type="button" data-site-save="${item.id}">${t('sites.save_button')}</button>
+            <button type="button" class="secondary" data-site-cancel-edit="1">${t('sites.cancel_button')}</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  return `
+    <tr>
+      <td>${escapeHtml(item.domain)}</td>
+      <td>${escapeHtml(templateLabel)}<div style="font-size:11px;color:var(--muted);">${escapeHtml(siteRedirectLabel(item.redirectMode))}</div></td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="secondary" data-site-edit="${item.id}">${t('sites.edit')}</button>
+        ${item.enabled
+          ? `<button type="button" class="secondary" data-site-stop="${item.id}">${t('sites.stop')}</button>`
+          : `<button type="button" class="secondary" data-site-start="${item.id}">${t('sites.start')}</button>`}
+        <button type="button" class="danger" data-site-delete="${item.id}">${t('sites.delete')}</button>
+      </td>
+    </tr>
+  `;
+}
+
+function sitesManageCardHtml(data) {
+  const { items, maxDomains } = data;
+  const used = items.length;
+  const hasLimit = typeof maxDomains === 'number' && maxDomains > 0;
+  const limitReached = hasLimit && used >= maxDomains;
+
+  const formHtml = limitReached ? `
+    <div class="empty-state">${t('sites.limit_reached', { limit: maxDomains })}</div>
+  ` : `
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px;">
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_domain')}</label>
+        <input type="text" id="site-new-domain" placeholder="${t('sites.domain_placeholder')}" style="width:100%;box-sizing:border-box;">
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_redirect')}</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteRedirectRadios('site-new-redirect', 'www-to-apex')}</div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
+        <select id="site-new-template" disabled><option value="html">${t('sites.template_html')}</option></select>
+      </div>
+      <div><button type="button" id="site-create-btn">${t('sites.add_button')}</button></div>
+    </div>
+    <div class="action-msg" id="site-msg"></div>
+  `;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('sites.manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('sites.manage_description')}</p>
+    ${formHtml}
+  `;
+}
+
+function sitesListCardHtml(data) {
+  const { items, maxDomains } = data;
+  const used = items.length;
+  const hasLimit = typeof maxDomains === 'number' && maxDomains > 0;
+  const percent = hasLimit ? Math.min(100, Math.round((used / maxDomains) * 100)) : 0;
+  const valueText = hasLimit ? `${used} / ${maxDomains}` : `${used}`;
+
+  const tableHtml = items.length ? `
+    <div style="overflow-x:auto;margin-top:14px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('sites.col_domain')}</th>
+            <th>${t('sites.col_template')}</th>
+            <th>${t('sites.col_status')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${items.map(siteRow).join('')}</tbody>
+      </table>
+    </div>
+  ` : `<div class="empty-state">${t('sites.empty')}</div>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('sites.list_title')}</h3>
+    <div class="stat-value" style="margin:6px 0 6px;">${escapeHtml(valueText)}</div>
+    <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
+    ${tableHtml}
+  `;
+}
+
+function renderSitesSection(data) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${sitesManageCardHtml(data)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${sitesListCardHtml(data)}
+      </div>
+    </div>
+  `;
+}
+
+function wireSitesSection(content) {
+  content.querySelectorAll('[data-site-edit]').forEach((btn) => {
+    btn.onclick = () => { siteEditingId = btn.dataset.siteEdit; refreshSitesTab(content); };
+  });
+
+  content.querySelectorAll('[data-site-cancel-edit]').forEach((btn) => {
+    btn.onclick = () => { siteEditingId = null; refreshSitesTab(content); };
+  });
+
+  content.querySelectorAll('[data-site-save]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.siteSave;
+      const selected = content.querySelector(`input[name="site-edit-redirect-${id}"]:checked`);
+      btn.disabled = true;
+      try {
+        await api('PUT', `/sites/${id}`, { redirectMode: selected ? selected.value : 'www-to-apex' });
+        siteEditingId = null;
+        await refreshSitesTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-site-start]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await api('POST', `/sites/${btn.dataset.siteStart}/start`);
+        await refreshSitesTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-site-stop]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await api('POST', `/sites/${btn.dataset.siteStop}/stop`);
+        await refreshSitesTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-site-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('sites.confirm_delete'))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/sites/${btn.dataset.siteDelete}`);
+        await refreshSitesTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const createBtn = document.getElementById('site-create-btn');
+  if (createBtn) {
+    createBtn.onclick = async () => {
+      const domainInput = document.getElementById('site-new-domain');
+      const selected = content.querySelector('input[name="site-new-redirect"]:checked');
+      const msgEl = document.getElementById('site-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      createBtn.disabled = true;
+      try {
+        await api('POST', '/sites', {
+          domain: domainInput.value.trim(),
+          redirectMode: selected ? selected.value : 'www-to-apex',
+          template: 'html'
+        });
+        await refreshSitesTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function refreshSitesTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('sites.loading')}</div>`;
+  try {
+    const data = await api('GET', '/sites');
+    content.innerHTML = renderSitesSection(data);
+    wireSitesSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -1097,6 +1338,8 @@ function renderTab() {
     refreshRedisTab(content);
   } else if (currentTab === 'ssh') {
     refreshSshTab(content);
+  } else if (currentTab === 'sites') {
+    refreshSitesTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
@@ -1107,6 +1350,7 @@ document.querySelectorAll('nav button.tab').forEach((btn) => {
     if (MUST_CHANGE_PASSWORD && btn.dataset.tab !== 'settings') return;
     currentTab = btn.dataset.tab;
     cronEditingId = null;
+    siteEditingId = null;
     renderTab();
   };
 });

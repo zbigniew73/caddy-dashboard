@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../services/hostingUserSelf.js';
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
 import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
+import { listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite } from '../services/hostingUserSites.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 
@@ -65,6 +66,57 @@ router.put('/cron/:id', async (req, res) => {
 router.delete('/cron/:id', async (req, res) => {
   try {
     await deleteCronJob(req.hostingUser, req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/sites', async (req, res) => {
+  try {
+    res.json(await listOwnSites(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/sites', async (req, res) => {
+  try {
+    const { domain, redirectMode, template } = req.body || {};
+    res.json(await createSite(req.hostingUser, { domain, redirectMode, template }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/sites/:id', async (req, res) => {
+  try {
+    const { redirectMode } = req.body || {};
+    res.json(await updateSiteRedirect(req.hostingUser, req.params.id, redirectMode));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/sites/:id/start', async (req, res) => {
+  try {
+    res.json(await toggleSite(req.hostingUser, req.params.id, true));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/sites/:id/stop', async (req, res) => {
+  try {
+    res.json(await toggleSite(req.hostingUser, req.params.id, false));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/sites/:id', async (req, res) => {
+  try {
+    await deleteSite(req.hostingUser, req.params.id);
     res.json({ success: true });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
