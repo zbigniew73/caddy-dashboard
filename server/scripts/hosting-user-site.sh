@@ -93,6 +93,36 @@ case "$ACTION" in
       TARGET_FILE="$DISABLED_FILE"
     fi
 
+    # Katalogi na tresc strony (w tym logs/) MUSZA istniec ZANIM Caddy
+    # dostanie nowy config - `systemctl reload` faktycznie laduje config do
+    # dzialajacej instancji (w odroznieniu od statycznego `caddy validate`
+    # ponizej), co otwiera writer loga z `output file .../logs/access.log`.
+    # Caddy dziala jako caddy:caddy i NIE ma prawa zapisu do ~/domains
+    # (0750, grupa caddy ma tylko r-x) - jesli katalog nie istnieje, reload
+    # wywala sie z "mkdir ...: permission denied". Musi wiec powstac
+    # WCZESNIEJ, tutaj, przez ten skrypt (root).
+    if [ "$IS_NEW" = "1" ]; then
+      USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
+      DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
+      mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp" "${DOMAIN_DIR}/logs"
+      chown -R "${USERNAME}:caddy" "$DOMAIN_DIR"
+      find "$DOMAIN_DIR" -type d -exec chmod 0750 {} \;
+      # logs/ to jedyny podkatalog, do ktorego Caddy faktycznie MUSI pisac
+      # (tworzy/rotuje access.log) - 0750 daje grupie caddy tylko r-x, wiec
+      # bez tego override'u `mkdir`/`open O_CREATE` na plik loga i tak
+      # dostanie permission denied mimo ze sam katalog juz istnieje.
+      chmod 0770 "${DOMAIN_DIR}/logs"
+      if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
+        cat > "${DOMAIN_DIR}/public/index.html" <<HTML
+<!doctype html>
+<html><head><meta charset="utf-8"><title>${DOMAIN}</title></head>
+<body><p>Strona ${DOMAIN} zostala utworzona. Wgraj swoje pliki przez SSH/SFTP do katalogu ~/domains/${DOMAIN}/public.</p></body></html>
+HTML
+        chown "${USERNAME}:caddy" "${DOMAIN_DIR}/public/index.html"
+        chmod 0640 "${DOMAIN_DIR}/public/index.html"
+      fi
+    fi
+
     BACKUP=""
     if [ "$IS_NEW" = "0" ]; then
       BACKUP="$(mktemp)"
@@ -126,23 +156,6 @@ case "$ACTION" in
       rm -f "$ERR_LOG"
     fi
     rm -f "$BACKUP"
-
-    if [ "$IS_NEW" = "1" ]; then
-      USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
-      DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
-      mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp" "${DOMAIN_DIR}/logs"
-      chown -R "${USERNAME}:caddy" "$DOMAIN_DIR"
-      find "$DOMAIN_DIR" -type d -exec chmod 0750 {} \;
-      if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
-        cat > "${DOMAIN_DIR}/public/index.html" <<HTML
-<!doctype html>
-<html><head><meta charset="utf-8"><title>${DOMAIN}</title></head>
-<body><p>Strona ${DOMAIN} zostala utworzona. Wgraj swoje pliki przez SSH/SFTP do katalogu ~/domains/${DOMAIN}/public.</p></body></html>
-HTML
-        chown "${USERNAME}:caddy" "${DOMAIN_DIR}/public/index.html"
-        chmod 0640 "${DOMAIN_DIR}/public/index.html"
-      fi
-    fi
     echo "OK: config strony ${DOMAIN} zapisany."
     ;;
 
