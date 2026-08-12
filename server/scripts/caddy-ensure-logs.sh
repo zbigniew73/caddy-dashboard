@@ -30,14 +30,23 @@
 # Naprawa wlasciciela plikow per-domena (chown <wlasciciel>:caddy 0640 -
 # ten sam wzorzec co hosting-user-site.sh apply: wlasciciel strony ma
 # prawo modyfikacji (rw-), grupa caddy ma prawo odczytu (r--) zeby usluga
-# Caddy mogla zaimportowac config), a takze samego katalogu ze strona
+# Caddy mogla zaimportowac config), samego katalogu ze strona
 # (~<wlasciciel>/domains/<domena>/{public,tmp,...} - chown -R
 # <wlasciciel>:caddy + chmod 2750 na katalogach, ten sam wzorzec i
-# uzasadnienie SGID co w hosting-user-site.sh) jest OPCJONALNA - wymaga
+# uzasadnienie SGID co w hosting-user-site.sh), a takze KATALOGU DOMOWEGO
+# i ~/domains (chown <wlasciciel>:caddy, chmod 0710 na homie / 0750 na
+# domains - wzorzec z hosting-account-create.sh) jest OPCJONALNA - wymaga
 # par "<username> <domena>" na stdin (jedna para na linie; wysyla je panel
 # na podstawie data/hosting-sites.json - patrz
 # server/services/caddyLogs.js). Uruchomienie recznie bez potoku (stdin =
 # terminal) pomija ten krok.
+#
+# Katalog domowy jest NAJCZESTSZYM realnym zrodlem 403 z Caddy - jesli ma
+# domyslne uprawnienia z `useradd -m` (0700, wlasciciel:wlasciciel, bez
+# bitu x dla grupy/other), Caddy nie dotrze do niczego ponizej (~/domains,
+# ~/domains/<domena>/public), NIEZALEZNIE jak dobre sa uprawnienia
+# glebiej w sciezce - dotyczy to zwlaszcza kont zalozonych PRZED
+# wprowadzeniem poprawki 0710 w hosting-account-create.sh.
 #
 # Uzycie: caddy-ensure-logs.sh (bez argumentow, dziala jako root; pary
 # "<username> <domena>" opcjonalnie na stdin)
@@ -50,6 +59,8 @@ DEFAULT_SITE_FILE="${SITES_DIR}/default.caddy"
 FIXED=0
 FIXED_SITE_FILES=0
 FIXED_DOMAIN_DIRS=0
+FIXED_HOME_DIRS=0
+declare -A HOME_DIR_DONE
 
 mkdir -p "$LOG_DIR" || { echo "BLAD: nie udalo sie utworzyc ${LOG_DIR}." >&2; exit 1; }
 chown caddy:caddy "$LOG_DIR"
@@ -113,6 +124,26 @@ if [ ! -t 0 ]; then
 
     SITE_USER_HOME="$(getent passwd "$SITE_USER" | cut -d: -f6)"
     if [ -n "$SITE_USER_HOME" ]; then
+      # Katalog domowy i ~/domains naprawiane RAZ na uzytkownika (nie per
+      # domena) - to samo konto moze miec kilka stron. Bez poprawnego
+      # 0710 (grupa caddy, tylko przejscie) na SAMYM katalogu domowym,
+      # Caddy nie dotrze do niczego ponizej, NIEZALEZNIE jak dobre sa
+      # uprawnienia glebiej w sciezce (patrz komentarz w
+      # hosting-account-create.sh) - konta zalozone PRZED wprowadzeniem
+      # tej poprawki maja czesto katalog domowy 0700 wlasciciel:wlasciciel
+      # (domyslne useradd -m), co daje dokladnie 403 z Caddy.
+      if [ -z "${HOME_DIR_DONE[$SITE_USER]:-}" ] && [ -d "$SITE_USER_HOME" ]; then
+        chown "${SITE_USER}:caddy" "$SITE_USER_HOME"
+        chmod 0710 "$SITE_USER_HOME"
+        USER_DOMAINS_DIR="${SITE_USER_HOME}/domains"
+        if [ -d "$USER_DOMAINS_DIR" ]; then
+          chown "${SITE_USER}:caddy" "$USER_DOMAINS_DIR"
+          chmod 0750 "$USER_DOMAINS_DIR"
+        fi
+        HOME_DIR_DONE[$SITE_USER]=1
+        FIXED_HOME_DIRS=$((FIXED_HOME_DIRS + 1))
+      fi
+
       DOMAIN_DIR="${SITE_USER_HOME}/domains/${SITE_DOMAIN}"
       if [ -d "$DOMAIN_DIR" ]; then
         chown -R "${SITE_USER}:caddy" "$DOMAIN_DIR"
@@ -123,4 +154,4 @@ if [ ! -t 0 ]; then
   done
 fi
 
-echo "OK: katalog logow ${LOG_DIR}, ${FIXED} plik(i) logow, ${DEFAULT_SITE_FILE}, ${FIXED_SITE_FILES} plik(i) konfiguracji stron oraz ${FIXED_DOMAIN_DIRS} katalog(i) domen sprawdzone/naprawione."
+echo "OK: katalog logow ${LOG_DIR}, ${FIXED} plik(i) logow, ${DEFAULT_SITE_FILE}, ${FIXED_SITE_FILES} plik(i) konfiguracji stron, ${FIXED_HOME_DIRS} katalog(i) domowych oraz ${FIXED_DOMAIN_DIRS} katalog(i) domen sprawdzone/naprawione."
