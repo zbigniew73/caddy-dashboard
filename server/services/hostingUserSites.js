@@ -20,6 +20,13 @@ const REDIRECT_MODES = ['www-to-apex', 'apex-to-www'];
 // blok co dla 'html' (brak jeszcze php_fastcgi/puli PHP-FPM per konto ani
 // instalatora WordPressa - to osobna, wieksza praca).
 const TEMPLATES = ['html', 'php', 'wordpress'];
+// Dwucyfrowy identyfikator wersji PHP (np. "83") - ten sam format co
+// server/runtime-manager/routes/php.js. Tylko zapisywane przy tworzeniu
+// (dla PHP/WordPress) - jeszcze NIC z tego nie czyta (buildSiteBlock go
+// nie uzywa, patrz wyzej), to tez czesc szkieletu na przyszlosc. Zle
+// sformatowana/brakujaca wartosc NIE blokuje tworzenia strony - po prostu
+// zapisujemy null, bo pole i tak jeszcze niczego nie steruje.
+const PHP_VERSION_RE = /^[0-9]{2}$/;
 
 function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
@@ -49,6 +56,7 @@ function toPublic(record) {
     domain: record.domain,
     redirectMode: record.redirectMode,
     template: record.template,
+    phpVersion: record.phpVersion ?? null,
     enabled: record.enabled,
     createdAt: record.createdAt
   };
@@ -169,10 +177,11 @@ function validateRedirectMode(redirectMode) {
   return redirectMode;
 }
 
-async function createSite(username, { domain, redirectMode, template }) {
+async function createSite(username, { domain, redirectMode, template, phpVersion }) {
   const domainValue = validateDomain(domain);
   const redirectValue = validateRedirectMode(redirectMode);
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
+  const phpVersionValue = (templateValue !== 'html' && PHP_VERSION_RE.test(phpVersion)) ? phpVersion : null;
 
   const account = getAccount(username);
   if (!account) throw badRequest('Nie znaleziono konta hostingowego.');
@@ -196,6 +205,7 @@ async function createSite(username, { domain, redirectMode, template }) {
     domain: domainValue,
     redirectMode: redirectValue,
     template: templateValue,
+    phpVersion: phpVersionValue,
     enabled: true,
     createdAt: new Date().toISOString()
   };

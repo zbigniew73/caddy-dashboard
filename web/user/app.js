@@ -1117,11 +1117,22 @@ function siteRedirectRadios(name, selected) {
   `;
 }
 
-function siteTemplateRadios(name, selected) {
+// PHP/WORDPRESS pod HTML (jedna pod druga, nie obok siebie w rzedzie) -
+// przy PHP i WORDPRESS dodatkowo rozwijalna lista z wersjami PHP
+// faktycznie zainstalowanymi w systemie (ten sam mechanizm co selektor
+// PHP dla zadan cron - /cron/php-paths - patrz refreshSitesTab).
+function siteTemplateRadios(name, selected, phpVersions) {
+  const versionOptions = phpVersions.length
+    ? phpVersions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')
+    : `<option value="">-</option>`;
+
   return ['html', 'php', 'wordpress'].map((key) => `
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
-      <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
-      ${SITE_TEMPLATE_LABELS[key]()}
+    <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:normal;">
+      <span style="display:flex;align-items:center;gap:6px;">
+        <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
+        ${SITE_TEMPLATE_LABELS[key]()}
+      </span>
+      ${key !== 'html' ? `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>` : ''}
     </label>
   `).join('');
 }
@@ -1282,7 +1293,7 @@ function siteRow(item) {
   `;
 }
 
-function sitesManageCardHtml(data) {
+function sitesManageCardHtml(data, phpVersions) {
   const { items, maxDomains } = data;
   const used = items.length;
   const hasLimit = typeof maxDomains === 'number' && maxDomains > 0;
@@ -1302,7 +1313,7 @@ function sitesManageCardHtml(data) {
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
-        <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteTemplateRadios('site-new-template', 'html')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">${siteTemplateRadios('site-new-template', 'html', phpVersions)}</div>
       </div>
       <div><button type="button" id="site-create-btn">${t('sites.add_button')}</button></div>
     </div>
@@ -1347,12 +1358,12 @@ function sitesListCardHtml(data) {
   `;
 }
 
-function renderSitesSection(data) {
+function renderSitesSection(data, phpVersions) {
   const editingItem = siteEditingId ? data.items.find((i) => i.id === siteEditingId) : null;
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${sitesManageCardHtml(data)}
+        ${sitesManageCardHtml(data, phpVersions)}
       </div>
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         ${sitesListCardHtml(data)}
@@ -1492,6 +1503,10 @@ function wireSitesSection(content) {
     createBtn.onclick = async () => {
       const domainInput = document.getElementById('site-new-domain');
       const templateSelected = content.querySelector('input[name="site-new-template"]:checked');
+      const templateValue = templateSelected ? templateSelected.value : 'html';
+      const phpVersionSelect = templateValue !== 'html'
+        ? content.querySelector(`select[name="site-new-template-phpversion-${templateValue}"]`)
+        : null;
       const selected = content.querySelector('input[name="site-new-redirect"]:checked');
       const msgEl = document.getElementById('site-msg');
       msgEl.textContent = '';
@@ -1501,7 +1516,8 @@ function wireSitesSection(content) {
         await api('POST', '/sites', {
           domain: domainInput.value.trim(),
           redirectMode: selected ? selected.value : 'www-to-apex',
-          template: templateSelected ? templateSelected.value : 'html'
+          template: templateValue,
+          phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined
         });
         await refreshSitesTab(content);
       } catch (e) {
@@ -1513,11 +1529,27 @@ function wireSitesSection(content) {
   }
 }
 
+// Te same surowe sciezki co selektor PHP dla cron (/cron/php-paths,
+// /usr/local/bin/phpNN) - wystarczy wyciagnac numer wersji regexem,
+// zamiast dublowac osobny endpoint/wywolanie do Runtime Managera tylko
+// dla tej listy.
+function parsePhpVersionsFromPaths(paths) {
+  return (paths || [])
+    .map((p) => /php([0-9]{2})$/.exec(p))
+    .filter(Boolean)
+    .map((m) => ({ id: m[1], version: `${m[1][0]}.${m[1].slice(1)}` }));
+}
+
 async function refreshSitesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('sites.loading')}</div>`;
   try {
-    const data = await api('GET', '/sites');
-    content.innerHTML = renderSitesSection(data);
+    const [data, phpPaths] = await Promise.all([
+      api('GET', '/sites'),
+      cronPhpPathsCache ? Promise.resolve(cronPhpPathsCache) : api('GET', '/cron/php-paths')
+    ]);
+    cronPhpPathsCache = phpPaths;
+    const phpVersions = parsePhpVersionsFromPaths(phpPaths);
+    content.innerHTML = renderSitesSection(data, phpVersions);
     wireSitesSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

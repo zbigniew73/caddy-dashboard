@@ -85,8 +85,8 @@ router.get('/sites', async (req, res) => {
 
 router.post('/sites', async (req, res) => {
   try {
-    const { domain, redirectMode, template } = req.body || {};
-    res.json(await createSite(req.hostingUser, { domain, redirectMode, template }));
+    const { domain, redirectMode, template, phpVersion } = req.body || {};
+    res.json(await createSite(req.hostingUser, { domain, redirectMode, template, phpVersion }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

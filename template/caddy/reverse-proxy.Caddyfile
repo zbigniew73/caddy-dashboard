@@ -6,18 +6,20 @@
 # Blok ":80, :443" ponizej to fallback z domyslnego install.sh - zostaw go,
 # zeby ruch na inne/nieskonfigurowane domeny/IP tego serwera nadal dostawal
 # odpowiedz zamiast bledu polaczenia.
+#
+# CELOWO bez bloku `header {...}` - naglowki bezpieczenstwa (CSP,
+# X-Frame-Options, Referrer-Policy, Permissions-Policy, HSTS, COOP/COEP)
+# ustawia WYLACZNIE sam panel (server/index.js), nie ten szablon. Dodanie
+# ich tu ZNOWU (jak w starszej wersji tego pliku) powoduje DUBLOWANIE -
+# Caddy dokladalby swoje wartosci na wierzch tego, co juz wysyla Express,
+# klient dostaje dwie (czesto sprzeczne) wartosci tego samego naglowka
+# naraz. Jesli potrzebujesz innych naglowkow bezpieczenstwa dla panelu,
+# zmien je w server/index.js, nie tutaj.
 
 przyklad.domena.pl {
 	reverse_proxy 127.0.0.1:4300
 
 	encode gzip zstd
-
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-		X-Content-Type-Options "nosniff"
-		X-Frame-Options "SAMEORIGIN"
-		Referrer-Policy "no-referrer-when-downgrade"
-	}
 }
 # phpmyadmin - bezposrednio na wlasnej subdomenie, bez posredniego skoku
 # przez wewnetrzny port (upraszcza konfiguracje, mniej miejsc do zepsucia)

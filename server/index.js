@@ -73,6 +73,7 @@ if (authRequired) {
 }
 
 const app = express();
+app.disable('x-powered-by');
 
 app.use(
   cors({
@@ -104,6 +105,17 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', authRequired ? requireUserAuth : (req, res, next) => next(), userApiRoutes);
 app.use('/api', authRequired ? requireAuth : (req, res, next) => next(), apiRoutes);
 
+// JEDYNE miejsce ustawiajace naglowki bezpieczenstwa panelu - CELOWO.
+// template/caddy/reverse-proxy.Caddyfile (szablon do wystawienia panelu
+// przez Caddy) NIE dubluje ich - kiedys dublowal (X-Frame-Options,
+// Referrer-Policy, X-Content-Type-Options ustawiane NIEZALEZNIE i po
+// Caddy stronie, i po Express stronie, z roznymi wartosciami - Caddy
+// dokladal swoje na wierzch tego co juz wyslal Express, klient widzial
+// dwie wartosci tego samego naglowka naraz). Trzymanie tego wylacznie tu
+// dziala tak samo bez wzgledu na to, czy/jak admin skonfigurowal reverse
+// proxy (dziala tez przy bezposrednim dostepie do samego Node, np.
+// EXPOSURE=local). Jesli dodajesz/zmieniasz naglowek bezpieczenstwa -
+// TYLKO tutaj, nigdy w szablonie Caddy.
 app.use((req, res, next) => {
   res.setHeader(
     'Content-Security-Policy',
@@ -124,6 +136,18 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  // Panel nie korzysta z zadnego z tych API - odmawiamy wszystkim, nie
+  // tylko obcym originom ("()" = nikomu, wlacznie z 'self').
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  // Bez efektu na zwyklym HTTP (przegladarki ignoruja HSTS spoza HTTPS),
+  // wiec bezpieczne do wysylania zawsze, tez w EXPOSURE=local/lan.
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  // same-origin-allow-popups (nie 'same-origin') - zeby popup Cloudflare
+  // Turnstile (challenges.cloudflare.com) mial dzialajace window.opener.
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  // 'unsafe-none' to wartosc DOMYSLNA (brak wymuszenia) - jawnie
+  // wypisana dla czytelnosci/audytu, nie zmienia faktycznego zachowania.
+  res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
   next();
 });
 
