@@ -413,8 +413,11 @@ if ! command -v caddy >/dev/null 2>&1; then
 }
 
 # Per-account site configs (see server/scripts/hosting-account-create.sh) -
-# one subdirectory per hosting account, one .caddy file per domain.
-import /etc/caddy/sites/*/*.caddy
+# one subdirectory per hosting account, one .caddy file per domain. Limited
+# to srv_* (the panel's hosting-account naming convention) on purpose - a
+# defense-in-depth filter against importing stray/foreign directories that
+# might end up in /etc/caddy/sites.
+import /etc/caddy/sites/srv_*/*.caddy
 EOF
   caddy validate --config /etc/caddy/Caddyfile || die "$(t err_caddyfile_invalid)"
   systemctl reload caddy
