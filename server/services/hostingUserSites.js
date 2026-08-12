@@ -18,8 +18,12 @@ const REDIRECT_MODES = ['www-to-apex', 'apex-to-www'];
 // 'php' i 'wordpress' sa na razie SZKIELETEM - wybieralne w UI/API, ale
 // buildSiteBlock ponizej generuje dla nich dokladnie ten sam statyczny
 // blok co dla 'html' (brak jeszcze php_fastcgi/puli PHP-FPM per konto ani
-// instalatora WordPressa - to osobna, wieksza praca).
-const TEMPLATES = ['html', 'php', 'wordpress'];
+// instalatora WordPressa - to osobna, wieksza praca). 'reverseproxy' NIE
+// jest szkieletem - w pelni dziala (patrz buildSiteBlock) - to jeden,
+// generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel tylko
+// robi `reverse_proxy 127.0.0.1:<port>`, wlasny proces (Python/venv,
+// Node, cokolwiek) user uruchamia i utrzymuje sam przez SSH.
+const TEMPLATES = ['html', 'php', 'wordpress', 'reverseproxy'];
 // Dwucyfrowy identyfikator wersji PHP (np. "83") - ten sam format co
 // server/runtime-manager/routes/php.js. Tylko zapisywane przy tworzeniu
 // (dla PHP/WordPress) - jeszcze NIC z tego nie czyta (buildSiteBlock go
@@ -27,6 +31,14 @@ const TEMPLATES = ['html', 'php', 'wordpress'];
 // sformatowana/brakujaca wartosc NIE blokuje tworzenia strony - po prostu
 // zapisujemy null, bo pole i tak jeszcze niczego nie steruje.
 const PHP_VERSION_RE = /^[0-9]{2}$/;
+
+function validateProxyPort(proxyPort) {
+  const port = parseInt(proxyPort, 10);
+  if (!Number.isInteger(port) || String(proxyPort).trim() !== String(port) || port < 1 || port > 65535) {
+    throw badRequest('Nieprawidlowy port dla reverse proxy (1-65535).');
+  }
+  return port;
+}
 
 function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
@@ -57,6 +69,7 @@ function toPublic(record) {
     redirectMode: record.redirectMode,
     template: record.template,
     phpVersion: record.phpVersion ?? null,
+    proxyPort: record.proxyPort ?? null,
     enabled: record.enabled,
     createdAt: record.createdAt
   };
@@ -92,7 +105,14 @@ function listSiteOwners() {
 // (wlasciciel caddy:caddy - Caddy pisze tam bez przeszkod), jeden plik na
 // domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji) - zawsze
 // nazwany po APEKSIE (bez www), niezaleznie od kierunku przekierowania.
-function buildSiteBlock(homeDir, domain, redirectMode) {
+//
+// Jedyna czesc bloku zalezna od template: 'reverseproxy' dostaje
+// `reverse_proxy 127.0.0.1:<port>` zamiast `root/file_server` - zawsze
+// loopback-only (user NIE podaje calego hosta, tylko port), zeby nie dalo
+// sie przypadkiem wskazac na cos poza ta sama maszyna. PHP/WordPress sa
+// wciaz szkieletem (patrz TEMPLATES) - dostaja ten sam statyczny blok co
+// 'html'.
+function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort) {
   const wwwDomain = `www.${domain}`;
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
@@ -101,12 +121,15 @@ function buildSiteBlock(homeDir, domain, redirectMode) {
     ? [`${wwwDomain}, ${domain}`, '@apex', domain, wwwDomain]
     : [`${domain}, ${wwwDomain}`, '@www', wwwDomain, domain];
 
+  const bodyDirectives = template === 'reverseproxy'
+    ? `\treverse_proxy 127.0.0.1:${proxyPort}`
+    : `\troot * ${publicRoot}\n\tfile_server`;
+
   return `${addresses} {
 	${matcherName} host ${matchedHost}
 	redir ${matcherName} https://${canonical}{uri} 301
 	header -X-Powered-By
-	root * ${publicRoot}
-	file_server
+${bodyDirectives}
 	log {
 		output file ${logFile}
 		format json
@@ -177,11 +200,16 @@ function validateRedirectMode(redirectMode) {
   return redirectMode;
 }
 
-async function createSite(username, { domain, redirectMode, template, phpVersion }) {
+async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort }) {
   const domainValue = validateDomain(domain);
   const redirectValue = validateRedirectMode(redirectMode);
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
   const phpVersionValue = (templateValue !== 'html' && PHP_VERSION_RE.test(phpVersion)) ? phpVersion : null;
+  // proxyPort jest FUNKCJONALNIE wymagany dla reverseproxy (buildSiteBlock
+  // nie ma sensownego fallbacku) - w odroznieniu od phpVersion (na razie
+  // czyste metadane) blad walidacji tu faktycznie blokuje utworzenie
+  // strony.
+  const proxyPortValue = templateValue === 'reverseproxy' ? validateProxyPort(proxyPort) : null;
 
   const account = getAccount(username);
   if (!account) throw badRequest('Nie znaleziono konta hostingowego.');
@@ -196,7 +224,7 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     throw badRequest('Ta domena jest juz zajeta.');
   }
 
-  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue);
+  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue);
   await runSiteScript('apply', username, domainValue, content);
 
   const record = {
@@ -206,6 +234,7 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     redirectMode: redirectValue,
     template: templateValue,
     phpVersion: phpVersionValue,
+    proxyPort: proxyPortValue,
     enabled: true,
     createdAt: new Date().toISOString()
   };
@@ -228,7 +257,7 @@ async function updateSiteRedirect(username, id, redirectMode) {
   const all = loadData();
   const record = findOwnRecord(all, username, id);
 
-  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue);
+  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort);
   await runSiteScript('apply', username, record.domain, content);
 
   record.redirectMode = redirectValue;

@@ -1086,6 +1086,11 @@ async function refreshSshTab(content) {
 //      hostingUserSites.js: buildSiteBlock). Szablony PHP/WordPress sa na
 //      razie SZKIELETEM - wybieralne, ale generuja ten sam statyczny blok
 //      co HTML (patrz komentarz przy TEMPLATES w hostingUserSites.js).
+//      REVERSE PROXY jest jedynym poza HTML, ktory realnie dziala - pole
+//      na port (zawsze 127.0.0.1:<port>, user nie podaje calego hosta) +
+//      podpowiedz tekstowa (venv/gunicorn/uvicorn/systemd --user dla
+//      Pythona, `npm start` dla Node) - jeden generyczny szablon zamiast
+//      osobnych wpisow per framework/jezyk (Django/Next/Ghost/...).
 //   2) prawy: lista istniejacych stron z akcjami (Start/Stop, Usun -
 //      NIEODWRACALNIE kasuje tez pliki w ~/domains, patrz
 //      hosting-user-site.sh) + licznik uzyto/limit z pakietu (maxDomains)
@@ -1099,7 +1104,8 @@ async function refreshSshTab(content) {
 const SITE_TEMPLATE_LABELS = {
   html: () => t('sites.template_html'),
   php: () => t('sites.template_php'),
-  wordpress: () => t('sites.template_wordpress')
+  wordpress: () => t('sites.template_wordpress'),
+  reverseproxy: () => t('sites.template_reverseproxy')
 };
 let siteEditingId = null;
 let siteEditingContent = null;
@@ -1117,24 +1123,36 @@ function siteRedirectRadios(name, selected) {
   `;
 }
 
-// PHP/WORDPRESS pod HTML (jedna pod druga, nie obok siebie w rzedzie) -
-// przy PHP i WORDPRESS dodatkowo rozwijalna lista z wersjami PHP
+// PHP/WORDPRESS/REVERSE PROXY pod HTML (jedna pod druga, nie obok siebie
+// w rzedzie) - przy PHP i WORDPRESS rozwijalna lista z wersjami PHP
 // faktycznie zainstalowanymi w systemie (ten sam mechanizm co selektor
-// PHP dla zadan cron - /cron/php-paths - patrz refreshSitesTab).
+// PHP dla zadan cron - /cron/php-paths - patrz refreshSitesTab), przy
+// REVERSE PROXY pole na port + podpowiedz pod spodem (jedyny szablon poza
+// HTML, ktory realnie dziala - patrz buildSiteBlock w
+// hostingUserSites.js: PHP/WORDPRESS sa nadal szkieletem).
 function siteTemplateRadios(name, selected, phpVersions) {
   const versionOptions = phpVersions.length
     ? phpVersions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')
     : `<option value="">-</option>`;
 
-  return ['html', 'php', 'wordpress'].map((key) => `
-    <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:normal;">
-      <span style="display:flex;align-items:center;gap:6px;">
-        <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
-        ${SITE_TEMPLATE_LABELS[key]()}
-      </span>
-      ${key !== 'html' ? `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>` : ''}
-    </label>
-  `).join('');
+  return ['html', 'php', 'wordpress', 'reverseproxy'].map((key) => {
+    let extra = '';
+    if (key === 'php' || key === 'wordpress') {
+      extra = `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>`;
+    } else if (key === 'reverseproxy') {
+      extra = `<input type="number" name="${name}-proxyport-${key}" min="1" max="65535" placeholder="${t('sites.template_reverseproxy_port_placeholder')}" style="width:110px;">`;
+    }
+    return `
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:normal;">
+        <span style="display:flex;align-items:center;gap:6px;">
+          <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
+          ${SITE_TEMPLATE_LABELS[key]()}
+        </span>
+        ${extra}
+      </label>
+      ${key === 'reverseproxy' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_reverseproxy_hint')}</p>` : ''}
+    `;
+  }).join('');
 }
 
 // Encode dyrektywa Caddy idzie PRZED file_server (np. root / encode /
@@ -1504,8 +1522,11 @@ function wireSitesSection(content) {
       const domainInput = document.getElementById('site-new-domain');
       const templateSelected = content.querySelector('input[name="site-new-template"]:checked');
       const templateValue = templateSelected ? templateSelected.value : 'html';
-      const phpVersionSelect = templateValue !== 'html'
+      const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress')
         ? content.querySelector(`select[name="site-new-template-phpversion-${templateValue}"]`)
+        : null;
+      const proxyPortInput = templateValue === 'reverseproxy'
+        ? content.querySelector('input[name="site-new-template-proxyport-reverseproxy"]')
         : null;
       const selected = content.querySelector('input[name="site-new-redirect"]:checked');
       const msgEl = document.getElementById('site-msg');
@@ -1517,7 +1538,8 @@ function wireSitesSection(content) {
           domain: domainInput.value.trim(),
           redirectMode: selected ? selected.value : 'www-to-apex',
           template: templateValue,
-          phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined
+          phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined,
+          proxyPort: proxyPortInput ? proxyPortInput.value : undefined
         });
         await refreshSitesTab(content);
       } catch (e) {
