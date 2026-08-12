@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 #
 # Zarzadza plikiem konfiguracji Caddy pojedynczej strony konta hostingowego
-# (/etc/caddy/sites/<username>/<domain>.caddy) - ten sam wzorzec
+# (PLASKO: /etc/caddy/sites/<domain>.caddy, bez podkatalogu per-konto -
+# patrz hosting-account-create.sh: Caddy `import` dopuszcza tylko jeden
+# wildcard w calym wzorcu, wiec `import /etc/caddy/sites/*.caddy` w glownym
+# Caddyfile, izolacja miedzy kontami idzie przez uprawnienia PLIKU
+# (chown <username>:caddy, 0640), nie przez katalog) - ten sam wzorzec
 # walidacja-przed-podmiana-z-rollbackiem co caddy-set-performance.sh, tylko
-# celem jest plik PER-STRONA (importowany przez podkatalog konta, ktory z
-# kolei jest importowany do glownego Caddyfile przez stub
-# <username>.caddyimport - patrz hosting-account-create.sh, Caddy `import`
-# dopuszcza tylko jeden wildcard w calym wzorcu), a nie sam Caddyfile.
+# celem jest plik PER-STRONA, a nie sam Caddyfile. Domena jest globalnie
+# unikalna (wymuszane w hostingUserSites.js), wiec plaska nazwa pliku nigdy
+# nie koliduje miedzy kontami.
 #
 # "Zatrzymana" strona = plik ma rozszerzenie .caddy.disabled (NIE pasuje do
 # glob *.caddy, wiec Caddy go w ogole nie importuje) - `caddy validate`
@@ -54,14 +57,13 @@ if ! id -u "$USERNAME" >/dev/null 2>&1; then
   exit 1
 fi
 
-SITE_DIR="${SITES_BASE_DIR}/${USERNAME}"
-if [ ! -d "$SITE_DIR" ]; then
-  echo "BLAD: katalog stron konta nie istnieje: ${SITE_DIR}" >&2
+if [ ! -d "$SITES_BASE_DIR" ]; then
+  echo "BLAD: katalog stron nie istnieje: ${SITES_BASE_DIR}" >&2
   exit 1
 fi
 
-ACTIVE_FILE="${SITE_DIR}/${DOMAIN}.caddy"
-DISABLED_FILE="${SITE_DIR}/${DOMAIN}.caddy.disabled"
+ACTIVE_FILE="${SITES_BASE_DIR}/${DOMAIN}.caddy"
+DISABLED_FILE="${SITES_BASE_DIR}/${DOMAIN}.caddy.disabled"
 
 case "$ACTION" in
   apply)

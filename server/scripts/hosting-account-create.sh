@@ -2,8 +2,9 @@
 #
 # Tworzy uzytkownika systemowego dla konta hostingowego - z prawdziwym
 # dostepem SSH (powloka bash), katalogiem domowym pod wskazanym punktem
-# montowania (<home_base_dir>/<username>) oraz wlasnym katalogiem na
-# konfiguracje domen Caddy w /etc/caddy/sites/<username>. Limit dysku
+# montowania (<home_base_dir>/<username>) i dostepem do wspoldzielonego
+# katalogu na konfiguracje domen Caddy w /etc/caddy/sites (plaska
+# struktura, patrz nizej). Limit dysku
 # (quota) NIE jest tu ustawiany - to osobny krok, patrz
 # quota-ext4-set.sh / quota-xfs-set.sh, wywolywany osobno przez
 # server/services/hostingAccounts.js.
@@ -14,22 +15,24 @@
 # udokumentowany mechanizm "user musi zmienic haslo przy nastepnym
 # logowaniu", dziala niezaleznie od globalnej polityki PASS_MAX_DAYS).
 #
-# Katalog stron: /etc/caddy/sites/<username> (owner=user, group=caddy,
-# 0750) - Caddy (dziala jako caddy:caddy) czyta stamtad *.caddy. Caddy
-# `import` dopuszcza tylko JEDEN wildcard w calym wzorcu, wiec glowny
-# Caddyfile (patrz install.sh) importuje plaski
-# `/etc/caddy/sites/*.caddyimport` (jeden stub per konto, tworzony nizej),
-# a kazdy stub robi drugi poziom importu do WLASNEGO podkatalogu konta.
-# Top-level /etc/caddy/sites ma o+x BEZ o+r, zeby kazdy user mogl wejsc
-# TYLKO do WLASNEGO podkatalogu (zna jego nazwe), ale nie zrobil `ls` i nie
-# zobaczyl nazw innych kont.
+# Katalog stron: PLASKI /etc/caddy/sites (owner=root, group=caddy, 0751) -
+# Caddy (dziala jako caddy:caddy) czyta stamtad *.caddy przez
+# `import /etc/caddy/sites/*.caddy` w glownym Caddyfile (patrz install.sh) -
+# Caddy `import` dopuszcza TYLKO JEDEN wildcard w calym wzorcu, wiec nie ma
+# tu podkatalogow per-konto. Kazdy plik <domena>.caddy (tworzony pozniej
+# przez flow "dodaj strone", patrz hosting-user-site.sh) nalezy do
+# <username>:caddy, 0640 - to WYSTARCZA do izolacji tresci miedzy kontami
+# (uprawnienia PLIKU, nie katalogu). Nazwa domeny jest globalnie unikalna
+# (wymuszane w hostingUserSites.js), wiec plaska nazwa <domena>.caddy nigdy
+# nie koliduje miedzy kontami. Top-level /etc/caddy/sites ma o+x BEZ o+r,
+# zeby zaden user nie zrobil `ls` i nie zobaczyl cudzych domen/nazw kont.
 #
 # ~/domains: PRAWDZIWY katalog na dysku (nie symlink) - user
 # laczacy sie po SSH/SFTP ma tu wrzucac realne pliki swoich stron. Wczesniejsza
 # wersja robila to jako symlink w strone /etc/caddy/sites/<username>
 # (katalog na KONFIGI Caddy, *.caddy), co bylo mylace - user zamiast
-# plikow strony widzial config Caddy'ego. Config zostaje tam gdzie byl
-# (USER_SITE_DIR ponizej), zarzadzany przez panel/root, nie przez usera.
+# plikow strony widzial config Caddy'ego. Config zostaje w SITES_BASE_DIR
+# (patrz wyzej), zarzadzany przez panel/root, nie przez usera.
 #
 # Zeby Caddy (dziala jako caddy:caddy) dotarl do plikow w
 # ~/domains/<domena>/public, katalog domowy MUSI dawac grupie caddy
@@ -79,27 +82,12 @@ useradd -m -b "$HOME_BASE_DIR" -s /bin/bash "${UID_ARGS[@]}" "$USERNAME"
 echo "${USERNAME}:${DEFAULT_TEMP_PASSWORD}" | chpasswd
 chage -d 0 "$USERNAME"
 
+# Katalog jest wspoldzielony przez wszystkie konta (plaska struktura, patrz
+# komentarz na gorze pliku) - tworzony/naprawiany idempotentnie przy kazdym
+# zakladaniu konta, na wypadek gdyby admin recznie reinstalowal Caddy.
 mkdir -p "$SITES_BASE_DIR"
 chown root:caddy "$SITES_BASE_DIR"
 chmod 0751 "$SITES_BASE_DIR"
-
-USER_SITE_DIR="${SITES_BASE_DIR}/${USERNAME}"
-mkdir -p "$USER_SITE_DIR"
-chown "${USERNAME}:caddy" "$USER_SITE_DIR"
-chmod 0750 "$USER_SITE_DIR"
-
-# Caddy `import` dopuszcza TYLKO JEDEN wildcard w calym wzorcu - glowny
-# Caddyfile (patrz install.sh) importuje wiec PLASKI katalog *.caddyimport,
-# jeden stub na konto, tworzony tutaj raz przy zakladaniu konta. Kazdy stub
-# robi DRUGI poziom importu do WLASNEGO podkatalogu konta (tez jeden
-# wildcard) - dzieki temu glowny Caddyfile nigdy nie wymaga edycji ani przy
-# nowym koncie, ani przy nowej stronie. Stub nalezy do root:caddy (NIE do
-# usera) - hosting user nie powinien miec mozliwosci zmiany dokad wskazuje
-# import.
-IMPORT_STUB="${SITES_BASE_DIR}/${USERNAME}.caddyimport"
-echo "import ${USER_SITE_DIR}/*.caddy" > "$IMPORT_STUB"
-chown root:caddy "$IMPORT_STUB"
-chmod 0640 "$IMPORT_STUB"
 
 USER_HOME="${HOME_BASE_DIR}/${USERNAME}"
 
@@ -127,4 +115,4 @@ mkdir -p "$USER_DOMAINS_DIR"
 chown "${USERNAME}:caddy" "$USER_DOMAINS_DIR"
 chmod 0750 "$USER_DOMAINS_DIR"
 
-echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${USER_SITE_DIR}, katalog na tresc stron ${USER_DOMAINS_DIR})"
+echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${SITES_BASE_DIR}, katalog na tresc stron ${USER_DOMAINS_DIR})"
