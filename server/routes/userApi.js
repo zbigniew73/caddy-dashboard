@@ -6,7 +6,7 @@ import {
   listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, restartSitePhp,
   getSiteConfig, checkSiteConfig, updateSiteConfig
 } from '../services/hostingUserSites.js';
-import { getInstalledPhp, getFrankenphpStatus } from '../services/runtimeManagerClient.js';
+import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import {
   listPythonVersions,
@@ -112,40 +112,10 @@ router.get('/php-versions', async (req, res) => {
   }
 });
 
-// Szablon 'frankenphp' NIE dostaje pelnej listy wersji PHP (jak php/
-// wordpress) - FrankenPHP to JEDNA, wspoldzielona binarka z JEDNA
-// wersja PHP-ZTS wbudowana na stale (wybrana przez admina przy instalacji,
-// patrz systemServices.js/frankenphp-install.sh) - composer/artisan MUSZA
-// dzialac pod TA SAMA wersja, ktora faktycznie serwuje strone (Symfony
-// wprost, przez systemowa binarke; Laravel posrednio, bo `artisan
-// octane:frankenphp` w hosting-user-frankenphp-site.sh tez jest wolany
-// tym php-cli). Stad zamiast wyboru - jedna, autodetekowana wartosc, i
-// jasny blad jesli FrankenPHP nie jest zainstalowany LUB nie ma dla niego
-// pasujacego wrappera PHP CLI (Remi, /usr/local/bin/phpXX - osobna
-// instalacja od strumienia ZTS, patrz php-install.sh).
-router.get('/frankenphp-php-version', async (req, res) => {
-  try {
-    const status = await getFrankenphpStatus();
-    if (!status.installed) {
-      return res.json({ available: false, phpVersion: null });
-    }
-    const match = /PHP (\d+)\.(\d+)/.exec(status.version || '');
-    if (!match) {
-      return res.json({ available: false, phpVersion: null });
-    }
-    const id = `${match[1]}${match[2]}`;
-    const installed = await getInstalledPhp();
-    const cliMatch = installed.find((v) => v.id === id);
-    res.json({ available: !!cliMatch, phpVersion: cliMatch ? { id: cliMatch.id, version: cliMatch.version } : null });
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
 router.post('/sites', async (req, res) => {
   try {
-    const { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, framework } = req.body || {};
-    res.json(await createSite(req.hostingUser, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, framework }));
+    const { domain, redirectMode, template, phpVersion, proxyPort, wpInstall } = req.body || {};
+    res.json(await createSite(req.hostingUser, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

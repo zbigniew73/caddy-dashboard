@@ -46,7 +46,6 @@ const NAV_ICONS = {
   postgresql: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   mongodb: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>',
   redis: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></svg>',
-  frankenphp: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 6 3 12 8 18"/><polyline points="16 6 21 12 16 18"/></svg>',
   phpmyadmin: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>',
   adminer: '<svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>'
 };
@@ -233,13 +232,7 @@ async function refreshDynamicNav() {
   // nigdy zakladka w GLOWNE, tam trafiaja pojedyncze zainstalowane wersje
   // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
   // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
-  // "frankenphp" wykluczone z TEGO SAMEGO powodu co w renderServicesTab
-  // (Usluga -> Start tutaj to surowy `systemctl start frankenphp.service`,
-  // domyslna globalna jednostka kolidujaca z Caddy panelu) - TEN pasek
-  // nawigacji (nav-installed-extra) to OSOBNY mechanizm od listy w
-  // zakladce Uslugi, wiec wymaga wlasnego wykluczenia, mimo ze powod jest
-  // identyczny.
-  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'frankenphp');
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm');
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
@@ -480,91 +473,6 @@ function wireInstallTile(key) {
       const successEl = document.getElementById(`install-msg-${key}`);
       successEl.textContent = t('install.install_success');
       successEl.className = 'action-msg success';
-      await refreshDynamicNav();
-    } catch (e) {
-      msgEl.textContent = e.message;
-      msgEl.className = 'action-msg error';
-      btn.disabled = false;
-    }
-  };
-}
-
-// W odroznieniu od PHP-FPM/Redis/MariaDB itp. (gdzie "zainstalowano" =
-// koniec historii, kafelek staje sie tylko-informacyjny), FrankenPHP MA
-// realny, uzasadniony powod, zeby pozwolic zmienic wersje PO instalacji:
-// to JEDNA, wspoldzielona binarka (server/services/systemServices.js -
-// "wersja ZTS PHP jest wyborem PRZY instalacji, nie osobnym runtime per
-// wersja"), wiec selektor strumieni musi zostac widoczny takze w stanie
-// "zainstalowano", z jasnym ostrzezeniem o skutkach przelaczenia (patrz
-// install.frankenphp.switch_warning) - strony Symfony w panelu klienta
-// wywoluja TA SAMA, systemowa binarke bezposrednio
-// (hosting-user-frankenphp-site.sh: `frankenphp run --config ...`).
-function frankenphpInstallTileHtml(status, avail) {
-  const name = t('services.frankenphp.name');
-  const description = t('install.frankenphp.description');
-
-  const versions = avail?.versions || [];
-  const selectable = versions.filter((v) => !v.enabled);
-  const firstSelectableVersion = selectable[0]?.version;
-
-  const versionList = versions.length
-    ? versions.map((v) => `
-        <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px;">
-          <input type="radio" name="frankenphp-version" value="${escapeHtml(v.version)}" ${v.version === firstSelectableVersion ? 'checked' : ''}>
-          <span>PHP ${escapeHtml(v.version)} ZTS${v.enabled ? ` <span class="status-badge active">${t('install.frankenphp.enabled_badge')}</span>` : ''}</span>
-        </label>
-      `).join('')
-    : `<p style="color:var(--muted);font-size:13px;">${t('install.frankenphp.no_versions')}</p>`;
-
-  const headerHtml = status.installed ? `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
-      <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
-      <span class="status-badge active">${t('install.installed_badge')}</span>
-    </div>
-    <p style="color:var(--muted);font-size:12px;font-family:monospace;margin:0 0 12px;">${escapeHtml(status.version || '')}</p>
-  ` : `<div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>`;
-
-  return `
-    <div class="system-info-card" style="max-width:560px;">
-      ${headerHtml}
-      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
-      ${status.installed ? `<p style="color:var(--warning);font-size:12px;line-height:1.5;margin:0 0 16px;">${t('install.frankenphp.switch_warning')}</p>` : ''}
-
-      <div style="margin-bottom:14px;">${versionList}</div>
-
-      ${versions.length ? `<button type="button" id="frankenphp-install-btn">${status.installed ? t('install.frankenphp.switch_button') : t('install.install_button')}</button>` : ''}
-      <div class="action-msg" id="frankenphp-install-msg"></div>
-      ${status.installed ? `<p style="color:var(--muted);font-size:12px;margin-top:14px;">${t('install.frankenphp.installed_hint')}</p>` : ''}
-    </div>
-  `;
-}
-
-function wireFrankenphpInstallTile(alreadyInstalled) {
-  const btn = document.getElementById('frankenphp-install-btn');
-  if (!btn) return;
-  const msgEl = document.getElementById('frankenphp-install-msg');
-
-  btn.onclick = async () => {
-    const selected = document.querySelector('input[name="frankenphp-version"]:checked');
-    if (!selected) return;
-    const version = selected.value;
-    const confirmKey = alreadyInstalled ? 'install.frankenphp.confirm_switch' : 'install.frankenphp.confirm_install';
-    if (!window.confirm(t(confirmKey, { version }))) return;
-
-    btn.disabled = true;
-    msgEl.textContent = t('install.installing');
-    msgEl.className = 'action-msg';
-    try {
-      await api('POST', `/frankenphp/${version}/install`);
-      const [status, avail] = await Promise.all([api('GET', '/frankenphp'), api('GET', '/frankenphp/available')]);
-      document.getElementById('content').innerHTML = frankenphpInstallTileHtml(status, avail);
-      applyTranslations();
-      wireFrankenphpInstallTile(status.installed);
-      const successEl = document.getElementById('frankenphp-install-msg');
-      if (successEl) {
-        successEl.textContent = t('install.install_success');
-        successEl.className = 'action-msg success';
-      }
       await refreshDynamicNav();
     } catch (e) {
       msgEl.textContent = e.message;
@@ -1487,17 +1395,6 @@ async function renderInstallDetailTab(key, content) {
       wirePhpInstallTile();
       return;
     }
-    if (key === 'frankenphp') {
-      const status = await api('GET', '/frankenphp');
-      // Zawsze pobieramy dostepne strumienie, nawet gdy juz zainstalowano -
-      // selektor wersji (i mozliwosc przelaczenia) jest teraz widoczny w
-      // OBU stanach, patrz frankenphpInstallTileHtml.
-      const avail = await api('GET', '/frankenphp/available');
-      content.innerHTML = frankenphpInstallTileHtml(status, avail);
-      applyTranslations();
-      wireFrankenphpInstallTile(status.installed);
-      return;
-    }
     if (key === 'phpmyadmin') {
       const status = await api('GET', '/phpmyadmin');
       content.innerHTML = phpmyadminInstallTileHtml(status);
@@ -2146,15 +2043,7 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    // 'frankenphp' wykluczone jak 'php-fpm' - z INNEGO powodu: generyczne
-    // Start/Stop/Restart tutaj odpalaja surowe `systemctl <akcja>
-    // frankenphp.service` (domyslna, globalna jednostka), ktora koliduje z
-    // Caddy panelu (patrz install.frankenphp.installed_hint) - user
-    // faktycznie trafil na ten dokladnie konflikt, klikajac Start tutaj.
-    // Panel klienta zaklada wlasne, izolowane procesy per-strona
-    // (hosting-user-frankenphp-site.sh) - ta globalna jednostka nie
-    // powinna byc uruchamiana w ogole, wiec nie pokazujemy jej kontrolek.
-    const installed = services.filter((s) => s.found && s.key !== 'php-fpm' && s.key !== 'frankenphp');
+    const installed = services.filter((s) => s.found && s.key !== 'php-fpm');
     if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;

@@ -70,7 +70,7 @@ DOMAIN="${3:-}"
 # TEMPLATES.includes(template) ? template : 'html' w hostingUserSites.js.
 TEMPLATE="${4:-html}"
 case "$TEMPLATE" in
-  html|php|wordpress|reverseproxy|frankenphp) ;;
+  html|php|wordpress|reverseproxy) ;;
   *) TEMPLATE="html" ;;
 esac
 # WP_INSTALL tylko dla 'apply' + TEMPLATE=wordpress (patrz IS_NEW nizej) -
@@ -429,13 +429,6 @@ PHP
 PHP
           chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/info.php"
           chmod 0644 "${DOMAIN_DIR}/public/info.php"
-        elif [ "$TEMPLATE" = "frankenphp" ]; then
-          # Bez placeholdera - `composer create-project` (nastepny krok,
-          # hosting-user-frankenphp-site.sh) wymaga PUSTEGO katalogu
-          # docelowego, wiec public/ musi zostac faktycznie puste (nie
-          # tylko bez placeholdera - ten skrypt tez usuwa sam katalog
-          # public/ tuz przed composerem, patrz tam).
-          :
         else
           cat > "${DOMAIN_DIR}/public/index.html" <<HTML
 <!doctype html>

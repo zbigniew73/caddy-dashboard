@@ -70,8 +70,8 @@ async function runViaSudo(scriptPath, args, timeout, sudoErrorLabel) {
 // phpServiceEntries() w server/routes/api.js), czyli przy kazdym
 // odswiezeniu calej strony panelu. Potwierdzone na zywym serwerze
 // (2026-08-09): to powodowalo ~30s opoznienie w ladowaniu reszty
-// nawigacji (MariaDB/PostgreSQL/MongoDB/PHP/FrankenPHP) przy KAZDYM
-// wejsciu do panelu, nie tylko przy pierwszym otwarciu kafelka PHP.
+// nawigacji (MariaDB/PostgreSQL/MongoDB/PHP) przy KAZDYM wejsciu do
+// panelu, nie tylko przy pierwszym otwarciu kafelka PHP.
 // Cache w pamieci procesu - repo bootstrap odpalany raz na cykl zycia
 // demona (Runtime Manager to dlugo dzialajacy proces systemd, restart
 // zdarza sie rzadko), nie przy kazdym requescie.

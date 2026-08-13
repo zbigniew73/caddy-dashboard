@@ -4,13 +4,11 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { listAccounts } from './hostingAccounts.js';
-import { findFreePort } from './hostingUserPorts.js';
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../data');
 const DATA_PATH = path.join(DATA_DIR, 'hosting-sites.json');
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-site.sh');
 const POOL_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-php-pool-apply.sh');
-const FRANKENPHP_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-frankenphp-site.sh');
 
 // Domena wpisywana jako "apex" (bez www.) dla dwoch trybow z przekierowaniem
 // (kierunek - ktora wersja jest kanoniczna - to osobne pole redirectMode,
@@ -33,19 +31,8 @@ const REDIRECT_MODES = ['www-to-apex', 'apex-to-www', 'none'];
 // pliki sam przez SSH/SFTP do juz-dzialajacego PHP). 'reverseproxy' to
 // jeden, generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel
 // tylko robi `reverse_proxy 127.0.0.1:<port>`, wlasny proces (Python/venv,
-// Node, cokolwiek) user uruchamia i utrzymuje sam przez SSH. 'frankenphp'
-// zachowuje sie na poziomie Caddy DOKLADNIE jak 'reverseproxy' (ten sam
-// `reverse_proxy 127.0.0.1:<port>`, patrz buildSiteBlock), ale port jest
-// AUTO-przydzielany (findFreePort), nie wpisywany recznie - i CALY backend
-// (composer scaffold + usluga systemd Worker Mode) jest zakladany/
-// zarzadzany przez panel, patrz createSite/deleteSite/toggleSite/
-// restartSitePhp nizej i hosting-user-frankenphp-site.sh.
-const TEMPLATES = ['html', 'php', 'wordpress', 'reverseproxy', 'frankenphp'];
-// Jedyne dwa frameworki wspierane przez szablon 'frankenphp' - kazdy ida
-// INNA sciezka integracji z FrankenPHP (Laravel: laravel/octane, wlasna
-// sciagnieta binarka; Symfony: runtime/frankenphp-symfony, systemowa
-// binarka admina) - patrz hosting-user-frankenphp-site.sh.
-const FRANKENPHP_FRAMEWORKS = ['laravel', 'symfony'];
+// Node, cokolwiek) user uruchamia i utrzymuje sam przez SSH.
+const TEMPLATES = ['html', 'php', 'wordpress', 'reverseproxy'];
 // Instalator WordPressa (tylko dla template 'wordpress') - 'none' zachowuje
 // sie jak zwykly PHP (index.php/info.php), 'en'/'pl' pobieraja i rozpakowuja
 // oficjalne archiwum wordpress.org BEZPOSREDNIO do public/ zamiast pisac
@@ -165,7 +152,6 @@ function toPublic(record) {
     template: record.template,
     phpVersion: record.phpVersion ?? null,
     proxyPort: record.proxyPort ?? null,
-    framework: record.framework ?? null,
     enabled: record.enabled,
     createdAt: record.createdAt
   };
@@ -209,7 +195,7 @@ function listSiteOwners() {
 // jest jedynym miejscem, ktore musi go czytac dla innych funkcji.
 function listUsedProxyPorts() {
   return loadData()
-    .filter((s) => (s.template === 'reverseproxy' || s.template === 'frankenphp') && Number.isInteger(s.proxyPort))
+    .filter((s) => s.template === 'reverseproxy' && Number.isInteger(s.proxyPort))
     .map((s) => s.proxyPort);
 }
 
@@ -247,7 +233,7 @@ function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort, phpS
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
 
-  const bodyDirectives = (template === 'reverseproxy' || template === 'frankenphp')
+  const bodyDirectives = template === 'reverseproxy'
     ? `\treverse_proxy 127.0.0.1:${proxyPort}`
     : (template === 'php' || template === 'wordpress')
       ? `\troot * ${publicRoot}\n\tphp_fastcgi unix/${phpSocketPath}\n\tfile_server`
@@ -334,27 +320,6 @@ function runPoolScript(action, ...args) {
   });
 }
 
-// hosting-user-frankenphp-site.sh - zaklada/uruchamia/zatrzymuje/kasuje
-// prywatny proces FrankenPHP (Worker Mode) strony z szablonem
-// 'frankenphp' (patrz komentarz przy TEMPLATES). Ten sam ksztalt co
-// runPoolScript powyzej.
-function runFrankenphpScript(action, ...args) {
-  return new Promise((resolve, reject) => {
-    const child = spawn('sudo', ['-n', FRANKENPHP_SCRIPT_PATH, action, ...args.map(String)]);
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => { stdout += d; });
-    child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
-    child.on('close', (code) => {
-      if (code === 0) { resolve(stdout); return; }
-      const message = sudoErrorMessage(stderr);
-      reject(Object.assign(new Error(message || `exit code ${code}`), { status: message ? 403 : 500 }));
-    });
-    child.stdin.end();
-  });
-}
-
 // Jak runSiteScript, ale zwraca stdout - dla akcji 'get'/'check', ktore
 // (w odroznieniu od apply/enable/disable/delete) maja tresc do oddania
 // wywolujacemu, nie tylko sukces/porazke.
@@ -397,7 +362,7 @@ function validateRedirectMode(redirectMode) {
   return redirectMode;
 }
 
-async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, framework }) {
+async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall }) {
   const redirectValue = validateRedirectMode(redirectMode);
   const domainValue = validateDomain(domain, redirectValue === 'none');
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
@@ -405,20 +370,10 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
   // wpInstall ma sens WYLACZNIE dla template 'wordpress' - dla kazdego
   // innego szablonu wymuszamy 'none', niezaleznie co przyszlo z klienta.
   const wpInstallValue = templateValue === 'wordpress' && WP_INSTALL_MODES.includes(wpInstall) ? wpInstall : 'none';
-  const frameworkValue = templateValue === 'frankenphp' && FRANKENPHP_FRAMEWORKS.includes(framework) ? framework : null;
-  if (templateValue === 'frankenphp') {
-    if (!frameworkValue) throw badRequest('Wybierz framework (Laravel lub Symfony).');
-    // W odroznieniu od php/wordpress (gdzie brak wersji PHP po prostu
-    // pomija pool, strona i tak powstaje) tutaj CALY scaffold zalezy od
-    // PHP CLI (composer/artisan) - brak wersji musi zablokowac tworzenie,
-    // inaczej user dostalby domene bez zadnej dzialajacej aplikacji za nia.
-    if (!phpVersionValue) throw badRequest('Wybierz wersje PHP CLI (do composera/artisana).');
-  }
   // proxyPort jest FUNKCJONALNIE wymagany dla reverseproxy (buildSiteBlock
   // nie ma sensownego fallbacku) - w odroznieniu od phpVersion (na razie
   // czyste metadane) blad walidacji tu faktycznie blokuje utworzenie
-  // strony. 'frankenphp' dostaje port AUTOMATYCZNIE (findFreePort, patrz
-  // nizej) - user nic nie wpisuje, w odroznieniu od reverseproxy.
+  // strony.
   const proxyPortValue = templateValue === 'reverseproxy' ? validateProxyPort(proxyPort) : null;
 
   const account = getAccount(username);
@@ -446,47 +401,8 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     phpSocketPath = sitePhpSocketPath(id, phpVersionValue);
   }
 
-  // Wrapper CLI utworzony automatycznie przy KAZDEJ instalacji wersji PHP
-  // przez Runtime Manager (php-install.sh: WRAPPER="/usr/local/bin/${PKG}")
-  // - budujemy sciezke wprost z phpVersionValue, ten sam wzorzec co
-  // listPhpCliPaths() w hostingUserCron.js skanuje.
-  const phpCliPathValue = phpVersionValue ? `/usr/local/bin/php${phpVersionValue}` : null;
-
-  // 'frankenphp': port PRYWATNY, auto-przydzielany (nie user-wpisywany
-  // jak reverseproxy) - musi byc znany PRZED buildSiteBlock (blok
-  // odwoluje sie do niego identycznie jak reverseproxy).
-  let frankenphpPortValue = proxyPortValue;
-  let frankenphpAdminPortValue = null;
-  if (templateValue === 'frankenphp') {
-    frankenphpPortValue = (await findFreePort()).port;
-    if (frameworkValue === 'laravel') {
-      // Laravel Octane potrzebuje DRUGIEGO, wewnetrznego portu
-      // (--admin-port, reload/status) - wykluczamy dopiero co przydzielony
-      // port publiczny (patrz komentarz przy findFreePort w
-      // hostingUserPorts.js).
-      frankenphpAdminPortValue = (await findFreePort(undefined, [frankenphpPortValue])).port;
-    }
-  }
-
-  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, frankenphpPortValue, phpSocketPath);
+  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath);
   await runSiteScript('apply', username, domainValue, content, templateValue, wpInstallValue);
-
-  if (templateValue === 'frankenphp') {
-    try {
-      await runFrankenphpScript('create', username, domainValue, frameworkValue, phpCliPathValue);
-      await runFrankenphpScript(
-        'start', username, domainValue, frameworkValue, phpCliPathValue,
-        frankenphpPortValue, frankenphpAdminPortValue || 0
-      );
-    } catch (e) {
-      // Sprzatanie po nieudanym scaffoldzie/starcie - Caddy juz kieruje na
-      // ten port, wiec zostawienie strony "na wpol gotowej" byloby gorsze
-      // niz jej brak (ten sam duch co brak polowicznych stron przy bledzie
-      // poola PHP-FPM).
-      await runSiteScript('delete', username, domainValue).catch(() => {});
-      throw e;
-    }
-  }
 
   const record = {
     id,
@@ -495,9 +411,7 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     redirectMode: redirectValue,
     template: templateValue,
     phpVersion: phpVersionValue,
-    proxyPort: templateValue === 'frankenphp' ? frankenphpPortValue : proxyPortValue,
-    framework: frameworkValue,
-    frankenphpAdminPort: frankenphpAdminPortValue,
+    proxyPort: proxyPortValue,
     enabled: true,
     createdAt: new Date().toISOString()
   };
@@ -580,22 +494,6 @@ async function toggleSite(username, id, enable) {
 
   await runSiteScript(enable ? 'enable' : 'disable', username, record.domain);
 
-  // Wylaczona strona 'frankenphp' = zero zasobow (usluga systemd tez
-  // zatrzymana), nie tylko brak ruchu z Caddy - w odroznieniu od php/
-  // wordpress, gdzie backend (FPM) jest WSPOLDZIELONY miedzy stronami i
-  // nie da sie go zatrzymac per-strona.
-  if (record.template === 'frankenphp') {
-    if (enable) {
-      const phpCliPath = record.phpVersion ? `/usr/local/bin/php${record.phpVersion}` : null;
-      await runFrankenphpScript(
-        'start', username, record.domain, record.framework, phpCliPath,
-        record.proxyPort, record.frankenphpAdminPort || 0
-      );
-    } else {
-      await runFrankenphpScript('stop', username, record.domain);
-    }
-  }
-
   record.enabled = enable;
   saveData(all);
   return toPublic(record);
@@ -606,37 +504,26 @@ async function deleteSite(username, id) {
   const record = findOwnRecord(all, username, id);
 
   // Kolejnosc odwrotna do createSite: Caddy MUSI przestac kierowac na
-  // pool/usluge ZANIM ta zniknie (patrz komentarz przy buildSiteBlock).
+  // pool ZANIM ten pool zniknie (patrz komentarz przy buildSiteBlock).
   await runSiteScript('delete', username, record.domain);
 
   if ((record.template === 'php' || record.template === 'wordpress') && record.phpVersion) {
     await runPoolScript('remove', username, record.phpVersion, sitePhpSlug(record.id));
   }
 
-  if (record.template === 'frankenphp') {
-    await runFrankenphpScript('delete', username, record.domain);
-  }
-
   saveData(all.filter((s) => s.id !== id));
 }
 
-// Przycisk "Restart PHP" w panelu klienta (php/wordpress/frankenphp).
-// UCZCIWIE dla php/wordpress: to `systemctl reload phpXX-php-fpm` (patrz
-// runPoolScript 'reload' -> hosting-user-php-pool-apply.sh) - miekki,
-// bezprzestojowy restart procesow roboczych CALEJ wspoldzielonej uslugi
-// tej wersji PHP (patrz komentarz przy PHP_POOL_RAM_FRACTION), NIE
-// izolowany restart tylko tej jednej strony (stock PHP-FPM nie ma
-// takiego sygnalu per pool) - UI musi to jasno komunikowac, nie
-// sugerowac izolacji. Dla 'frankenphp' jest to PRAWDZIWY, izolowany
-// restart (wlasna usluga systemd tej jednej strony) - tu izolacja jest
-// prawdziwa, bo backend NIE jest wspoldzielony z innymi stronami.
+// Przycisk "Restart PHP" w panelu klienta (tylko strony php/wordpress).
+// UCZCIWIE: to `systemctl reload phpXX-php-fpm` (patrz runPoolScript
+// 'reload' -> hosting-user-php-pool-apply.sh) - miekki, bezprzestojowy
+// restart procesow roboczych CALEJ wspoldzielonej uslugi tej wersji PHP
+// (patrz komentarz przy PHP_POOL_RAM_FRACTION), NIE izolowany restart
+// tylko tej jednej strony (stock PHP-FPM nie ma takiego sygnalu per
+// pool) - UI musi to jasno komunikowac, nie sugerowac izolacji.
 async function restartSitePhp(username, id) {
   const all = loadData();
   const record = findOwnRecord(all, username, id);
-  if (record.template === 'frankenphp') {
-    await runFrankenphpScript('restart', username, record.domain);
-    return { success: true };
-  }
   if (record.template !== 'php' && record.template !== 'wordpress') {
     throw badRequest('Ta strona nie uzywa PHP.');
   }

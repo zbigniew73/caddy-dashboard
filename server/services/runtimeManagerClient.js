@@ -102,19 +102,6 @@ async function togglePhpModule(id, moduleKey, action) {
   return request('POST', `/php/${encodeURIComponent(id)}/modules/${encodeURIComponent(moduleKey)}/${encodeURIComponent(action)}`);
 }
 
-async function getAvailableFrankenphp() {
-  const { versions } = await request('GET', '/frankenphp/available');
-  return versions;
-}
-
-async function getFrankenphpStatus() {
-  return request('GET', '/frankenphp');
-}
-
-async function installFrankenphp(version) {
-  return request('POST', `/frankenphp/${encodeURIComponent(version)}/install`);
-}
-
 async function getPhpmyadminStatus() {
   return request('GET', '/phpmyadmin');
 }
@@ -142,7 +129,6 @@ async function uninstallAdminer() {
 export {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
-  getAvailableFrankenphp, getFrankenphpStatus, installFrankenphp,
   getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin,
   getAdminerStatus, installAdminer, uninstallAdminer
 };

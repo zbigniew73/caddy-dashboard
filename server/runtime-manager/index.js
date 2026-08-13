@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import fs from 'fs';
 import phpRoutes from './routes/php.js';
-import frankenphpRoutes from './routes/frankenphp.js';
 import phpmyadminRoutes from './routes/phpmyadmin.js';
 import adminerRoutes from './routes/adminer.js';
 
@@ -40,7 +39,6 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.use('/php', phpRoutes);
-app.use('/frankenphp', frankenphpRoutes);
 app.use('/phpmyadmin', phpmyadminRoutes);
 app.use('/adminer', adminerRoutes);
 

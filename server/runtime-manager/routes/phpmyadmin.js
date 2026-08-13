@@ -46,8 +46,7 @@ async function runViaSudo(scriptPath, timeout, sudoErrorLabel) {
 
 // Odczyt statusu (czy PHP 8.3 jest zainstalowany, czy phpMyAdmin jest
 // zainstalowany) NIE wymaga sudo - `rpm -q` i sprawdzenie istnienia
-// katalogu to odczyt, nie zmiana stanu systemu, tak samo jak sprawdzenie
-// `frankenphp version` w routes/frankenphp.js.
+// katalogu to odczyt, nie zmiana stanu systemu.
 async function getStatus() {
   let php83Installed = false;
   try {
