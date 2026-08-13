@@ -233,10 +233,11 @@ async function refreshDynamicNav() {
   // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
   // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
   // 'mail' wykluczone jak 'php-fpm' - to tylko trigger instalacji
-  // (kafelek "MAIL SERVER"), realne kontrolki (Postfix/Dovecot, JUZ
-  // widoczne tu normalnie po instalacji, bez wykluczenia) zyja w
-  // dedykowanej zakladce Poczta (renderMailTab).
-  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'mail');
+  // (kafelek "MAIL SERVER"). 'postfix'/'dovecot' rowniez wykluczone -
+  // ich kontrolki (Start/Stop/Restart) zyja WYLACZNIE w dedykowanej
+  // zakladce Poczta (renderMailTab), zeby nie dublowac tego samego
+  // sterowania w dwoch miejscach (ten sam powod co przy 'mail').
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'mail' && s.key !== 'postfix' && s.key !== 'dovecot');
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
@@ -2191,7 +2192,7 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    const installed = services.filter((s) => s.found && s.key !== 'php-fpm');
+    const installed = services.filter((s) => s.found && s.key !== 'php-fpm' && s.key !== 'postfix' && s.key !== 'dovecot');
     if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;

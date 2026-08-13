@@ -34,10 +34,13 @@ const SERVICE_REGISTRY = [
   // realna, kontrolowalna usluga per klucz).
   { key: 'mail', unitCandidates: ['postfix.service'], installable: { custom: true } },
   // Prawdziwe, niezalezne uslugi - BEZ 'installable' (instalowane razem
-  // przez kafelek 'mail' powyzej, nie osobno) - pojawiaja sie w ogolnej
-  // liscie Uslug automatycznie po instalacji, jak 'caddy'/'cron', na
-  // wypadek gdyby ktos wolal ogolny mechanizm zamiast dedykowanych
-  // kafelkow w zakladce Poczta.
+  // przez kafelek 'mail' powyzej, nie osobno). Status ('found'/
+  // ActiveState/...) dalej idzie z tych samych wpisow (GET /services),
+  // ale UI (web/app.js) celowo wyklucza 'postfix'/'dovecot' zarowno z
+  // paska nawigacji (refreshDynamicNav) jak i z ogolnej siatki Uslug
+  // (renderServicesTab) - ich jedyne miejsce sterowania to dedykowane
+  // kafelki w zakladce Poczta (renderMailTab), zeby nie dublowac tych
+  // samych przyciskow Start/Stop/Restart w dwoch miejscach.
   { key: 'postfix', unitCandidates: ['postfix.service'] },
   { key: 'dovecot', unitCandidates: ['dovecot.service'] }
 ];
