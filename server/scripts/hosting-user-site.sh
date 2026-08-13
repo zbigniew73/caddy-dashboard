@@ -130,6 +130,8 @@ case "$ACTION" in
       TARGET_FILE="$DISABLED_FILE"
     fi
 
+    USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
+
     # Katalogi na tresc strony MUSZA istniec ZANIM Caddy dostanie nowy
     # config - `systemctl reload` faktycznie laduje config do dzialajacej
     # instancji (w odroznieniu od statycznego `caddy validate` ponizej).
@@ -161,8 +163,24 @@ case "$ACTION" in
     chown caddy:caddy "$LOG_FILE"
     chmod 0644 "$LOG_FILE"
 
+    # Log NIE jest kopiowany do ~/logs (jeden zapisujacy - Caddy - to
+    # jedyne bezpieczne zrodlo prawdy), tylko DOWIAZANY symlinkiem, zeby
+    # user mial go pod reka bez grzebania w /var/log/caddy. Plik docelowy
+    # jest juz 0644 caddy:caddy (wyzej) - "other" (czyli user) ma prawo
+    # odczytu, wiec symlink dziala BEZ zadnej zmiany uprawnien na ~/logs
+    # (zostaje 0700, patrz hosting-account-create.sh) - kernel przy
+    # odczycie przez symlink sprawdza uprawnienia CELU, nie samego
+    # dowiazania. Odswiezane przy KAZDYM apply (nie tylko IS_NEW), zeby
+    # przetrwalo np. reczne usuniecie przez usera. Pomijane jesli ~/logs
+    # jeszcze nie istnieje (konto sprzed tej poprawki, zanim /etc/skel
+    # zaczal go zakladac) - naprawi sie samo przy kolejnym apply, gdy
+    # katalog juz bedzie.
+    USER_LOGS_DIR="${USER_HOME}/logs"
+    if [ -d "$USER_LOGS_DIR" ]; then
+      ln -sf "$LOG_FILE" "${USER_LOGS_DIR}/${DOMAIN}.log"
+    fi
+
     if [ "$IS_NEW" = "1" ]; then
-      USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
       DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
       mkdir -p "${DOMAIN_DIR}/public"
       chown "${USERNAME}:${USERNAME}" "$DOMAIN_DIR"
