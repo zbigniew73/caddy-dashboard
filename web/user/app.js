@@ -1748,14 +1748,14 @@ function siteRedirectRadios(name, selected) {
 // REVERSE PROXY pole na port + podpowiedz pod spodem (jedyny szablon poza
 // HTML, ktory realnie dziala - patrz buildSiteBlock w
 // hostingUserSites.js: PHP/WORDPRESS sa nadal szkieletem).
-function siteTemplateRadios(name, selected, phpVersions) {
+function siteTemplateRadios(name, selected, phpVersions, frankenphpPhpVersion) {
   const versionOptions = phpVersions.length
     ? phpVersions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')
     : `<option value="">-</option>`;
 
   return ['html', 'php', 'wordpress', 'reverseproxy', 'frankenphp'].map((key) => {
     let extra = '';
-    if (key === 'php' || key === 'wordpress' || key === 'frankenphp') {
+    if (key === 'php' || key === 'wordpress') {
       extra = `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>`;
       if (key === 'wordpress') {
         extra += `
@@ -1766,21 +1766,31 @@ function siteTemplateRadios(name, selected, phpVersions) {
           </select>
         `;
       }
-      if (key === 'frankenphp') {
-        extra += `
+    } else if (key === 'reverseproxy') {
+      extra = `<input type="number" name="${name}-proxyport-${key}" min="1" max="65535" placeholder="${t('sites.template_reverseproxy_port_placeholder')}" style="width:110px;">`;
+    } else if (key === 'frankenphp') {
+      // W odroznieniu od php/wordpress (pelna lista wersji PHP-FPM) -
+      // FrankenPHP to JEDNA, wspoldzielona binarka z JEDNA wersja PHP-ZTS
+      // wbudowana na stale (wybor admina przy instalacji) - composer/
+      // artisan MUSZA dzialac pod TA SAMA wersja, ktora faktycznie serwuje
+      // strone, wiec zero wyboru - tylko autodetekcja (patrz GET
+      // /frankenphp-php-version) i jasny blad, jesli niedostepna.
+      extra = frankenphpPhpVersion?.available
+        ? `
+          <span style="font-size:13px;">PHP ${escapeHtml(frankenphpPhpVersion.phpVersion.version)}</span>
+          <input type="hidden" name="${name}-phpversion-frankenphp" value="${escapeHtml(frankenphpPhpVersion.phpVersion.id)}">
           <select name="${name}-framework" style="margin-left:8px;">
             <option value="laravel">${t('sites.frankenphp_laravel')}</option>
             <option value="symfony">${t('sites.frankenphp_symfony')}</option>
           </select>
-        `;
-      }
-    } else if (key === 'reverseproxy') {
-      extra = `<input type="number" name="${name}-proxyport-${key}" min="1" max="65535" placeholder="${t('sites.template_reverseproxy_port_placeholder')}" style="width:110px;">`;
+        `
+        : `<span style="color:var(--muted);font-size:12px;">${t('sites.frankenphp_not_available')}</span>`;
     }
+    const radioDisabled = key === 'frankenphp' && !frankenphpPhpVersion?.available;
     return `
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:normal;">
         <span style="display:flex;align-items:center;gap:6px;">
-          <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''}>
+          <input type="radio" name="${name}" value="${key}" ${selected === key ? 'checked' : ''} ${radioDisabled ? 'disabled' : ''}>
           ${SITE_TEMPLATE_LABELS[key]()}
         </span>
         ${extra}
@@ -1955,7 +1965,7 @@ function siteRow(item) {
   `;
 }
 
-function sitesManageCardHtml(data, phpVersions) {
+function sitesManageCardHtml(data, phpVersions, frankenphpPhpVersion) {
   const { items, maxDomains } = data;
   const used = items.length;
   const hasLimit = typeof maxDomains === 'number' && maxDomains > 0;
@@ -1976,7 +1986,7 @@ function sitesManageCardHtml(data, phpVersions) {
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
-        <div style="display:flex;flex-direction:column;gap:8px;">${siteTemplateRadios('site-new-template', 'html', phpVersions)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">${siteTemplateRadios('site-new-template', 'html', phpVersions, frankenphpPhpVersion)}</div>
       </div>
       <div><button type="button" id="site-create-btn">${t('sites.add_button')}</button></div>
     </div>
@@ -2021,12 +2031,12 @@ function sitesListCardHtml(data) {
   `;
 }
 
-function renderSitesSection(data, phpVersions) {
+function renderSitesSection(data, phpVersions, frankenphpPhpVersion) {
   const editingItem = siteEditingId ? data.items.find((i) => i.id === siteEditingId) : null;
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${sitesManageCardHtml(data, phpVersions)}
+        ${sitesManageCardHtml(data, phpVersions, frankenphpPhpVersion)}
       </div>
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         ${sitesListCardHtml(data)}
@@ -2182,9 +2192,14 @@ function wireSitesSection(content) {
       const domainInput = document.getElementById('site-new-domain');
       const templateSelected = content.querySelector('input[name="site-new-template"]:checked');
       const templateValue = templateSelected ? templateSelected.value : 'html';
-      const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress' || templateValue === 'frankenphp')
+      const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress')
         ? content.querySelector(`select[name="site-new-template-phpversion-${templateValue}"]`)
-        : null;
+        // frankenphp: autodetekowana wersja - ukryty input, nie select
+        // (patrz siteTemplateRadios), ale ten sam name, wiec formularz
+        // czyta ja identycznie.
+        : templateValue === 'frankenphp'
+          ? content.querySelector('input[name="site-new-template-phpversion-frankenphp"]')
+          : null;
       const wpInstallSelect = templateValue === 'wordpress'
         ? content.querySelector('select[name="site-new-template-wpinstall"]')
         : null;
@@ -2229,11 +2244,12 @@ async function refreshSitesTab(content) {
     // (/php-versions, juz {id, version}), NIE /cron/php-paths (to inny,
     // niezalezny mechanizm dla zakladki Cron - zostaje bez zmian, wlasny
     // cronPhpPathsCache).
-    const [data, phpVersions] = await Promise.all([
+    const [data, phpVersions, frankenphpPhpVersion] = await Promise.all([
       api('GET', '/sites'),
-      api('GET', '/php-versions')
+      api('GET', '/php-versions'),
+      api('GET', '/frankenphp-php-version').catch(() => ({ available: false, phpVersion: null }))
     ]);
-    content.innerHTML = renderSitesSection(data, phpVersions);
+    content.innerHTML = renderSitesSection(data, phpVersions, frankenphpPhpVersion);
     wireSitesSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

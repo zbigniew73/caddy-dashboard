@@ -107,6 +107,7 @@
   "sites.frankenphp_laravel": "Laravel",
   "sites.frankenphp_symfony": "Symfony",
   "sites.template_frankenphp_hint": "A ready Laravel or Symfony app in Worker Mode (the app is loaded once into RAM and serves subsequent requests without restarting) - the panel installs the framework via Composer and runs it as its own service. Creation can take up to a minute.",
+  "sites.frankenphp_not_available": "FrankenPHP isn't installed, or a matching PHP CLI version is missing - contact your Administrator.",
   "sites.creating_frankenphp": "Installing the app (Composer) - this can take up to a minute...",
   "sites.wp_install_none": "None",
   "sites.wp_install_en": "WordPress EN",
