@@ -25,6 +25,16 @@ VERSION="${1:-}"
 
 STREAM="static-${VERSION}"
 
+# Reset PRZED enable - modul dnf dopuszcza TYLKO JEDEN wlaczony strumien
+# naraz ("php-zts:static-8.4" i "php-zts:static-8.5" wzajemnie sie
+# wykluczaja) - bez resetu, wlaczenie innego strumienia niz juz wlaczony
+# konczy sie bledem konfliktu. Reset jest bezpieczny/idempotentny nawet
+# przy PIERWSZEJ instalacji (nic jeszcze nie jest wlaczone) - to jedyny
+# udokumentowany sposob PRZELACZENIA strumienia (nie da sie "dopisac"
+# drugiego obok pierwszego).
+dnf module reset -y php-zts \
+  || err "Reset modulu php-zts nie powiodl sie."
+
 dnf module enable -y "php-zts:${STREAM}" \
   || err "Wlaczenie modulu php-zts:${STREAM} nie powiodlo sie."
 

@@ -483,23 +483,19 @@ function wireInstallTile(key) {
   };
 }
 
+// W odroznieniu od PHP-FPM/Redis/MariaDB itp. (gdzie "zainstalowano" =
+// koniec historii, kafelek staje sie tylko-informacyjny), FrankenPHP MA
+// realny, uzasadniony powod, zeby pozwolic zmienic wersje PO instalacji:
+// to JEDNA, wspoldzielona binarka (server/services/systemServices.js -
+// "wersja ZTS PHP jest wyborem PRZY instalacji, nie osobnym runtime per
+// wersja"), wiec selektor strumieni musi zostac widoczny takze w stanie
+// "zainstalowano", z jasnym ostrzezeniem o skutkach przelaczenia (patrz
+// install.frankenphp.switch_warning) - strony Symfony w panelu klienta
+// wywoluja TA SAMA, systemowa binarke bezposrednio
+// (hosting-user-frankenphp-site.sh: `frankenphp run --config ...`).
 function frankenphpInstallTileHtml(status, avail) {
   const name = t('services.frankenphp.name');
   const description = t('install.frankenphp.description');
-
-  if (status.installed) {
-    return `
-      <div class="system-info-card" style="max-width:560px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
-          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
-          <span class="status-badge active">${t('install.installed_badge')}</span>
-        </div>
-        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
-        <p style="color:var(--muted);font-size:12px;margin-top:10px;font-family:monospace;">${escapeHtml(status.version || '')}</p>
-        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.frankenphp.installed_hint')}</p>
-      </div>
-    `;
-  }
 
   const versions = avail?.versions || [];
   const selectable = versions.filter((v) => !v.enabled);
@@ -514,20 +510,30 @@ function frankenphpInstallTileHtml(status, avail) {
       `).join('')
     : `<p style="color:var(--muted);font-size:13px;">${t('install.frankenphp.no_versions')}</p>`;
 
+  const headerHtml = status.installed ? `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+      <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+      <span class="status-badge active">${t('install.installed_badge')}</span>
+    </div>
+    <p style="color:var(--muted);font-size:12px;font-family:monospace;margin:0 0 12px;">${escapeHtml(status.version || '')}</p>
+  ` : `<div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>`;
+
   return `
     <div class="system-info-card" style="max-width:560px;">
-      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      ${headerHtml}
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+      ${status.installed ? `<p style="color:var(--warning);font-size:12px;line-height:1.5;margin:0 0 16px;">${t('install.frankenphp.switch_warning')}</p>` : ''}
 
       <div style="margin-bottom:14px;">${versionList}</div>
 
-      ${versions.length ? `<button type="button" id="frankenphp-install-btn">${t('install.install_button')}</button>` : ''}
+      ${versions.length ? `<button type="button" id="frankenphp-install-btn">${status.installed ? t('install.frankenphp.switch_button') : t('install.install_button')}</button>` : ''}
       <div class="action-msg" id="frankenphp-install-msg"></div>
+      ${status.installed ? `<p style="color:var(--muted);font-size:12px;margin-top:14px;">${t('install.frankenphp.installed_hint')}</p>` : ''}
     </div>
   `;
 }
 
-function wireFrankenphpInstallTile() {
+function wireFrankenphpInstallTile(alreadyInstalled) {
   const btn = document.getElementById('frankenphp-install-btn');
   if (!btn) return;
   const msgEl = document.getElementById('frankenphp-install-msg');
@@ -536,16 +542,18 @@ function wireFrankenphpInstallTile() {
     const selected = document.querySelector('input[name="frankenphp-version"]:checked');
     if (!selected) return;
     const version = selected.value;
-    if (!window.confirm(t('install.frankenphp.confirm_install', { version }))) return;
+    const confirmKey = alreadyInstalled ? 'install.frankenphp.confirm_switch' : 'install.frankenphp.confirm_install';
+    if (!window.confirm(t(confirmKey, { version }))) return;
 
     btn.disabled = true;
     msgEl.textContent = t('install.installing');
     msgEl.className = 'action-msg';
     try {
       await api('POST', `/frankenphp/${version}/install`);
-      const status = await api('GET', '/frankenphp');
-      document.getElementById('content').innerHTML = frankenphpInstallTileHtml(status, null);
+      const [status, avail] = await Promise.all([api('GET', '/frankenphp'), api('GET', '/frankenphp/available')]);
+      document.getElementById('content').innerHTML = frankenphpInstallTileHtml(status, avail);
       applyTranslations();
+      wireFrankenphpInstallTile(status.installed);
       const successEl = document.getElementById('frankenphp-install-msg');
       if (successEl) {
         successEl.textContent = t('install.install_success');
@@ -1475,10 +1483,13 @@ async function renderInstallDetailTab(key, content) {
     }
     if (key === 'frankenphp') {
       const status = await api('GET', '/frankenphp');
-      const avail = status.installed ? null : await api('GET', '/frankenphp/available');
+      // Zawsze pobieramy dostepne strumienie, nawet gdy juz zainstalowano -
+      // selektor wersji (i mozliwosc przelaczenia) jest teraz widoczny w
+      // OBU stanach, patrz frankenphpInstallTileHtml.
+      const avail = await api('GET', '/frankenphp/available');
       content.innerHTML = frankenphpInstallTileHtml(status, avail);
       applyTranslations();
-      wireFrankenphpInstallTile();
+      wireFrankenphpInstallTile(status.installed);
       return;
     }
     if (key === 'phpmyadmin') {
