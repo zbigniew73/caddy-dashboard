@@ -84,11 +84,18 @@ case "$ACTION" in
     esac
     [ -e "$APP_DIR" ] && err "Aplikacja '${SLUG}' juz istnieje."
 
+    # PACKAGES jako tablica (nie string) - "uvicorn[standard]" musi
+    # dotrzec do pip jako JEDEN argv, bez otaczajacych cudzyslowow. String
+    # ze "wbudowanymi" cudzyslowami + unquoted $PACKAGES (word-splitting)
+    # NIE dziala - bash dzieli tylko po bialych znakach, cudzyslowy w
+    # srodku stringa zostaja doslownymi znakami i leca do pip, ktory je
+    # odrzuca ("Expected package name..."). Tablica + "${PACKAGES[@]}"
+    # przekazuje kazdy pakiet jako osobny, nietkniety argv.
     case "$FRAMEWORK" in
-      django) PACKAGES="django gunicorn" ;;
-      flask) PACKAGES="flask gunicorn" ;;
-      fastapi) PACKAGES='fastapi "uvicorn[standard]"' ;;
-      manual) PACKAGES="" ;;
+      django) PACKAGES=(django gunicorn) ;;
+      flask) PACKAGES=(flask gunicorn) ;;
+      fastapi) PACKAGES=(fastapi "uvicorn[standard]") ;;
+      manual) PACKAGES=() ;;
     esac
 
     runuser -u "$USERNAME" -- mkdir -p "$APP_DIR" || err "Nie udalo sie utworzyc ${APP_DIR}."
@@ -102,11 +109,10 @@ case "$ACTION" in
       rm -rf "$APP_DIR"
       err "Aktualizacja pip w venv nie powiodla sie."
     fi
-    if [ -n "$PACKAGES" ]; then
-      # shellcheck disable=SC2086
-      if ! runuser -u "$USERNAME" -- "${VENV_DIR}/bin/pip" install $PACKAGES; then
+    if [ "${#PACKAGES[@]}" -gt 0 ]; then
+      if ! runuser -u "$USERNAME" -- "${VENV_DIR}/bin/pip" install "${PACKAGES[@]}"; then
         rm -rf "$APP_DIR"
-        err "Instalacja pakietow (${FRAMEWORK}: ${PACKAGES}) nie powiodla sie."
+        err "Instalacja pakietow (${FRAMEWORK}: ${PACKAGES[*]}) nie powiodla sie."
       fi
     fi
 
