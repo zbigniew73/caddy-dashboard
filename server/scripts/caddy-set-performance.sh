@@ -26,6 +26,30 @@ if [ "${1:-}" = "get" ]; then
   exit 0
 fi
 
+# get-sites: zrzuca zawartosc wszystkich prawdziwych plikow strony pod
+# /etc/caddy/sites (wlaczajac .caddy.disabled - zatrzymana strona to
+# nadal "strona", ten sam wzorzec co hosting-account-sites-count.sh),
+# pomijajac default.caddy (fallback dla nieskonfigurowanych domen, nie
+# jest "strona" w sensie liczonym przez kafelek). Uzywane przez
+# getSiteCount() w caddyPerformance.js do policzenia PRAWDZIWEJ liczby
+# stron - glowny Caddyfile ma tylko `import /etc/caddy/sites/*.caddy`
+# (patrz install.sh), wiec bez tej akcji countSiteBlocks() nie widzialby
+# nic z tego katalogu. Panel dziala jako osobny user serwisowy (nie w
+# grupie caddy), wiec nie ma prawa czytac tego katalogu bezposrednio -
+# stad przez sudo, tak samo jak hosting-account-sites-count.sh.
+if [ "${1:-}" = "get-sites" ]; then
+  SITES_DIR="/etc/caddy/sites"
+  if [ -d "$SITES_DIR" ]; then
+    find "$SITES_DIR" -maxdepth 1 -type f \( -name '*.caddy' -o -name '*.caddy.disabled' \) \
+      ! -name 'default.caddy' ! -name 'default.caddy.disabled' -print0 \
+      | while IFS= read -r -d '' f; do
+          cat "$f"
+          echo
+        done
+  fi
+  exit 0
+fi
+
 NEW_BLOCK="$(cat)"
 
 if [ -z "$NEW_BLOCK" ]; then

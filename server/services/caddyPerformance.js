@@ -62,6 +62,10 @@ function readCaddyfile() {
   return sudoScript(['get']);
 }
 
+function readSitesFiles() {
+  return sudoScript(['get-sites']);
+}
+
 function extractBlock(content) {
   const startIdx = content.indexOf(MARK_START);
   const endIdx = content.indexOf(MARK_END);
@@ -86,9 +90,17 @@ function countSiteBlocks(content) {
   return siteCount;
 }
 
+// Glowny Caddyfile ma na tym projekcie WYLACZNIE `import
+// /etc/caddy/sites/*.caddy` (patrz install.sh) - zaden top-level blok w
+// nim samym nie jest prawdziwa strona (poza rzadkim recznym wpisem admina
+// wprost do pliku). Prawdziwe strony (hostingowe konta + cokolwiek innego
+// wrzuconego do tego katalogu) zyja w /etc/caddy/sites/*.caddy, importowane,
+// wiec licza sie osobno - stad DWA zrodla, nie jedno, zeby kafelek "Wszystkie
+// Strony" pokazywal prawdziwa sume, a nie tylko to, co przypadkiem siedzi
+// inline w glownym pliku.
 async function getSiteCount() {
-  const content = await readCaddyfile();
-  return countSiteBlocks(content);
+  const [mainContent, sitesContent] = await Promise.all([readCaddyfile(), readSitesFiles()]);
+  return countSiteBlocks(mainContent) + countSiteBlocks(sitesContent);
 }
 
 async function getStatus() {
