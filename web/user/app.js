@@ -222,10 +222,9 @@ function renderDashboard(content) {
 
 // Szkielet zakladek "na razie tylko szkielet" - jeden rzad, dwa rowne
 // klocki (ten sam wzorzec co Witaj+Info na Dashboardzie), bez tresci - do
-// wypelnienia w kolejnych krokach. Pusty teraz (Backup, ostatni szkielet,
-// dostal realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
+// wypelnienia w kolejnych krokach. Pusty teraz (Backup i Python dostaly
+// realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
 const PLACEHOLDER_TABS = {
-  python: 'nav.python',
   node: 'nav.node'
 };
 
@@ -930,6 +929,196 @@ async function refreshRedisTab(content) {
     const status = await api('GET', '/redis');
     content.innerHTML = renderRedisSection(status);
     wireRedisSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+const PYTHON_FRAMEWORKS = ['django', 'flask', 'fastapi'];
+
+function pythonManageCardHtml(status, versions) {
+  const noVersionsHtml = versions.length === 0
+    ? `<div class="empty-state">${t('python.no_versions_hint')}</div>`
+    : '';
+
+  const selectHtml = versions.length > 0 ? `
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_version')}</label>
+      <select id="python-version-select">
+        ${versions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')}
+      </select>
+    </div>
+    <button type="button" id="python-create-btn" data-exists="${status.exists ? '1' : '0'}">${t('python.create_venv_button')}</button>
+  ` : '';
+
+  const frameworksHtml = status.exists ? `
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${PYTHON_FRAMEWORKS.map((fw) => {
+        const installed = status.frameworks.includes(fw);
+        return `
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span>${t(`python.framework_${fw}`)}</span>
+            ${installed
+              ? `<span class="status-badge active">${t('python.installed_badge')}</span>`
+              : `<button type="button" class="secondary" id="python-install-${fw}-btn">${t('python.install_button')}</button>`}
+          </div>
+        `;
+      }).join('')}
+    </div>
+    <button type="button" class="danger" id="python-delete-btn" style="margin-top:16px;">${t('python.delete_venv_button')}</button>
+  ` : '';
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('python.manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('python.manage_description')}</p>
+    ${noVersionsHtml}
+    ${selectHtml}
+    ${frameworksHtml}
+    <div class="action-msg" id="python-msg"></div>
+  `;
+}
+
+function pythonStatsCardHtml(status, portInfo) {
+  const statusBadge = `<span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('python.status_exists') : t('python.status_not_exists')}</span>`;
+
+  const versionRow = status.exists ? `
+    <div class="info-grid" style="margin-top:10px;">
+      <div class="info-label">${t('python.venv_python_version_label')}</div><div class="info-value">${escapeHtml(status.pythonVersion || '-')}</div>
+    </div>
+  ` : '';
+
+  const frameworksText = status.exists && status.frameworks.length > 0
+    ? status.frameworks.map((fw) => t(`python.framework_${fw}`)).join(', ')
+    : t('python.none_installed');
+
+  const portValueHtml = portInfo
+    ? `${portInfo.port} <span class="status-badge ${portInfo.free ? 'active' : 'inactive'}">${portInfo.free ? t('python.port_free') : t('python.port_taken')}</span>`
+    : '-';
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('python.stats_title')} ${statusBadge}</h3>
+    ${versionRow}
+    <div class="info-grid" style="margin-top:10px;">
+      <div class="info-label">${t('python.installed_frameworks_label')}</div><div class="info-value">${escapeHtml(frameworksText)}</div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    <div style="font-size:13px;margin-bottom:8px;">${t('python.free_port_label')}: <strong>${portValueHtml}</strong></div>
+    <div style="display:flex;gap:8px;">
+      <input type="number" id="python-port-input" min="1" max="65535" placeholder="${portInfo ? escapeHtml(String(portInfo.port)) : ''}" style="flex:1;">
+      <button type="button" class="secondary" id="python-port-check-btn">${t('python.check_port_button')}</button>
+    </div>
+    <div class="action-msg" id="python-port-msg"></div>
+    <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('python.reverseproxy_hint')}</div>
+  `;
+}
+
+function renderPythonSection(status, versions, portInfo) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${pythonManageCardHtml(status, versions)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${pythonStatsCardHtml(status, portInfo)}
+      </div>
+    </div>
+  `;
+}
+
+function wirePythonSection(content) {
+  const msgEl = document.getElementById('python-msg');
+
+  const createBtn = document.getElementById('python-create-btn');
+  if (createBtn) {
+    createBtn.onclick = async () => {
+      if (createBtn.dataset.exists === '1' && !window.confirm(t('python.confirm_recreate_venv'))) return;
+      const pythonId = document.getElementById('python-version-select').value;
+      createBtn.disabled = true;
+      msgEl.textContent = t('python.creating_venv');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/python/venv', { pythonId });
+        await refreshPythonTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createBtn.disabled = false;
+      }
+    };
+  }
+
+  PYTHON_FRAMEWORKS.forEach((fw) => {
+    const installBtn = document.getElementById(`python-install-${fw}-btn`);
+    if (installBtn) {
+      installBtn.onclick = async () => {
+        installBtn.disabled = true;
+        msgEl.textContent = t('python.installing');
+        msgEl.className = 'action-msg';
+        try {
+          await api('POST', '/python/venv/install', { framework: fw });
+          await refreshPythonTab(content);
+        } catch (e) {
+          msgEl.textContent = e.message;
+          msgEl.className = 'action-msg error';
+          installBtn.disabled = false;
+        }
+      };
+    }
+  });
+
+  const deleteBtn = document.getElementById('python-delete-btn');
+  if (deleteBtn) {
+    deleteBtn.onclick = async () => {
+      if (!window.confirm(t('python.confirm_delete_venv'))) return;
+      deleteBtn.disabled = true;
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      try {
+        await api('DELETE', '/python/venv');
+        await refreshPythonTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        deleteBtn.disabled = false;
+      }
+    };
+  }
+
+  const portCheckBtn = document.getElementById('python-port-check-btn');
+  if (portCheckBtn) {
+    portCheckBtn.onclick = async () => {
+      const portInput = document.getElementById('python-port-input');
+      const portMsgEl = document.getElementById('python-port-msg');
+      const portValue = portInput.value.trim();
+      portCheckBtn.disabled = true;
+      portMsgEl.textContent = '';
+      portMsgEl.className = 'action-msg';
+      try {
+        const query = portValue ? `?port=${encodeURIComponent(portValue)}` : '';
+        const result = await api('GET', `/python/free-port${query}`);
+        portMsgEl.textContent = `${result.port}: ${result.free ? t('python.port_free') : t('python.port_taken')}`;
+        portMsgEl.className = `action-msg ${result.free ? 'success' : 'error'}`;
+      } catch (e) {
+        portMsgEl.textContent = e.message;
+        portMsgEl.className = 'action-msg error';
+      } finally {
+        portCheckBtn.disabled = false;
+      }
+    };
+  }
+}
+
+async function refreshPythonTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('python.loading')}</div>`;
+  try {
+    const [status, versions, portInfo] = await Promise.all([
+      api('GET', '/python'),
+      api('GET', '/python/versions'),
+      api('GET', '/python/free-port').catch(() => null)
+    ]);
+    content.innerHTML = renderPythonSection(status, versions, portInfo);
+    wirePythonSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
@@ -2081,6 +2270,8 @@ function renderTab() {
     refreshSitesTab(content);
   } else if (currentTab === 'backup') {
     refreshBackupTab(content);
+  } else if (currentTab === 'python') {
+    refreshPythonTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }

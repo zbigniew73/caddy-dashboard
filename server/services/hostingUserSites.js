@@ -188,6 +188,17 @@ function listSiteOwners() {
   return loadData().map((s) => ({ username: s.accountUsername, domain: s.domain }));
 }
 
+// Dla sprawdzania "wolnego portu" w zakladce Python (hostingUserPython.js)
+// - porty juz PRZYPISANE do jakiejkolwiek strony reverseproxy, DOWOLNEGO
+// konta - to jedyny rejestr portow w tym projekcie (jeden port na
+// strone, patrz validateProxyPort/buildSiteBlock wyzej), wiec ta funkcja
+// jest jedynym miejscem, ktore musi go czytac dla innych funkcji.
+function listUsedProxyPorts() {
+  return loadData()
+    .filter((s) => s.template === 'reverseproxy' && Number.isInteger(s.proxyPort))
+    .map((s) => s.proxyPort);
+}
+
 // Obie wersje domeny (apex i www) w JEDNYM site-blocku (adres to lista
 // hostow rozdzielona przecinkiem) - matcher named (@apex/@www) lapie
 // TYLKO niekanoniczna wersje i przekierowuje ja na kanoniczna, reszta
@@ -524,5 +535,5 @@ async function restartSitePhp(username, id) {
 
 export {
   listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners, restartSitePhp,
-  getSiteConfig, checkSiteConfig, updateSiteConfig, getSitePublicPath
+  getSiteConfig, checkSiteConfig, updateSiteConfig, getSitePublicPath, listUsedProxyPorts
 };

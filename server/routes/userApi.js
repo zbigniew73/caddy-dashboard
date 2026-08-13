@@ -8,6 +8,9 @@ import {
 } from '../services/hostingUserSites.js';
 import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
+import {
+  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort
+} from '../services/hostingUserPython.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 import {
   getRepoSettings, saveRepoSettings, listJobs, createJob, updateJob, deleteJob, runJobNow,
@@ -232,6 +235,56 @@ router.post('/redis/stop', async (req, res) => {
 router.post('/redis/test', async (req, res) => {
   try {
     res.json(await testOwnRedis(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/python/versions', async (req, res) => {
+  try {
+    res.json(listPythonVersions());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/python', async (req, res) => {
+  try {
+    res.json(await getVenvStatus(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/venv', async (req, res) => {
+  try {
+    const { pythonId } = req.body || {};
+    res.json(await createVenv(req.hostingUser, pythonId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/venv/install', async (req, res) => {
+  try {
+    const { framework } = req.body || {};
+    res.json(await installFramework(req.hostingUser, framework));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/python/venv', async (req, res) => {
+  try {
+    res.json(await deleteVenv(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/python/free-port', async (req, res) => {
+  try {
+    res.json(await findFreePort(req.query.port));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
