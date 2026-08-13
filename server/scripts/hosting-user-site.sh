@@ -429,6 +429,13 @@ PHP
 PHP
           chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/info.php"
           chmod 0644 "${DOMAIN_DIR}/public/info.php"
+        elif [ "$TEMPLATE" = "frankenphp" ]; then
+          # Bez placeholdera - `composer create-project` (nastepny krok,
+          # hosting-user-frankenphp-site.sh) wymaga PUSTEGO katalogu
+          # docelowego, wiec public/ musi zostac faktycznie puste (nie
+          # tylko bez placeholdera - ten skrypt tez usuwa sam katalog
+          # public/ tuz przed composerem, patrz tam).
+          :
         else
           cat > "${DOMAIN_DIR}/public/index.html" <<HTML
 <!doctype html>

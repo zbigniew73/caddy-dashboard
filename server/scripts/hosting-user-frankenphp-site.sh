@@ -107,6 +107,17 @@ case "$ACTION" in
       err "FrankenPHP nie jest zainstalowany na tym serwerze - zainstaluj go najpierw z panelu admina (Uslugi -> FrankenPHP)."
     fi
 
+    # `composer create-project` wymaga PUSTEGO katalogu docelowego -
+    # hosting-user-site.sh (apply, wywolane wczesniej) zaklada
+    # ${DOMAIN_DIR}/public dla KAZDEGO szablonu (bez placeholdera dla
+    # frankenphp, patrz tam), ale sam PUSTY katalog "public" w srodku
+    # DOMAIN_DIR nadal liczy sie jako "niepuste" dla composera - rmdir
+    # (nie rm -rf!) usuwa go TYLKO jesli faktycznie jest pusty, wiec to
+    # bezpieczne nawet gdyby ktos juz recznie cos tam wgral przez SSH
+    # (wtedy rmdir po prostu zawiedzie i create-project ponizej zglosi
+    # jasny blad "not empty" zamiast cichej utraty danych).
+    rmdir "${DOMAIN_DIR}/public" 2>/dev/null || true
+
     case "$FRAMEWORK" in
       laravel)
         if ! runuser -u "$USERNAME" -- env -C "$DOMAIN_DIR" "$COMPOSER_PATH" create-project laravel/laravel . --no-interaction; then
