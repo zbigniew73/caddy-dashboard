@@ -224,7 +224,10 @@ function renderDashboard(content) {
 // klocki (ten sam wzorzec co Witaj+Info na Dashboardzie), bez tresci - do
 // wypelnienia w kolejnych krokach. Pusty teraz (Backup, ostatni szkielet,
 // dostal realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
-const PLACEHOLDER_TABS = {};
+const PLACEHOLDER_TABS = {
+  python: 'nav.python',
+  node: 'nav.node'
+};
 
 function renderPlaceholderTab(content, titleKey) {
   content.innerHTML = `

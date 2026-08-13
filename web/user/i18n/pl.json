@@ -8,6 +8,8 @@
   "nav.cron": "Cron",
   "nav.ssh": "SSH",
   "nav.backup": "Backup",
+  "nav.python": "Python",
+  "nav.node": "Node",
   "nav.settings": "Ustawienia",
   "theme.light": "Jasny",
   "theme.dark": "Ciemny",
