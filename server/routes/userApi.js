@@ -3,9 +3,10 @@ import { getMustChangePassword, changeOwnPassword, getOwnAccount } from '../serv
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob, listPhpCliPaths } from '../services/hostingUserCron.js';
 import { listOwnDatabases, createDatabase, deleteDatabase } from '../services/hostingUserDatabases.js';
 import {
-  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite,
+  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, restartSitePhp,
   getSiteConfig, checkSiteConfig, updateSiteConfig
 } from '../services/hostingUserSites.js';
+import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 import {
@@ -87,6 +88,19 @@ router.get('/sites', async (req, res) => {
   }
 });
 
+// Zrodlo wersji PHP dla selektora w formularzu "Dodaj strone" - Runtime
+// Manager (osobny proces, patrz runtimeManagerClient.js), NIE
+// /cron/php-paths (to inny, mniej autorytatywny mechanizm - skan
+// wrapperow na dysku dla zakladki Cron, patrz listPhpCliPaths() w
+// hostingUserCron.js - zostaje bez zmian, osobna sprawa).
+router.get('/php-versions', async (req, res) => {
+  try {
+    res.json(await getInstalledPhp());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
 router.post('/sites', async (req, res) => {
   try {
     const { domain, redirectMode, template, phpVersion, proxyPort } = req.body || {};
@@ -142,6 +156,14 @@ router.post('/sites/:id/start', async (req, res) => {
 router.post('/sites/:id/stop', async (req, res) => {
   try {
     res.json(await toggleSite(req.hostingUser, req.params.id, false));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/sites/:id/php/restart', async (req, res) => {
+  try {
+    res.json(await restartSitePhp(req.hostingUser, req.params.id));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

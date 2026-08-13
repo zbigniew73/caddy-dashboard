@@ -1158,6 +1158,7 @@ function siteTemplateRadios(name, selected, phpVersions) {
         ${extra}
       </label>
       ${key === 'reverseproxy' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_reverseproxy_hint')}</p>` : ''}
+      ${(key === 'php' || key === 'wordpress') ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_php_pool_hint')}</p>` : ''}
     `;
   }).join('');
 }
@@ -1315,6 +1316,9 @@ function siteRow(item) {
         ${item.enabled
           ? `<button type="button" class="secondary" data-site-stop="${item.id}">${t('sites.stop')}</button>`
           : `<button type="button" class="secondary" data-site-start="${item.id}">${t('sites.start')}</button>`}
+        ${(item.template === 'php' || item.template === 'wordpress')
+          ? `<button type="button" class="secondary" data-site-php-restart="${item.id}">${t('sites.php_restart')}</button>`
+          : ''}
         <button type="button" class="danger" data-site-delete="${item.id}" data-site-domain="${escapeHtml(item.domain)}">${t('sites.delete')}</button>
       </td>
     </tr>
@@ -1527,6 +1531,21 @@ function wireSitesSection(content) {
     };
   });
 
+  content.querySelectorAll('[data-site-php-restart]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('sites.php_restart_confirm'))) return;
+      btn.disabled = true;
+      try {
+        await api('POST', `/sites/${btn.dataset.sitePhpRestart}/php/restart`);
+        window.alert(t('sites.php_restart_success'));
+      } catch (e) {
+        window.alert(e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+
   const createBtn = document.getElementById('site-create-btn');
   if (createBtn) {
     createBtn.onclick = async () => {
@@ -1562,26 +1581,17 @@ function wireSitesSection(content) {
   }
 }
 
-// Te same surowe sciezki co selektor PHP dla cron (/cron/php-paths,
-// /usr/local/bin/phpNN) - wystarczy wyciagnac numer wersji regexem,
-// zamiast dublowac osobny endpoint/wywolanie do Runtime Managera tylko
-// dla tej listy.
-function parsePhpVersionsFromPaths(paths) {
-  return (paths || [])
-    .map((p) => /php([0-9]{2})$/.exec(p))
-    .filter(Boolean)
-    .map((m) => ({ id: m[1], version: `${m[1][0]}.${m[1].slice(1)}` }));
-}
-
 async function refreshSitesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('sites.loading')}</div>`;
   try {
-    const [data, phpPaths] = await Promise.all([
+    // Wersje PHP dla selektora "Dodaj strone" - Runtime Manager
+    // (/php-versions, juz {id, version}), NIE /cron/php-paths (to inny,
+    // niezalezny mechanizm dla zakladki Cron - zostaje bez zmian, wlasny
+    // cronPhpPathsCache).
+    const [data, phpVersions] = await Promise.all([
       api('GET', '/sites'),
-      cronPhpPathsCache ? Promise.resolve(cronPhpPathsCache) : api('GET', '/cron/php-paths')
+      api('GET', '/php-versions')
     ]);
-    cronPhpPathsCache = phpPaths;
-    const phpVersions = parsePhpVersionsFromPaths(phpPaths);
     content.innerHTML = renderSitesSection(data, phpVersions);
     wireSitesSection(content);
   } catch (e) {

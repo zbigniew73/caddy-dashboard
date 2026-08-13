@@ -63,6 +63,16 @@ CADDYFILE="/etc/caddy/Caddyfile"
 ACTION="${1:-}"
 USERNAME="${2:-}"
 DOMAIN="${3:-}"
+# TEMPLATE tylko dla 'apply' (przy pierwszym utworzeniu decyduje, jaki
+# placeholder trafia do public/ - patrz nizej) - inne akcje go ignoruja,
+# argv jest jednak zawsze 3-argumentowe dla 'apply' (sudoers wymaga
+# spojnego ksztaltu argv per akcja). Ten sam fallback co
+# TEMPLATES.includes(template) ? template : 'html' w hostingUserSites.js.
+TEMPLATE="${4:-html}"
+case "$TEMPLATE" in
+  html|php|wordpress|reverseproxy) ;;
+  *) TEMPLATE="html" ;;
+esac
 
 if ! [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
   echo "BLAD: nieprawidlowa nazwa uzytkownika: '${USERNAME}'" >&2
@@ -196,14 +206,11 @@ case "$ACTION" in
       chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public"
       chmod 0755 "${DOMAIN_DIR}/public"
       if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
-        cat > "${DOMAIN_DIR}/public/index.html" <<HTML
-<!doctype html>
-<html lang="pl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${DOMAIN}</title>
-<style>
+        # Wspolny CSS (identyczny w index.html i index.php - jedna,
+        # samodzielna karta, bez zewnetrznych zaleznosci) - trzymany raz
+        # tutaj i wstrzykiwany do obu wariantow, zeby zmiana wygladu nie
+        # wymagala edycji w dwoch miejscach.
+        PLACEHOLDER_CSS='
   :root { color-scheme: light dark; }
   * { box-sizing: border-box; }
   body {
@@ -238,6 +245,10 @@ case "$ACTION" in
     border-radius: 999px;
     margin-bottom: 16px;
   }
+  .badge.warn {
+    color: #9a6700;
+    background: #fff3cd;
+  }
   h1 {
     font-size: 22px;
     line-height: 1.3;
@@ -265,11 +276,79 @@ case "$ACTION" in
     body { background: #0d1117; color: #e6edf3; }
     .card { background: #161b22; border-color: #30363d; box-shadow: none; }
     .badge { color: #3fb950; background: rgba(63, 185, 80, 0.15); }
+    .badge.warn { color: #d29922; background: rgba(210, 153, 34, 0.15); }
     p { color: #9198a1; }
     code { background: #21262d; color: #e6edf3; }
     hr { border-top-color: #30363d; }
   }
-</style>
+'
+
+        if [ "$TEMPLATE" = "php" ] || [ "$TEMPLATE" = "wordpress" ]; then
+          # PHP/WordPress: index.php (jak index.html, ale ujawnia zywa
+          # wersje PHP przez phpversion() - potwierdzenie, ze pool
+          # PHP-FPM faktycznie dziala) + info.php (phpinfo() - diagnostyka
+          # ustawien). Heredoc NIE jest cytowany (`<<PHP`, nie `<<'PHP'`),
+          # bo ${DOMAIN} (juz zwalidowany regexem wyzej) MA sie
+          # rozwinac - kazdy PHP-owy znak `$` jest wiec celowo
+          # eskejpowany (`\$`), zeby bash go NIE dotykal.
+          cat > "${DOMAIN_DIR}/public/index.php" <<PHP
+<?php \$__cddash_php_version = phpversion(); ?>
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${DOMAIN}</title>
+<style>${PLACEHOLDER_CSS}</style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">Strona utworzona</span>
+    <h1>${DOMAIN}</h1>
+    <p>Ta strona zostala wlasnie zalozona w panelu hostingowym i czeka na Twoje pliki. Dziala na PHP <strong><?php echo htmlspecialchars(\$__cddash_php_version); ?></strong>.</p>
+    <p class="path">Wgraj je przez SSH/SFTP do katalogu <code>~/domains/${DOMAIN}/public</code>.</p>
+    <hr>
+    <div lang="en">
+      <p>This site has just been created in the hosting panel and is waiting for your files. Running on PHP <strong><?php echo htmlspecialchars(\$__cddash_php_version); ?></strong>.</p>
+      <p class="path">Upload them via SSH/SFTP to the <code>~/domains/${DOMAIN}/public</code> directory.</p>
+    </div>
+  </div>
+</body>
+</html>
+PHP
+          chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/index.php"
+          chmod 0644 "${DOMAIN_DIR}/public/index.php"
+
+          cat > "${DOMAIN_DIR}/public/info.php" <<PHP
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>info.php - ${DOMAIN}</title>
+<style>${PLACEHOLDER_CSS}</style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge warn">Uwaga / Warning</span>
+    <p>Ta strona ujawnia szczegoly konfiguracji serwera (wersje, sciezki, zaladowane moduly). Usun ten plik po zakonczeniu diagnostyki.</p>
+    <p class="path">This page discloses server configuration details (versions, paths, loaded modules). Delete this file once you're done diagnosing.</p>
+  </div>
+  <?php phpinfo(); ?>
+</body>
+</html>
+PHP
+          chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/info.php"
+          chmod 0644 "${DOMAIN_DIR}/public/info.php"
+        else
+          cat > "${DOMAIN_DIR}/public/index.html" <<HTML
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${DOMAIN}</title>
+<style>${PLACEHOLDER_CSS}</style>
 </head>
 <body>
   <div class="card">
@@ -286,8 +365,9 @@ case "$ACTION" in
 </body>
 </html>
 HTML
-        chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/index.html"
-        chmod 0644 "${DOMAIN_DIR}/public/index.html"
+          chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/index.html"
+          chmod 0644 "${DOMAIN_DIR}/public/index.html"
+        fi
       fi
     fi
 

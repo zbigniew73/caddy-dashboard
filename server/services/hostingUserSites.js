@@ -8,6 +8,7 @@ import { listAccounts } from './hostingAccounts.js';
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../data');
 const DATA_PATH = path.join(DATA_DIR, 'hosting-sites.json');
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-site.sh');
+const POOL_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-php-pool-apply.sh');
 
 // Domena wpisywana jako "apex" (bez www.) dla dwoch trybow z przekierowaniem
 // (kierunek - ktora wersja jest kanoniczna - to osobne pole redirectMode,
@@ -22,22 +23,69 @@ const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../
 // recznie - jeden string, dwa jezyki).
 const DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 const REDIRECT_MODES = ['www-to-apex', 'apex-to-www', 'none'];
-// 'php' i 'wordpress' sa na razie SZKIELETEM - wybieralne w UI/API, ale
-// buildSiteBlock ponizej generuje dla nich dokladnie ten sam statyczny
-// blok co dla 'html' (brak jeszcze php_fastcgi/puli PHP-FPM per konto ani
-// instalatora WordPressa - to osobna, wieksza praca). 'reverseproxy' NIE
-// jest szkieletem - w pelni dziala (patrz buildSiteBlock) - to jeden,
-// generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel tylko
-// robi `reverse_proxy 127.0.0.1:<port>`, wlasny proces (Python/venv,
+// 'php' i 'wordpress' MAJA prawdziwy PHP-FPM za soba (dedykowany pool per
+// strona, patrz computePhpPoolSizing/buildSiteBlock/createSite nizej) -
+// jedyna roznica miedzy nimi to 'wordpress' NIE ma (jeszcze) wlasnego
+// instalatora WordPressa - user i tak wgrywa jego pliki sam przez
+// SSH/SFTP do juz-dzialajacego PHP, dokladnie jak przy 'php'. 'reverseproxy'
+// to jeden, generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel
+// tylko robi `reverse_proxy 127.0.0.1:<port>`, wlasny proces (Python/venv,
 // Node, cokolwiek) user uruchamia i utrzymuje sam przez SSH.
 const TEMPLATES = ['html', 'php', 'wordpress', 'reverseproxy'];
 // Dwucyfrowy identyfikator wersji PHP (np. "83") - ten sam format co
-// server/runtime-manager/routes/php.js. Tylko zapisywane przy tworzeniu
-// (dla PHP/WordPress) - jeszcze NIC z tego nie czyta (buildSiteBlock go
-// nie uzywa, patrz wyzej), to tez czesc szkieletu na przyszlosc. Zle
-// sformatowana/brakujaca wartosc NIE blokuje tworzenia strony - po prostu
-// zapisujemy null, bo pole i tak jeszcze niczego nie steruje.
+// server/runtime-manager/routes/php.js (i to, co zwraca
+// runtimeManagerClient.getInstalledPhp(), skad panel bierze liste
+// dostepnych wersji do wyboru - patrz GET /php-versions w userApi.js).
+// Zapisywane WYLACZNIE przy tworzeniu strony - nie istnieje przeplyw
+// "zmien wersje PHP pozniej" (wymagaloby przebudowy poola od zera, poza
+// zakresem na razie).
 const PHP_VERSION_RE = /^[0-9]{2}$/;
+
+// Wspolny katalog na sockety PHP-FPM wszystkich stron/kont (musi byc
+// IDENTYCZNY z RUN_DIR w hosting-user-php-pool-apply.sh - jeden string,
+// dwa jezyki, jak DOMAIN_RE wyzej). Multi-tenant (0755 root:root,
+// samo przejscie) - realny dostep do KONKRETNEGO socketu idzie przez
+// listen.owner/listen.group/listen.mode per plik poola, nie przez ten
+// katalog.
+const PHP_POOL_RUN_DIR = '/run/cd-hosting-php';
+
+// Pierwsze 12 hex-owych znakow UUID strony (bez myslnikow) - deterministyczny,
+// unikalny per strona identyfikator socketu/poola, zero dodatkowej
+// generacji (randomUUID() juz i tak jest jedynym zrodlem id kazdego
+// rekordu w tym projekcie). Przyklad: id "d59c0274-..." -> slug
+// "d59c0274dcb6".
+function sitePhpSlug(siteId) {
+  return siteId.replace(/-/g, '').slice(0, 12);
+}
+
+function sitePhpSocketPath(siteId, phpVersion) {
+  return `${PHP_POOL_RUN_DIR}/php-${sitePhpSlug(siteId)}-v${phpVersion}.sock`;
+}
+
+// Rozmiar poola PHP-FPM wyliczany Z LIMITU RAM PAKIETU konta (miekki,
+// konfiguracyjny sufit - pm.max_children x memory_limit - NIE twardy
+// limit cgroup/systemd-slice). Prawdziwy twardy limit per-konto (jak przy
+// Redis - Slice=user-<uid>.slice) jest tu NIEOSIAGALNY bez zlamania juz
+// istniejacego wzorca: wszystkie poole danej wersji PHP dziela JEDEN,
+// wspolny proces systemd (phpXX-php-fpm.service, patrz php-install.sh) -
+// przypisanie cgroup/slice dziala na poziomie CALEJ uslugi, nie
+// pojedynczego poola, wiec nie da sie przypisac wspoldzielonej uslugi do
+// slice'a JEDNEGO konta bez odejscia od modelu "jeden proces per wersja
+// PHP" juz uzywanego przez phpMyAdmin/Adminer. Stale ponizej to punkt
+// startowy do strojenia, nie objawienie.
+const PHP_POOL_RAM_FRACTION = 0.4;
+const PHP_WORKER_MB_ESTIMATE = 64;
+const PHP_POOL_MAX_CHILDREN_MIN = 2;
+const PHP_POOL_MAX_CHILDREN_MAX = 20;
+
+function computePhpPoolSizing(ramLimitMb) {
+  const budgetMb = Math.round((ramLimitMb || 512) * PHP_POOL_RAM_FRACTION);
+  const maxChildren = Math.min(
+    PHP_POOL_MAX_CHILDREN_MAX,
+    Math.max(PHP_POOL_MAX_CHILDREN_MIN, Math.floor(budgetMb / PHP_WORKER_MB_ESTIMATE))
+  );
+  return { maxChildren, memoryLimitMb: PHP_WORKER_MB_ESTIMATE };
+}
 
 function validateProxyPort(proxyPort) {
   const port = parseInt(proxyPort, 10);
@@ -132,19 +180,26 @@ function listSiteOwners() {
 // niezaleznie od kierunku; dla 'none' po prostu po tym, co user wpisal
 // (moze wiec byc "www.<domena>.log", jesli tak brzmiala domena).
 //
-// Jedyna czesc bloku zalezna od template: 'reverseproxy' dostaje
+// Czesc bloku zalezna od template: 'reverseproxy' dostaje
 // `reverse_proxy 127.0.0.1:<port>` zamiast `root/file_server` - zawsze
 // loopback-only (user NIE podaje calego hosta, tylko port), zeby nie dalo
-// sie przypadkiem wskazac na cos poza ta sama maszyna. PHP/WordPress sa
-// wciaz szkieletem (patrz TEMPLATES) - dostaja ten sam statyczny blok co
-// 'html'.
-function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort) {
+// sie przypadkiem wskazac na cos poza ta sama maszyna. 'php'/'wordpress'
+// dostaja `php_fastcgi unix/<socket>` MIEDZY `root` a `file_server` -
+// standardowa receptura Caddy (php_fastcgi samo dopasowuje *.php/index),
+// `file_server` ponizej wciaz obsluguje statyczne pliki (CSS/JS/obrazki)
+// bezposrednio, bez przechodzenia przez PHP. `phpSocketPath` musi byc
+// podany (non-null) dla tych dwoch szablonow - wywolujacy (createSite)
+// zaklada pool PRZED wywolaniem tej funkcji, zeby socket juz istnial, gdy
+// Caddy dostanie ten config.
+function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort, phpSocketPath) {
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
 
   const bodyDirectives = template === 'reverseproxy'
     ? `\treverse_proxy 127.0.0.1:${proxyPort}`
-    : `\troot * ${publicRoot}\n\tfile_server`;
+    : (template === 'php' || template === 'wordpress')
+      ? `\troot * ${publicRoot}\n\tphp_fastcgi unix/${phpSocketPath}\n\tfile_server`
+      : `\troot * ${publicRoot}\n\tfile_server`;
 
   if (redirectMode === 'none') {
     return `${domain} {
@@ -183,9 +238,16 @@ function sudoErrorMessage(stderr) {
   return stderr.trim() || null;
 }
 
-function runSiteScript(action, username, domain, stdinContent) {
+// `template` idzie na argv TYLKO dla akcji 'apply' (jedyna, ktora go
+// czyta - IS_NEW placeholder w hosting-user-site.sh) - inne akcje
+// (check/get/enable/disable/delete) maja niezmieniony, 2-argumentowy
+// ksztalt, zgodny z sudoers.
+function runSiteScript(action, username, domain, stdinContent, template) {
   return new Promise((resolve, reject) => {
-    const child = spawn('sudo', ['-n', SCRIPT_PATH, action, username, domain]);
+    const args = action === 'apply'
+      ? [SCRIPT_PATH, action, username, domain, template || 'html']
+      : [SCRIPT_PATH, action, username, domain];
+    const child = spawn('sudo', ['-n', ...args]);
     let stderr = '';
     child.stderr.on('data', (d) => { stderr += d; });
     child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
@@ -195,6 +257,27 @@ function runSiteScript(action, username, domain, stdinContent) {
       reject(Object.assign(new Error(message || `exit code ${code}`), { status: message ? 403 : 500 }));
     });
     if (stdinContent !== undefined) child.stdin.write(stdinContent);
+    child.stdin.end();
+  });
+}
+
+// hosting-user-php-pool-apply.sh - zaklada/usuwa/przeladowuje dedykowany
+// pool PHP-FPM jednej strony (patrz komentarz przy PHP_POOL_RAM_FRACTION
+// wyzej). Zero stdin - wszystkie wartosci (w tym rozmiar poola) sa juz
+// policzone przez wywolujacego i ida na argv, nic tu nie jest sekretem.
+function runPoolScript(action, ...args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('sudo', ['-n', POOL_SCRIPT_PATH, action, ...args.map(String)]);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
+    child.on('close', (code) => {
+      if (code === 0) { resolve(stdout); return; }
+      const message = sudoErrorMessage(stderr);
+      reject(Object.assign(new Error(message || `exit code ${code}`), { status: message ? 403 : 500 }));
+    });
     child.stdin.end();
   });
 }
@@ -265,11 +348,23 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     throw badRequest('Ta domena jest juz zajeta.');
   }
 
-  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue);
-  await runSiteScript('apply', username, domainValue, content);
+  // id musi istniec PRZED buildSiteBlock - dla php/wordpress jest
+  // podstawa slugu socketu (sitePhpSlug), a pool (i socket) musi zostac
+  // zalozony ZANIM Caddy dostanie config, ktory sie do niego odwoluje.
+  const id = randomUUID();
+  let phpSocketPath = null;
+  if ((templateValue === 'php' || templateValue === 'wordpress') && phpVersionValue) {
+    const { maxChildren, memoryLimitMb } = computePhpPoolSizing(account.ramLimitMb);
+    const slug = sitePhpSlug(id);
+    await runPoolScript('apply', username, domainValue, phpVersionValue, slug, maxChildren, memoryLimitMb);
+    phpSocketPath = sitePhpSocketPath(id, phpVersionValue);
+  }
+
+  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath);
+  await runSiteScript('apply', username, domainValue, content, templateValue);
 
   const record = {
-    id: randomUUID(),
+    id,
     accountUsername: username,
     domain: domainValue,
     redirectMode: redirectValue,
@@ -306,8 +401,11 @@ async function updateSiteRedirect(username, id, redirectMode) {
     throw badRequest('Ta strona ma domene zaczynajaca sie od "www." (tryb "Bez przekierowania") - nie mozna dla niej wlaczyc przekierowania. Usun strone i zaloz ja ponownie z domena bez "www.".');
   }
 
-  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort);
-  await runSiteScript('apply', username, record.domain, content);
+  const phpSocketPath = (record.template === 'php' || record.template === 'wordpress') && record.phpVersion
+    ? sitePhpSocketPath(record.id, record.phpVersion)
+    : null;
+  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort, phpSocketPath);
+  await runSiteScript('apply', username, record.domain, content, record.template);
 
   record.redirectMode = redirectValue;
   saveData(all);
@@ -345,7 +443,7 @@ async function updateSiteConfig(username, id, content) {
   if (typeof content !== 'string' || !content.trim()) {
     throw badRequest('Pusta tresc konfiguracji.');
   }
-  await runSiteScript('apply', username, record.domain, content);
+  await runSiteScript('apply', username, record.domain, content, record.template);
   return toPublic(record);
 }
 
@@ -364,12 +462,37 @@ async function deleteSite(username, id) {
   const all = loadData();
   const record = findOwnRecord(all, username, id);
 
+  // Kolejnosc odwrotna do createSite: Caddy MUSI przestac kierowac na
+  // pool ZANIM ten pool zniknie (patrz komentarz przy buildSiteBlock).
   await runSiteScript('delete', username, record.domain);
+
+  if ((record.template === 'php' || record.template === 'wordpress') && record.phpVersion) {
+    await runPoolScript('remove', username, record.phpVersion, sitePhpSlug(record.id));
+  }
 
   saveData(all.filter((s) => s.id !== id));
 }
 
+// Przycisk "Restart PHP" w panelu klienta (tylko strony php/wordpress).
+// UCZCIWIE: to `systemctl reload phpXX-php-fpm` (patrz runPoolScript
+// 'reload' -> hosting-user-php-pool-apply.sh) - miekki, bezprzestojowy
+// restart procesow roboczych CALEJ wspoldzielonej uslugi tej wersji PHP
+// (patrz komentarz przy PHP_POOL_RAM_FRACTION), NIE izolowany restart
+// tylko tej jednej strony (stock PHP-FPM nie ma takiego sygnalu per
+// pool) - UI musi to jasno komunikowac, nie sugerowac izolacji.
+async function restartSitePhp(username, id) {
+  const all = loadData();
+  const record = findOwnRecord(all, username, id);
+  if (record.template !== 'php' && record.template !== 'wordpress') {
+    throw badRequest('Ta strona nie uzywa PHP.');
+  }
+  if (!record.phpVersion) throw badRequest('Ta strona nie ma przypisanej wersji PHP.');
+
+  await runPoolScript('reload', username, record.phpVersion);
+  return { success: true };
+}
+
 export {
-  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners,
+  listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners, restartSitePhp,
   getSiteConfig, checkSiteConfig, updateSiteConfig, getSitePublicPath
 };
