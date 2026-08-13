@@ -233,14 +233,21 @@ async function refreshDynamicNav() {
   // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
   // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
   // 'mail' wykluczone jak 'php-fpm' - to tylko trigger instalacji
-  // (kafelek "MAIL SERVER"). 'postfix'/'dovecot' rowniez wykluczone -
-  // ich kontrolki (Start/Stop/Restart) zyja WYLACZNIE w dedykowanej
-  // zakladce Poczta (renderMailTab), zeby nie dublowac tego samego
-  // sterowania w dwoch miejscach (ten sam powod co przy 'mail').
+  // (kafelek "MAIL SERVER"). 'postfix'/'dovecot' rowniez wykluczone z
+  // LEWEGO PASKA NAWIGACJI - ich Start/Stop/Restart zyje przede
+  // wszystkim w dedykowanej zakladce Poczta (renderMailTab), zeby nie
+  // dublowac sterowania w dwoch miejscach.
   const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'mail' && s.key !== 'postfix' && s.key !== 'dovecot');
   const installablePackages = services.filter((s) => s.installable);
 
-  SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
+  // 'dovecot' MA wlasny pelny kafelek (i strone szczegolow w stylu
+  // sshd.service - unit/status/wlaczony/pid/od kiedy + Start/Stop/
+  // Restart) w ogolnej zakladce USLUGI, mimo ze nie ma go w lewym
+  // pasku nawigacji powyzej - stad osobne dopisanie tutaj, poza
+  // 'installedExtra'. 'postfix' celowo NIE dostaje tego (zostaje
+  // wylacznie w Poczcie).
+  const dovecotFound = services.some((s) => s.key === 'dovecot' && s.found);
+  SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key), ...(dovecotFound ? ['dovecot'] : [])];
   INSTALL_DETAIL_TABS = installablePackages.map((s) => `install:${s.key}`);
 
   const extraContainer = document.getElementById('nav-installed-extra');
@@ -2192,7 +2199,9 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    const installed = services.filter((s) => s.found && s.key !== 'php-fpm' && s.key !== 'postfix' && s.key !== 'dovecot');
+    // 'postfix' zostaje wylacznie w zakladce Poczta, ale 'dovecot' ma
+    // tu wlasny kafelek (patrz refreshDynamicNav - SERVICE_DETAIL_TABS).
+    const installed = services.filter((s) => s.found && s.key !== 'php-fpm' && s.key !== 'postfix');
     if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;

@@ -91,6 +91,8 @@
   "services.phpmyadmin.name": "PHPMYADMIN",
   "services.adminer.name": "ADMINER",
   "services.mail.name": "MAIL SERVER",
+  "services.postfix.name": "POSTFIX",
+  "services.dovecot.name": "DOVECOT",
   "install.install_button": "Install",
   "install.installed_badge": "Installed",
   "install.installing": "Installing...",
