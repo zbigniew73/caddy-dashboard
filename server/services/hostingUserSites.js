@@ -9,12 +9,19 @@ const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../
 const DATA_PATH = path.join(DATA_DIR, 'hosting-sites.json');
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/hosting-user-site.sh');
 
-// Domena zawsze wpisywana jako "apex" (bez www.) - kierunek przekierowania
-// (ktora wersja jest kanoniczna) to osobne pole (redirectMode), patrz
-// buildSiteBlock ponizej. Ta sama regula co w hosting-user-site.sh (musi
-// zostac zsynchronizowana recznie - jeden string, dwa jezyki).
+// Domena wpisywana jako "apex" (bez www.) dla dwoch trybow z przekierowaniem
+// (kierunek - ktora wersja jest kanoniczna - to osobne pole redirectMode,
+// patrz buildSiteBlock ponizej). Trzeci tryb, 'none' ("Bez przekierowania"),
+// to WYJATEK od tej reguly - user podaje JEDNA, kompletna domene (moze byc
+// z "www." - to wtedy zwykla, samodzielna etykieta hosta, nie "wersja"
+// apeksu), Caddy serwuje TYLKO ja, druga wersja po prostu nie istnieje
+// (brak matchera/redir w bloku, patrz buildSiteBlock). Regex sam w sobie
+// (dopasowanie etykiet) jest identyczny w obu przypadkach - to
+// validateDomain wymusza/luzuje zakaz prefiksu "www." zaleznie od trybu.
+// Ta sama regula co w hosting-user-site.sh (musi zostac zsynchronizowana
+// recznie - jeden string, dwa jezyki).
 const DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
-const REDIRECT_MODES = ['www-to-apex', 'apex-to-www'];
+const REDIRECT_MODES = ['www-to-apex', 'apex-to-www', 'none'];
 // 'php' i 'wordpress' sa na razie SZKIELETEM - wybieralne w UI/API, ale
 // buildSiteBlock ponizej generuje dla nich dokladnie ten sam statyczny
 // blok co dla 'html' (brak jeszcze php_fastcgi/puli PHP-FPM per konto ani
@@ -98,13 +105,18 @@ function listSiteOwners() {
 // dyrektyw (root/file_server/log) obsluguje juz oba hosty naraz. Caddy
 // nadal automatycznie wystawia certyfikaty ACME dla OBU nazw wypisanych
 // w adresie site-blocku, wiec przekierowanie dziala tez po HTTPS bez
-// dodatkowej konfiguracji.
+// dodatkowej konfiguracji. Tryb 'none' ("Bez przekierowania") NIE dostaje
+// tego traktowania - adres to TYLKO to, co user wpisal (moze byc z "www.",
+// patrz validateDomain), bez matchera/redir - druga wersja domeny po
+// prostu nie ma wlasnego certyfikatu ani site-blocku, wiec nie dziala.
 // Log NIE idzie do ~/domains/<domena>/logs - Caddy (caddy:caddy) nie ma
 // prawa zapisu do katalogu domowego usera bez dodatkowych sztuczek z
 // uprawnieniami grupy. Zamiast tego wspolny, systemowy /var/log/caddy/
 // (wlasciciel caddy:caddy - Caddy pisze tam bez przeszkod), jeden plik na
-// domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji) - zawsze
-// nazwany po APEKSIE (bez www), niezaleznie od kierunku przekierowania.
+// domene (nazwa domeny jest globalnie unikalna, wiec bez kolizji) - dla
+// trybow z przekierowaniem zawsze nazwany po APEKSIE (bez www),
+// niezaleznie od kierunku; dla 'none' po prostu po tym, co user wpisal
+// (moze wiec byc "www.<domena>.log", jesli tak brzmiala domena).
 //
 // Jedyna czesc bloku zalezna od template: 'reverseproxy' dostaje
 // `reverse_proxy 127.0.0.1:<port>` zamiast `root/file_server` - zawsze
@@ -113,17 +125,29 @@ function listSiteOwners() {
 // wciaz szkieletem (patrz TEMPLATES) - dostaja ten sam statyczny blok co
 // 'html'.
 function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort) {
-  const wwwDomain = `www.${domain}`;
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
-
-  const [addresses, matcherName, matchedHost, canonical] = redirectMode === 'apex-to-www'
-    ? [`${wwwDomain}, ${domain}`, '@apex', domain, wwwDomain]
-    : [`${domain}, ${wwwDomain}`, '@www', wwwDomain, domain];
 
   const bodyDirectives = template === 'reverseproxy'
     ? `\treverse_proxy 127.0.0.1:${proxyPort}`
     : `\troot * ${publicRoot}\n\tfile_server`;
+
+  if (redirectMode === 'none') {
+    return `${domain} {
+	header -X-Powered-By
+${bodyDirectives}
+	log {
+		output file ${logFile}
+		format json
+	}
+}
+`;
+  }
+
+  const wwwDomain = `www.${domain}`;
+  const [addresses, matcherName, matchedHost, canonical] = redirectMode === 'apex-to-www'
+    ? [`${wwwDomain}, ${domain}`, '@apex', domain, wwwDomain]
+    : [`${domain}, ${wwwDomain}`, '@www', wwwDomain, domain];
 
   return `${addresses} {
 	${matcherName} host ${matchedHost}
@@ -182,9 +206,12 @@ function runSiteScriptCapture(action, username, domain, stdinContent) {
   });
 }
 
-function validateDomain(domain) {
+// allowWww=true TYLKO dla redirectMode 'none' - tam domena to jedyny,
+// samodzielny adres (moze zaczynac sie od "www."), nie "apex" ktorego
+// wersja www jest dorzucana automatycznie przez buildSiteBlock.
+function validateDomain(domain, allowWww) {
   const value = String(domain || '').trim().toLowerCase();
-  if (value.startsWith('www.')) {
+  if (!allowWww && value.startsWith('www.')) {
     throw badRequest('Podaj domene bez "www." - kierunek przekierowania wybierz osobno.');
   }
   if (!DOMAIN_RE.test(value)) {
@@ -201,8 +228,8 @@ function validateRedirectMode(redirectMode) {
 }
 
 async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort }) {
-  const domainValue = validateDomain(domain);
   const redirectValue = validateRedirectMode(redirectMode);
+  const domainValue = validateDomain(domain, redirectValue === 'none');
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
   const phpVersionValue = (templateValue !== 'html' && PHP_VERSION_RE.test(phpVersion)) ? phpVersion : null;
   // proxyPort jest FUNKCJONALNIE wymagany dla reverseproxy (buildSiteBlock
@@ -256,6 +283,14 @@ async function updateSiteRedirect(username, id, redirectMode) {
 
   const all = loadData();
   const record = findOwnRecord(all, username, id);
+  // Strona zalozona w trybie 'none' z domena zaczynajaca sie od "www."
+  // (dozwolone TYLKO w tym trybie, patrz validateDomain) nie moze przejsc
+  // na tryb z przekierowaniem - buildSiteBlock doklejalby wtedy "www."
+  // PONOWNIE (www.www.<domena>). Jedyne wyjscie w takim przypadku to
+  // usunac strone i zalozyc od nowa z domena apex.
+  if (redirectValue !== 'none' && record.domain.startsWith('www.')) {
+    throw badRequest('Ta strona ma domene zaczynajaca sie od "www." (tryb "Bez przekierowania") - nie mozna dla niej wlaczyc przekierowania. Usun strone i zaloz ja ponownie z domena bez "www.".');
+  }
 
   const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort);
   await runSiteScript('apply', username, record.domain, content);

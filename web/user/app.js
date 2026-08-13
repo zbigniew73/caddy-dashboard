@@ -1080,10 +1080,14 @@ async function refreshSshTab(content) {
 // Strony - dwa klocki obok siebie (ten sam wzorzec co Bazy/Redis/SSH) +
 // TRZECI, pelnoszerokosciowy klocek POD nimi, ktory pojawia sie tylko
 // podczas edycji (patrz renderSitesSection/siteConfigEditorHtml):
-//   1) lewy: formularz "dodaj strone" - domena ZAWSZE bez www. (kierunek
+//   1) lewy: formularz "dodaj strone" - domena bez www. (kierunek
 //      przekierowania www<->apex to osobne pole, wybor klikany - radio,
 //      NIE rozwijalna lista - patrz siteRedirectRadios/siteTemplateRadios;
-//      hostingUserSites.js: buildSiteBlock). Szablony PHP/WordPress sa na
+//      hostingUserSites.js: buildSiteBlock), Z WYJATKIEM trzeciej opcji
+//      "Bez przekierowania" (redirectMode 'none') - tam domena to jeden,
+//      samodzielny adres i MOZE zaczynac sie od "www." (serwowana jest
+//      TYLKO ta jedna wersja, bez matchera/redir w bloku).
+//      Szablony PHP/WordPress sa na
 //      razie SZKIELETEM - wybieralne, ale generuja ten sam statyczny blok
 //      co HTML (patrz komentarz przy TEMPLATES w hostingUserSites.js).
 //      REVERSE PROXY jest jedynym poza HTML, ktory realnie dziala - pole
@@ -1113,12 +1117,16 @@ let siteEditingContent = null;
 function siteRedirectRadios(name, selected) {
   return `
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
-      <input type="radio" name="${name}" value="www-to-apex" ${selected === 'apex-to-www' ? '' : 'checked'}>
+      <input type="radio" name="${name}" value="www-to-apex" ${selected === 'www-to-apex' ? 'checked' : ''}>
       ${t('sites.redirect_www_to_apex')}
     </label>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
       <input type="radio" name="${name}" value="apex-to-www" ${selected === 'apex-to-www' ? 'checked' : ''}>
       ${t('sites.redirect_apex_to_www')}
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="none" ${selected === 'none' ? 'checked' : ''}>
+      ${t('sites.redirect_none')}
     </label>
   `;
 }
@@ -1324,6 +1332,7 @@ function sitesManageCardHtml(data, phpVersions) {
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_domain')}</label>
         <input type="text" id="site-new-domain" placeholder="${t('sites.domain_placeholder')}" style="width:100%;box-sizing:border-box;">
+        <p style="margin:4px 0 0;color:var(--muted);font-size:11px;">${t('sites.domain_hint')}</p>
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_redirect')}</label>
