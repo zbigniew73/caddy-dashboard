@@ -122,6 +122,8 @@
   "sites.compression_zstd": "zstd",
   "sites.security_title": "Security",
   "sites.security_checkbox": "Security headers (HSTS, CSP, X-Frame-Options, Referrer-Policy, ...)",
+  "sites.config_edit_title": "Config editing",
+  "sites.config_edit_hint": "Below is the full, raw Caddy config for this site - you can edit it by hand and add your own blocks/directives. The Compression/Security checkboxes above only insert/remove specific lines within this same content. Click \"Check\" before \"Activate\" to validate your changes without deploying them.",
   "sites.check_button": "Check",
   "sites.activate_button": "Activate",
   "sites.checking": "Checking...",

@@ -122,6 +122,8 @@
   "sites.compression_zstd": "zstd",
   "sites.security_title": "Bezpieczenstwo",
   "sites.security_checkbox": "Naglowki bezpieczenstwa (HSTS, CSP, X-Frame-Options, Referrer-Policy, ...)",
+  "sites.config_edit_title": "Edycja konfiguracji",
+  "sites.config_edit_hint": "Ponizej masz pelny, surowy config Caddy tej strony - mozesz go recznie edytowac i dodawac wlasne bloki/dyrektywy. Zaznaczenia Kompresji/Bezpieczenstwa powyzej tylko wstawiaja/usuwaja odpowiednie linie w tej samej tresci. Kliknij \"Sprawdz\" przed \"Aktywuj\", zeby zwalidowac zmiany bez ich wdrazania.",
   "sites.check_button": "Sprawdz",
   "sites.activate_button": "Aktywuj",
   "sites.checking": "Sprawdzam...",

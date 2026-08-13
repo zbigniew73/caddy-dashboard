@@ -1287,6 +1287,10 @@ function siteConfigEditorHtml(item) {
           ${t('sites.security_checkbox')}
         </label>
       </div>
+      <div style="margin-bottom:6px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.config_edit_title')}</label>
+        <p style="margin:0 0 6px;font-size:12px;color:var(--muted);">${t('sites.config_edit_hint')}</p>
+      </div>
       <textarea id="site-edit-config-${item.id}" rows="16" style="width:100%;font-family:var(--mono);font-size:12px;background:var(--input-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;box-sizing:border-box;resize:vertical;">${escapeHtml(textareaValue)}</textarea>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
         <button type="button" data-site-check="${item.id}">${t('sites.check_button')}</button>
