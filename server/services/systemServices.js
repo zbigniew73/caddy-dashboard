@@ -20,7 +20,26 @@ const SERVICE_REGISTRY = [
     installable: { custom: true }
   },
   { key: 'mongodb', unitCandidates: ['mongod.service'], installable: { custom: true } },
-  { key: 'redis', unitCandidates: ['redis.service', 'valkey.service'], installable: { custom: true } }
+  { key: 'redis', unitCandidates: ['redis.service', 'valkey.service'], installable: { custom: true } },
+  // 'mail' to WYLACZNIE trigger instalacji (kafelek "MAIL SERVER" w
+  // Instalatorze) - instaluje Postfix+Dovecot+OpenDKIM razem
+  // (mail-install.sh), 'postfix.service' jako reprezentant "found"
+  // (wystarczajacy dowod, ze cala instalacja sie odbyla, oba pakiety
+  // instaluja sie w jednym kroku). Realne kontrolki (Start/Stop/Restart)
+  // NIE zyja tutaj/w ogolnej liscie Uslug - zyja w dedykowanej zakladce
+  // Poczta (web/app.js renderMailTab) - ten klucz jest wiec wykluczony z
+  // generycznego paska nawigacji (refreshDynamicNav), dokladnie jak
+  // wczesniej 'php-fpm' (i tak jak wczesniej FrankenPHP, usuniete z tego
+  // projektu - ten sam powod: syntetyczny trigger instalacji nie jest
+  // realna, kontrolowalna usluga per klucz).
+  { key: 'mail', unitCandidates: ['postfix.service'], installable: { custom: true } },
+  // Prawdziwe, niezalezne uslugi - BEZ 'installable' (instalowane razem
+  // przez kafelek 'mail' powyzej, nie osobno) - pojawiaja sie w ogolnej
+  // liscie Uslug automatycznie po instalacji, jak 'caddy'/'cron', na
+  // wypadek gdyby ktos wolal ogolny mechanizm zamiast dedykowanych
+  // kafelkow w zakladce Poczta.
+  { key: 'postfix', unitCandidates: ['postfix.service'] },
+  { key: 'dovecot', unitCandidates: ['dovecot.service'] }
 ];
 
 const ALLOWED_ACTIONS = ['start', 'stop', 'restart'];

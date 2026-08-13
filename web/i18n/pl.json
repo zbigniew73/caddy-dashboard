@@ -90,6 +90,7 @@
   "services.php-fpm.name": "PHP-FPM",
   "services.phpmyadmin.name": "PHPMYADMIN",
   "services.adminer.name": "ADMINER",
+  "services.mail.name": "MAIL SERVER",
   "install.install_button": "Zainstaluj",
   "install.installed_badge": "Zainstalowane",
   "install.installing": "Instaluję...",
@@ -220,6 +221,9 @@
   "phpmyadmin.confirm_uninstall": "Usunąć phpMyAdmin? To skasuje pliki i dedykowany pool PHP-FPM (Twoje bazy danych pozostaną nietknięte).",
   "install.adminer.description": "Adminer (wersja ze wszystkimi językami, w tym polskim przełącznikiem w samym UI) - jednoplikowe narzędzie do baz danych, obsługuje od razu MySQL/MariaDB, PostgreSQL, SQLite, MS SQL i Oracle - nie trzeba instalować phpMyAdmin tylko po to, żeby dostać się do MariaDB. Instaluje się do /opt/caddy-dashboard/adminer z własnym dedykowanym poolem PHP-FPM na PHP 8.3. Wtyczka MongoDB pobiera się automatycznie, ale MongoDB nie zadziała, dopóki nie włączysz też modułu pecl-mongodb dla PHP 8.3 (Usługi -> PHP 8.3 -> Moduły PHP) - to świadomy ręczny krok, bo rozszerzenia PHP są wspólne dla całej usługi PHP-FPM, nie tylko dla Adminera. Żadne dane dostępowe do bazy nie są zapisywane - logujesz się własnym, prawdziwym kontem przez formularz logowania Adminera. Wpięcie w Caddy jest ręcznym krokiem - gotowy do wklejenia blok konfiguracji pokazuje się po instalacji.",
   "install.adminer.confirm_install": "Zainstalować Adminer? Pobiera najnowsze wydanie, może potrwać minutę.",
+  "install.mail.description": "Instaluje serwer pocztowy: Postfix (SMTP) + Dovecot (IMAP) + OpenDKIM, w stabilnych wersjach z repozytoriów systemowych. Dostęp: IMAP/IMAPS oraz SMTP/SMTPS (porty 587/465) - bez POP3/POP3S. Logowanie tym samym hasłem co SSH (PAM), każde konto hostingowe dostaje jedną skrzynkę (~/Maildir, grupa systemowa mail - jak w DirectAdmin). Na start zostanie użyty certyfikat TLS self-signed (do podmiany na własny później), a OpenDKIM zostanie włączony bez jeszcze skonfigurowanych kluczy per-domena - to kolejny krok.",
+  "install.mail.installed_hint": "Zainstalowano. Sterowanie Postfixem i Dovecotem (start/stop/restart) znajdziesz w zakładce Poczta.",
+  "install.mail.confirm_install": "Zainstalować serwer pocztowy (Postfix + Dovecot + OpenDKIM)? To może potrwać kilka minut.",
   "adminer.requires_php83": "Wymaga najpierw PHP 8.3 - zainstaluj go z kafelka PHP-FPM.",
   "adminer.version_label": "Wersja",
   "adminer.docroot_label": "Pliki",
@@ -489,5 +493,13 @@
   "accounts.cancel_button": "Anuluj",
   "accounts.saving": "Zapisywanie...",
   "mail.title": "Poczta",
-  "mail.info_title": "Info"
+  "mail.info_title": "Info",
+  "mail.postfix_title": "Postfix",
+  "mail.dovecot_title": "Dovecot",
+  "mail.status_running": "Uruchomiony",
+  "mail.status_stopped": "Zatrzymany",
+  "mail.start_button": "Start",
+  "mail.stop_button": "Stop",
+  "mail.restart_button": "Restart",
+  "mail.not_installed_hint": "Nie zainstalowano. Zainstaluj z Instalatora (MAIL SERVER)."
 }

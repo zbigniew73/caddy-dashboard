@@ -24,6 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
+import { installMail } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -555,6 +556,15 @@ router.get('/mariadb/local-version', async (req, res) => {
 router.post('/mariadb/install', async (req, res) => {
   try {
     const result = await installMariadb({ mode: req.body?.mode, version: req.body?.version });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/install', async (req, res) => {
+  try {
+    const result = await installMail();
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

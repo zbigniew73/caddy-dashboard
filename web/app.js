@@ -232,7 +232,11 @@ async function refreshDynamicNav() {
   // nigdy zakladka w GLOWNE, tam trafiaja pojedyncze zainstalowane wersje
   // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
   // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
-  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm');
+  // 'mail' wykluczone jak 'php-fpm' - to tylko trigger instalacji
+  // (kafelek "MAIL SERVER"), realne kontrolki (Postfix/Dovecot, JUZ
+  // widoczne tu normalnie po instalacji, bez wykluczenia) zyja w
+  // dedykowanej zakladce Poczta (renderMailTab).
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'mail');
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
@@ -333,20 +337,78 @@ function wireSystemRebootButton() {
   };
 }
 
-// Szkielet "na razie tylko szkielet" - jeden rzad, dwa rowne klocki (ten
-// sam wzorzec co placeholdery Python/Node mialy w panelu klienta przed
-// rozbudowa) - bez tresci, do wypelnienia w kolejnym kroku.
-function renderMailTab(content) {
-  content.innerHTML = `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        <h3 style="margin:0;font-size:15px;">${t('mail.title')}</h3>
-      </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        <h3 style="margin:0;font-size:15px;">${t('mail.info_title')}</h3>
-      </div>
+// Lewy kafelek Postfix, prawy Dovecot - stan/kontrolki czytane i
+// sterowane przez JUZ ISTNIEJACY, generyczny mechanizm uslug
+// (GET/POST /services/:key(/:action)) - te same trasy co ogolna
+// zakladka Uslugi, tylko wlasny, kompaktowy markup zamiast pelnej
+// serviceDetailHtml. Jesli pakiety nie sa jeszcze zainstalowane
+// (found=false), pusty stan z podpowiedzia "zainstaluj z Instalatora".
+function mailServiceCardHtml(key, title, svc) {
+  if (!svc.found) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${escapeHtml(title)}</h3>
+      <div class="empty-state">${t('mail.not_installed_hint')}</div>
+    `;
+  }
+  const isActive = svc.activeState === 'active';
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">
+      ${escapeHtml(title)}
+      <span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('mail.status_running') : t('mail.status_stopped')}</span>
+    </h3>
+    <p style="color:var(--muted);font-size:12px;margin:8px 0 14px;">${escapeHtml(svc.subState || '')}</p>
+    <div class="service-actions">
+      <button type="button" data-mail-key="${key}" data-action="start">${t('mail.start_button')}</button>
+      <button type="button" data-mail-key="${key}" data-action="restart">${t('mail.restart_button')}</button>
+      <button type="button" class="danger" data-mail-key="${key}" data-action="stop">${t('mail.stop_button')}</button>
     </div>
+    <div class="action-msg" id="mail-${key}-msg"></div>
   `;
+}
+
+function wireMailServiceCards(content) {
+  content.querySelectorAll('[data-mail-key]').forEach((btn) => {
+    btn.onclick = async () => {
+      const key = btn.dataset.mailKey;
+      const action = btn.dataset.action;
+      const msgEl = document.getElementById(`mail-${key}-msg`);
+      content.querySelectorAll(`[data-mail-key="${key}"]`).forEach((b) => { b.disabled = true; });
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', `/services/${key}/${action}`);
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        content.querySelectorAll(`[data-mail-key="${key}"]`).forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
+}
+
+async function renderMailTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
+  try {
+    const [postfix, dovecot] = await Promise.all([
+      api('GET', '/services/postfix'),
+      api('GET', '/services/dovecot')
+    ]);
+    content.innerHTML = `
+      <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+          ${mailServiceCardHtml('postfix', t('mail.postfix_title'), postfix)}
+        </div>
+        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+          ${mailServiceCardHtml('dovecot', t('mail.dovecot_title'), dovecot)}
+        </div>
+      </div>
+    `;
+    applyTranslations();
+    wireMailServiceCards(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
 }
 
 async function renderTab() {
@@ -362,7 +424,7 @@ async function renderTab() {
     return;
   }
   if (currentTab === 'mail') {
-    renderMailTab(content);
+    await renderMailTab(content);
     return;
   }
   if (currentTab === 'services') {
@@ -1015,6 +1077,66 @@ function wireMariadbInstallTile() {
   updateButtonState();
 }
 
+// Bez wyboru trybu/wersji (w odroznieniu od MariaDB/Redis) - jeden,
+// stabilny zestaw pakietow (postfix+dovecot+opendkim, patrz
+// mail-install.sh) - prosty, pojedynczy przycisk.
+function mailInstallTileHtml(svc) {
+  const name = t('services.mail.name');
+  const description = t('install.mail.description');
+
+  if (svc.found) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+          <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+          <span class="status-badge active">${t('install.installed_badge')}</span>
+        </div>
+        <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
+        <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.mail.installed_hint')}</p>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${escapeHtml(description)}</p>
+      <button type="button" id="mail-install-btn">${t('install.install_button')}</button>
+      <div class="action-msg" id="mail-install-msg"></div>
+    </div>
+  `;
+}
+
+function wireMailInstallTile() {
+  const btn = document.getElementById('mail-install-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mail-install-msg');
+
+  btn.onclick = async () => {
+    if (!window.confirm(t('install.mail.confirm_install'))) return;
+
+    btn.disabled = true;
+    msgEl.textContent = t('install.installing');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/install');
+      const svc = await api('GET', '/services/mail');
+      document.getElementById('content').innerHTML = mailInstallTileHtml(svc);
+      applyTranslations();
+      const successEl = document.getElementById('mail-install-msg');
+      if (successEl) {
+        successEl.textContent = t('install.install_success');
+        successEl.className = 'action-msg success';
+      }
+      await refreshDynamicNav();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 function postgresqlInstallTileHtml(svc) {
   const name = t('services.postgresql.name');
   const description = t('install.postgresql.description');
@@ -1430,6 +1552,12 @@ async function renderInstallDetailTab(key, content) {
       return;
     }
     const svc = await api('GET', `/services/${key}`);
+    if (key === 'mail') {
+      content.innerHTML = mailInstallTileHtml(svc);
+      applyTranslations();
+      wireMailInstallTile();
+      return;
+    }
     if (key === 'mariadb') {
       content.innerHTML = mariadbInstallTileHtml(svc);
       applyTranslations();
