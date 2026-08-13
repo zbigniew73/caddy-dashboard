@@ -70,7 +70,7 @@ DOMAIN="${3:-}"
 # TEMPLATES.includes(template) ? template : 'html' w hostingUserSites.js.
 TEMPLATE="${4:-html}"
 case "$TEMPLATE" in
-  html|php|wordpress|reverseproxy) ;;
+  html|php|wordpress|reverseproxy|frankenphp) ;;
   *) TEMPLATE="html" ;;
 esac
 # WP_INSTALL tylko dla 'apply' + TEMPLATE=wordpress (patrz IS_NEW nizej) -
