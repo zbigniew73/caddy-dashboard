@@ -2640,23 +2640,17 @@ function wireTurnstileSection() {
   }
 }
 
-const CADDYPERF_PROFILE_KEYS = ['balanced', 'low_ram', 'high_throughput', 'recommended'];
+const CADDYPERF_PROFILE_KEYS = ['balanced', 'low_ram', 'high_throughput'];
 let CADDYPERF_PROFILE_BLOCKS = {};
-let CADDYPERF_LAST_RECOMMENDED = null;
 
 async function renderCaddyPerformanceSection() {
   let status;
-  let recommended;
   try {
-    [status, recommended] = await Promise.all([
-      api('GET', '/caddy/performance'),
-      api('GET', '/caddy/performance/recommended')
-    ]);
+    status = await api('GET', '/caddy/performance');
   } catch (e) {
     return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
   }
   CADDYPERF_PROFILE_BLOCKS = status.profileBlocks || {};
-  CADDYPERF_LAST_RECOMMENDED = recommended;
 
   const isExpertActive = status.profile === 'expert';
   const selectedProfile = status.active && !isExpertActive ? status.profile : 'balanced';
@@ -2672,7 +2666,6 @@ async function renderCaddyPerformanceSection() {
   `;
 
   const initialTextareaValue = isExpertActive ? status.block : (CADDYPERF_PROFILE_BLOCKS[selectedProfile] || '');
-  const plannedSitesValue = recommended.sites ?? recommended.detectedSites ?? 1;
 
   return `
     <div class="system-info-card">
@@ -2682,20 +2675,6 @@ async function renderCaddyPerformanceSection() {
       <div class="action-msg" style="margin-bottom:10px;">${escapeHtml(t('caddyperf.current_label'))}: ${escapeHtml(currentLabel)}</div>
       <div style="display:flex;flex-wrap:wrap;margin-bottom:12px;">
         ${CADDYPERF_PROFILE_KEYS.map(profileOption).join('')}
-      </div>
-      <div id="caddyperf-recommended-panel" style="display:${selectedProfile === 'recommended' ? 'block' : 'none'};margin:0 0 14px;padding:12px;border:1px solid var(--border);border-radius:8px;">
-        <p style="margin:0 0 10px;color:var(--muted);font-size:12px;">${t('caddyperf.recommended_hint')}</p>
-        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
-          <div>
-            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('caddyperf.field_planned_sites')}</label>
-            <input type="number" id="caddyperf-planned-sites" min="1" value="${escapeHtml(String(plannedSitesValue))}" style="width:100px;">
-          </div>
-          <div>
-            <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('caddyperf.field_cf_percent')}</label>
-            <input type="number" id="caddyperf-cf-percent" min="0" max="100" value="${escapeHtml(String(recommended.cfPercent ?? 0))}" style="width:100px;">
-          </div>
-        </div>
-        <div id="caddyperf-recommended-preview" style="font-size:12px;color:var(--muted);font-family:var(--mono);white-space:pre-wrap;"></div>
       </div>
       <label style="display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px;">
         <input type="checkbox" id="caddyperf-expert-toggle" ${isExpertActive ? 'checked' : ''}>
@@ -2710,81 +2689,29 @@ async function renderCaddyPerformanceSection() {
   `;
 }
 
-function caddyperfRecommendedPreviewText(r) {
-  return t('caddyperf.recommended_preview', {
-    tier: t(`caddyperf.profile_${r.tier}`),
-    cpus: r.cpus,
-    ram: r.ramMb,
-    read_body: r.values.read_body,
-    read_header: r.values.read_header,
-    write: r.values.write,
-    idle: r.values.idle,
-    max_header_size: r.values.max_header_size
-  });
-}
-
 function wireCaddyPerformanceSection() {
   const applyBtn = document.getElementById('caddyperf-apply-btn');
   if (!applyBtn) return;
   const expertToggle = document.getElementById('caddyperf-expert-toggle');
   const textarea = document.getElementById('caddyperf-expert-textarea');
   const msgEl = document.getElementById('caddyperf-msg');
-  const recommendedPanel = document.getElementById('caddyperf-recommended-panel');
-  const plannedSitesInput = document.getElementById('caddyperf-planned-sites');
-  const cfPercentInput = document.getElementById('caddyperf-cf-percent');
-  const recommendedPreview = document.getElementById('caddyperf-recommended-preview');
 
   function selectedProfileKey() {
     const checked = document.querySelector('input[name="caddyperf-profile"]:checked');
     return checked ? checked.value : 'balanced';
   }
 
-  function currentTextareaBlock(key) {
-    return key === 'recommended'
-      ? (CADDYPERF_LAST_RECOMMENDED?.block || '')
-      : (CADDYPERF_PROFILE_BLOCKS[key] || '');
-  }
-
-  if (recommendedPreview && CADDYPERF_LAST_RECOMMENDED) {
-    recommendedPreview.textContent = caddyperfRecommendedPreviewText(CADDYPERF_LAST_RECOMMENDED);
-  }
-
-  let recommendedFetchTimer = null;
-  async function refreshRecommendedPreview() {
-    const plannedSites = plannedSitesInput.value;
-    const cfPercent = cfPercentInput.value;
-    try {
-      const r = await api('GET', `/caddy/performance/recommended?plannedSites=${encodeURIComponent(plannedSites)}&cfPercent=${encodeURIComponent(cfPercent)}`);
-      CADDYPERF_LAST_RECOMMENDED = r;
-      if (recommendedPreview) recommendedPreview.textContent = caddyperfRecommendedPreviewText(r);
-      if (expertToggle.checked && selectedProfileKey() === 'recommended' && !textarea.dataset.userEdited) {
-        textarea.value = r.block;
-      }
-    } catch (e) {
-      if (recommendedPreview) recommendedPreview.textContent = e.message;
-    }
-  }
-
-  function scheduleRecommendedRefresh() {
-    if (recommendedFetchTimer) clearTimeout(recommendedFetchTimer);
-    recommendedFetchTimer = setTimeout(refreshRecommendedPreview, 400);
-  }
-
-  if (plannedSitesInput) plannedSitesInput.oninput = scheduleRecommendedRefresh;
-  if (cfPercentInput) cfPercentInput.oninput = scheduleRecommendedRefresh;
-
   expertToggle.onchange = () => {
     textarea.style.display = expertToggle.checked ? 'block' : 'none';
     if (expertToggle.checked && !textarea.dataset.userEdited) {
-      textarea.value = currentTextareaBlock(selectedProfileKey());
+      textarea.value = CADDYPERF_PROFILE_BLOCKS[selectedProfileKey()] || '';
     }
   };
 
   document.querySelectorAll('input[name="caddyperf-profile"]').forEach((radio) => {
     radio.onchange = () => {
-      if (recommendedPanel) recommendedPanel.style.display = selectedProfileKey() === 'recommended' ? 'block' : 'none';
       if (expertToggle.checked) {
-        textarea.value = currentTextareaBlock(selectedProfileKey());
+        textarea.value = CADDYPERF_PROFILE_BLOCKS[selectedProfileKey()] || '';
         delete textarea.dataset.userEdited;
       }
     };
@@ -2798,15 +2725,9 @@ function wireCaddyPerformanceSection() {
     msgEl.textContent = t('caddyperf.applying');
     msgEl.className = 'action-msg';
     try {
-      const profileKey = selectedProfileKey();
-      let body;
-      if (expertToggle.checked) {
-        body = { profile: 'expert', expertBlock: textarea.value };
-      } else if (profileKey === 'recommended') {
-        body = { profile: 'recommended', plannedSites: plannedSitesInput.value, cfPercent: cfPercentInput.value };
-      } else {
-        body = { profile: profileKey };
-      }
+      const body = expertToggle.checked
+        ? { profile: 'expert', expertBlock: textarea.value }
+        : { profile: selectedProfileKey() };
       await api('POST', '/caddy/performance', body);
       await renderTab();
     } catch (e) {

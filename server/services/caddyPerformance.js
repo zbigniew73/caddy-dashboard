@@ -1,6 +1,5 @@
 import { spawn, execFile } from 'child_process';
 import { promisify } from 'util';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,11 +15,9 @@ const PROFILES = {
   high_throughput: { read_body: '60s', read_header: '15s', write: '60s', idle: '300s', max_header_size: 65536 }
 };
 
-// Wspolny budowniczy bloku - uzywany zarowno przez statyczne profile
-// (profileBlock) jak i przez wyliczony profil "recommended"
-// (computeRecommendedProfile nizej), zeby obie sciezki produkowaly
-// dokladnie ten sam ksztalt configu z jednego miejsca.
-function buildBlockFromValues(p) {
+function profileBlock(key) {
+  const p = PROFILES[key];
+  if (!p) return null;
   return `{
 	admin localhost:2019
 	grace_period 20s
@@ -43,74 +40,6 @@ function buildBlockFromValues(p) {
 		max_header_size ${p.max_header_size}
 	}
 }`;
-}
-
-function profileBlock(key) {
-  const p = PROFILES[key];
-  if (!p) return null;
-  return buildBlockFromValues(p);
-}
-
-// 4. profil, "obliczony" - punktem startowym sa te same TRZY statyczne
-// profile wyzej (nie wymyslamy nowych liczb od zera), tylko wybor miedzy
-// nimi jest CIAGLY: ile RAM/CPU wypada na KAZDA planowana strone decyduje
-// ktory z trzech profili jest najblizszy, a wynik jest dodatkowo skalowany
-// W DOL procentem ruchu przez Cloudflare - Cloudflare terminuje
-// polaczenie z realnym (czasem wolnym) klientem i samo ma wlasny bufor
-// czasowy do origin, wiec im wiecej ruchu idzie przez CF, tym mniej sensu
-// ma trzymac dlugie timeouty "na wszelki wypadek" bezposredniego, wolnego
-// klienta.
-//
-// To HEURYSTYKA (moja wlasna, rozsadna estymacja), NIE oficjalne
-// zalecenie z dokumentacji Caddy - punkt startowy do dalszego strojenia
-// (user zawsze moze przelaczyc sie na tryb eksperta i skorygowac
-// recznie), nie objawiona prawda.
-const CF_MAX_SHRINK = 0.3; // przy 100% ruchu przez CF, skracamy timeouty o max 30%
-
-function computeRecommendedProfile({ plannedSites, cfPercent }) {
-  const cpus = os.cpus().length;
-  const ramMb = Math.round(os.totalmem() / (1024 * 1024));
-  const sites = Math.max(1, parseInt(plannedSites, 10) || 1);
-  const cf = Math.min(100, Math.max(0, parseInt(cfPercent, 10) || 0));
-
-  const ramPerSiteMb = ramMb / sites;
-  const cpuPerTenSites = (cpus / sites) * 10;
-
-  let tier;
-  if (ramPerSiteMb < 150 || cpuPerTenSites < 1) {
-    tier = 'low_ram';
-  } else if (ramPerSiteMb > 800 && cpuPerTenSites >= 4) {
-    tier = 'high_throughput';
-  } else {
-    tier = 'balanced';
-  }
-
-  const base = PROFILES[tier];
-  const cfFactor = 1 - (cf / 100) * CF_MAX_SHRINK;
-  const scaleSeconds = (s) => `${Math.max(5, Math.round(parseInt(s, 10) * cfFactor))}s`;
-
-  const values = {
-    read_body: scaleSeconds(base.read_body),
-    read_header: scaleSeconds(base.read_header),
-    write: scaleSeconds(base.write),
-    idle: scaleSeconds(base.idle),
-    max_header_size: base.max_header_size
-  };
-
-  return { cpus, ramMb, sites, cfPercent: cf, tier, values };
-}
-
-// Podglad dla panelu (przed kliknieciem "Zastosuj") - dokleja tez
-// wykryta REALNA liczbe stron z aktualnego Caddyfile (getSiteCount
-// nizej), zeby pole "planowana liczba stron" mialo sensowna wartosc
-// domyslna zamiast pustego pola.
-async function getRecommendedPreview({ plannedSites, cfPercent }) {
-  const detectedSites = await getSiteCount().catch(() => null);
-  const effectivePlannedSites = plannedSites !== undefined && plannedSites !== null && plannedSites !== ''
-    ? plannedSites
-    : detectedSites;
-  const recommendation = computeRecommendedProfile({ plannedSites: effectivePlannedSites, cfPercent });
-  return { ...recommendation, detectedSites, block: buildBlockFromValues(recommendation.values) };
 }
 
 async function sudoScript(args) {
@@ -175,7 +104,7 @@ async function getStatus() {
   return { active: true, profile: 'expert', block, profileBlocks };
 }
 
-function applyPerformanceConfig({ profile, expertBlock, plannedSites, cfPercent }) {
+function applyPerformanceConfig({ profile, expertBlock }) {
   return new Promise((resolve, reject) => {
     let blockContent;
     if (profile === 'expert') {
@@ -192,14 +121,6 @@ function applyPerformanceConfig({ profile, expertBlock, plannedSites, cfPercent 
         reject(Object.assign(new Error('Tryb eksperta: tresc musi byc pelnym blokiem nawiasow klamrowych { ... }'), { status: 400 }));
         return;
       }
-    } else if (profile === 'recommended') {
-      // Wartosci sa PRZELICZANE TU, servera-side, z tych samych
-      // plannedSites/cfPercent co user widzial w podgladzie - nigdy nie
-      // ufamy gotowemu blokowi przyslanemu z przegladarki (ten sam wzorzec
-      // co reszta projektu - klient dostarcza tylko surowe wejscia, serwer
-      // wylicza wynik).
-      const { values } = computeRecommendedProfile({ plannedSites, cfPercent });
-      blockContent = buildBlockFromValues(values);
     } else {
       blockContent = profileBlock(profile);
       if (!blockContent) {
@@ -237,7 +158,4 @@ function applyPerformanceConfig({ profile, expertBlock, plannedSites, cfPercent 
   });
 }
 
-export {
-  PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile, getSiteCount,
-  computeRecommendedProfile, getRecommendedPreview
-};
+export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile, getSiteCount };
