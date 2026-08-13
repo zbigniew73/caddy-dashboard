@@ -46,26 +46,34 @@ function isPortListening(port) {
   });
 }
 
-async function isPortFree(port) {
+async function isPortFree(port, exclude = []) {
   if (port === panelOwnPort()) return false;
+  if (exclude.includes(port)) return false;
   if (listUsedProxyPorts().includes(port)) return false;
   if (listUsedPythonAppPorts().includes(port)) return false;
   if (listUsedNodeAppPorts().includes(port)) return false;
   return isPortListening(port);
 }
 
-async function findFreePort(preferredPort) {
+// `exclude` - porty do TEZ traktowania jako zajete w tym jednym
+// wywolaniu, bez zapisywania ich nigdzie na stale - potrzebne, gdy
+// jedna aplikacja wymaga WIECEJ NIZ JEDNEGO portu na raz (np. Laravel
+// Octane: port publiczny + --admin-port) - drugie wywolanie musi
+// wykluczyc port dopiero co zwrocony przez pierwsze, bo nic tam jeszcze
+// nie nasluchuje (zywy bind-test sam by tego nie zlapal), a zaden
+// rejestr JSON tez jeszcze o nim nie wie (jeszcze nie zapisany).
+async function findFreePort(preferredPort, exclude = []) {
   if (preferredPort !== undefined && preferredPort !== null && preferredPort !== '') {
     const port = parseInt(preferredPort, 10);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw badRequest('Nieprawidlowy numer portu (1-65535).');
     }
-    return { port, free: await isPortFree(port) };
+    return { port, free: await isPortFree(port, exclude) };
   }
 
   const [start, end] = PORT_RANGE;
   for (let port = start; port <= end; port++) {
-    if (await isPortFree(port)) return { port, free: true };
+    if (await isPortFree(port, exclude)) return { port, free: true };
   }
   throw Object.assign(new Error('Nie znaleziono wolnego portu w zakresie ' + start + '-' + end + '.'), { status: 500 });
 }

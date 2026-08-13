@@ -1718,7 +1718,8 @@ const SITE_TEMPLATE_LABELS = {
   html: () => t('sites.template_html'),
   php: () => t('sites.template_php'),
   wordpress: () => t('sites.template_wordpress'),
-  reverseproxy: () => t('sites.template_reverseproxy')
+  reverseproxy: () => t('sites.template_reverseproxy'),
+  frankenphp: () => t('sites.template_frankenphp')
 };
 let siteEditingId = null;
 let siteEditingContent = null;
@@ -1752,9 +1753,9 @@ function siteTemplateRadios(name, selected, phpVersions) {
     ? phpVersions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')
     : `<option value="">-</option>`;
 
-  return ['html', 'php', 'wordpress', 'reverseproxy'].map((key) => {
+  return ['html', 'php', 'wordpress', 'reverseproxy', 'frankenphp'].map((key) => {
     let extra = '';
-    if (key === 'php' || key === 'wordpress') {
+    if (key === 'php' || key === 'wordpress' || key === 'frankenphp') {
       extra = `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>`;
       if (key === 'wordpress') {
         extra += `
@@ -1762,6 +1763,14 @@ function siteTemplateRadios(name, selected, phpVersions) {
             <option value="none">${t('sites.wp_install_none')}</option>
             <option value="en">${t('sites.wp_install_en')}</option>
             <option value="pl">${t('sites.wp_install_pl')}</option>
+          </select>
+        `;
+      }
+      if (key === 'frankenphp') {
+        extra += `
+          <select name="${name}-framework" style="margin-left:8px;">
+            <option value="laravel">${t('sites.frankenphp_laravel')}</option>
+            <option value="symfony">${t('sites.frankenphp_symfony')}</option>
           </select>
         `;
       }
@@ -1779,6 +1788,7 @@ function siteTemplateRadios(name, selected, phpVersions) {
       ${key === 'reverseproxy' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_reverseproxy_hint')}</p>` : ''}
       ${(key === 'php' || key === 'wordpress') ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_php_pool_hint')}</p>` : ''}
       ${key === 'wordpress' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.wp_install_hint')}</p>` : ''}
+      ${key === 'frankenphp' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_frankenphp_hint')}</p>` : ''}
     `;
   }).join('');
 }
@@ -1936,7 +1946,7 @@ function siteRow(item) {
         ${item.enabled
           ? `<button type="button" class="secondary" data-site-stop="${item.id}">${t('sites.stop')}</button>`
           : `<button type="button" class="secondary" data-site-start="${item.id}">${t('sites.start')}</button>`}
-        ${(item.template === 'php' || item.template === 'wordpress')
+        ${(item.template === 'php' || item.template === 'wordpress' || item.template === 'frankenphp')
           ? `<button type="button" class="secondary" data-site-php-restart="${item.id}">${t('sites.php_restart')}</button>`
           : ''}
         <button type="button" class="danger" data-site-delete="${item.id}" data-site-domain="${escapeHtml(item.domain)}">${t('sites.delete')}</button>
@@ -2172,7 +2182,7 @@ function wireSitesSection(content) {
       const domainInput = document.getElementById('site-new-domain');
       const templateSelected = content.querySelector('input[name="site-new-template"]:checked');
       const templateValue = templateSelected ? templateSelected.value : 'html';
-      const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress')
+      const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress' || templateValue === 'frankenphp')
         ? content.querySelector(`select[name="site-new-template-phpversion-${templateValue}"]`)
         : null;
       const wpInstallSelect = templateValue === 'wordpress'
@@ -2181,11 +2191,17 @@ function wireSitesSection(content) {
       const proxyPortInput = templateValue === 'reverseproxy'
         ? content.querySelector('input[name="site-new-template-proxyport-reverseproxy"]')
         : null;
+      const frameworkSelect = templateValue === 'frankenphp'
+        ? content.querySelector('select[name="site-new-template-framework"]')
+        : null;
       const selected = content.querySelector('input[name="site-new-redirect"]:checked');
       const msgEl = document.getElementById('site-msg');
       msgEl.textContent = '';
       msgEl.className = 'action-msg';
       createBtn.disabled = true;
+      if (templateValue === 'frankenphp') {
+        msgEl.textContent = t('sites.creating_frankenphp');
+      }
       try {
         await api('POST', '/sites', {
           domain: domainInput.value.trim(),
@@ -2193,7 +2209,8 @@ function wireSitesSection(content) {
           template: templateValue,
           phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined,
           wpInstall: wpInstallSelect ? wpInstallSelect.value : undefined,
-          proxyPort: proxyPortInput ? proxyPortInput.value : undefined
+          proxyPort: proxyPortInput ? proxyPortInput.value : undefined,
+          framework: frameworkSelect ? frameworkSelect.value : undefined
         });
         await refreshSitesTab(content);
       } catch (e) {

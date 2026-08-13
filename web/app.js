@@ -2129,7 +2129,15 @@ async function renderServicesTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
     const { services } = await api('GET', '/services');
-    const installed = services.filter((s) => s.found && s.key !== 'php-fpm');
+    // 'frankenphp' wykluczone jak 'php-fpm' - z INNEGO powodu: generyczne
+    // Start/Stop/Restart tutaj odpalaja surowe `systemctl <akcja>
+    // frankenphp.service` (domyslna, globalna jednostka), ktora koliduje z
+    // Caddy panelu (patrz install.frankenphp.installed_hint) - user
+    // faktycznie trafil na ten dokladnie konflikt, klikajac Start tutaj.
+    // Panel klienta zaklada wlasne, izolowane procesy per-strona
+    // (hosting-user-frankenphp-site.sh) - ta globalna jednostka nie
+    // powinna byc uruchamiana w ogole, wiec nie pokazujemy jej kontrolek.
+    const installed = services.filter((s) => s.found && s.key !== 'php-fpm' && s.key !== 'frankenphp');
     if (!installed.length) {
       content.innerHTML = `<div class="empty-state">${t('services.empty')}</div>`;
       return;
