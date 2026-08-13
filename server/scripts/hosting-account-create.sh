@@ -48,11 +48,14 @@
 # poprzedniego modelu (grupa caddy + SGID) NIE trzeba juz nic
 # wymuszac/dziedziczyc rekurencyjnie.
 #
-# ~/tmp: kontowy (NIE per-strona) prywatny katalog robocze usera - istnieje
-# juz po `useradd -m` (kopiowany z /etc/skel), tu tylko naprawiamy
-# wlasciciela/uprawnienia na 0700 <username>:<username> (wylacznie
-# wlasciciel, zaden dostep dla "other"/Caddy - to NIE jest katalog
-# serwowany).
+# ~/tmp, ~/logs, ~/backup: kontowe (NIE per-strona) katalogi CALKOWICIE
+# prywatne usera - istnieja juz po `useradd -m` (kopiowane z /etc/skel),
+# tu tylko naprawiamy wlasciciela/uprawnienia na 0700
+# <username>:<username> (wylacznie wlasciciel, zaden dostep dla
+# "other"/Caddy - zaden z nich nie jest katalogiem serwowanym; ~/logs to
+# WLASNE logi usera, nie logi Caddy - patrz komentarz w
+# hosting-user-site.sh; ~/backup to na razie tylko miejsce na dysku,
+# funkcja Backup w panelu jest swiadomie odlozona).
 #
 # Uzycie: hosting-account-create.sh <username> <home_base_dir>
 
@@ -130,15 +133,25 @@ mkdir -p "$USER_DOMAINS_DIR"
 chown "${USERNAME}:${USERNAME}" "$USER_DOMAINS_DIR"
 chmod 0711 "$USER_DOMAINS_DIR"
 
-USER_TMP_DIR="${USER_HOME}/tmp"
-# Tak samo jak domains/ wyzej - /etc/skel go juz kopiuje (useradd -m),
-# tu tylko naprawiamy wlasciciela/uprawnienia (i typ, na wypadek starego
-# symlinku/pliku o tej nazwie).
-if [ -L "$USER_TMP_DIR" ] || { [ -e "$USER_TMP_DIR" ] && [ ! -d "$USER_TMP_DIR" ]; }; then
-  rm -f "$USER_TMP_DIR"
-fi
-mkdir -p "$USER_TMP_DIR"
-chown "${USERNAME}:${USERNAME}" "$USER_TMP_DIR"
-chmod 0700 "$USER_TMP_DIR"
+# Katalogi CALKOWICIE prywatne konta - tmp/ (robocze), logs/ (wlasne logi
+# usera, NIE logi Caddy - te sa scentralizowane w /var/log/caddy/, patrz
+# hosting-user-site.sh), backup/ (na razie tylko miejsce na dysku - funkcja
+# Backup w panelu jest swiadomie odlozona). Zaden z nich nie jest
+# serwowany, wiec ZERO dostepu dla "other"/Caddy (0700, w odroznieniu od
+# domains/ wyzej). /etc/skel juz je kopiuje (useradd -m), tu tylko
+# naprawiamy wlasciciela/uprawnienia (i typ, na wypadek starego
+# symlinku/pliku o tej nazwie) - ten sam idempotentny wzorzec co domains/.
+ensure_private_dir() {
+  local dir="$1"
+  if [ -L "$dir" ] || { [ -e "$dir" ] && [ ! -d "$dir" ]; }; then
+    rm -f "$dir"
+  fi
+  mkdir -p "$dir"
+  chown "${USERNAME}:${USERNAME}" "$dir"
+  chmod 0700 "$dir"
+}
+ensure_private_dir "${USER_HOME}/tmp"
+ensure_private_dir "${USER_HOME}/logs"
+ensure_private_dir "${USER_HOME}/backup"
 
 echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${SITES_BASE_DIR}, katalog na tresc stron ${USER_DOMAINS_DIR})"

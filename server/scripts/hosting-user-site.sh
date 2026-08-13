@@ -214,8 +214,8 @@ case "$ACTION" in
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #0969da;
-    background: #ddf1ff;
+    color: #1a7f37;
+    background: #dafbe1;
     padding: 4px 10px;
     border-radius: 999px;
     margin-bottom: 16px;
@@ -238,12 +238,18 @@ case "$ACTION" in
     font-size: 0.92em;
   }
   .path { margin-bottom: 0; }
+  hr {
+    border: none;
+    border-top: 1px solid #e2e4e8;
+    margin: 20px 0;
+  }
   @media (prefers-color-scheme: dark) {
     body { background: #0d1117; color: #e6edf3; }
     .card { background: #161b22; border-color: #30363d; box-shadow: none; }
-    .badge { color: #58a6ff; background: rgba(56, 139, 253, 0.15); }
+    .badge { color: #3fb950; background: rgba(63, 185, 80, 0.15); }
     p { color: #9198a1; }
     code { background: #21262d; color: #e6edf3; }
+    hr { border-top-color: #30363d; }
   }
 </style>
 </head>
@@ -253,6 +259,11 @@ case "$ACTION" in
     <h1>${DOMAIN}</h1>
     <p>Ta strona zostala wlasnie zalozona w panelu hostingowym i czeka na Twoje pliki.</p>
     <p class="path">Wgraj je przez SSH/SFTP do katalogu <code>~/domains/${DOMAIN}/public</code>.</p>
+    <hr>
+    <div lang="en">
+      <p>This site has just been created in the hosting panel and is waiting for your files.</p>
+      <p class="path">Upload them via SSH/SFTP to the <code>~/domains/${DOMAIN}/public</code> directory.</p>
+    </div>
   </div>
 </body>
 </html>
