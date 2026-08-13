@@ -20,7 +20,7 @@ import {
 import { getSliceStatus, applySystemReserve } from '../services/hostingSlice.js';
 import { getQuotaStatus, installQuotaPackage, verifyQuotaMechanism } from '../services/diskQuota.js';
 import { listAccounts, createAccount, updateAccount, deleteAccount, getNextHostingUsername } from '../services/hostingAccounts.js';
-import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount } from '../services/caddyPerformance.js';
+import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCaddyfile, getSiteCount, getRecommendedPreview } from '../services/caddyPerformance.js';
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
@@ -522,8 +522,21 @@ router.get('/caddy/performance', async (req, res) => {
 
 router.post('/caddy/performance', async (req, res) => {
   try {
-    const result = await applyPerformanceConfig({ profile: req.body?.profile, expertBlock: req.body?.expertBlock });
+    const result = await applyPerformanceConfig({
+      profile: req.body?.profile,
+      expertBlock: req.body?.expertBlock,
+      plannedSites: req.body?.plannedSites,
+      cfPercent: req.body?.cfPercent
+    });
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/caddy/performance/recommended', async (req, res) => {
+  try {
+    res.json(await getRecommendedPreview({ plannedSites: req.query.plannedSites, cfPercent: req.query.cfPercent }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
