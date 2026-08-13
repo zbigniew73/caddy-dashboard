@@ -498,10 +498,5 @@
   "mail.info_title": "Info",
   "mail.postfix_title": "Postfix",
   "mail.dovecot_title": "Dovecot",
-  "mail.status_running": "Uruchomiony",
-  "mail.status_stopped": "Zatrzymany",
-  "mail.start_button": "Start",
-  "mail.stop_button": "Stop",
-  "mail.restart_button": "Restart",
   "mail.not_installed_hint": "Nie zainstalowano. Zainstaluj z Instalatora (MAIL SERVER)."
 }

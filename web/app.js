@@ -354,21 +354,25 @@ function wireSystemRebootButton() {
 function mailServiceCardHtml(key, title, svc) {
   if (!svc.found) {
     return `
-      <h3 style="margin:0 0 4px;font-size:15px;">${escapeHtml(title)}</h3>
+      <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
       <div class="empty-state">${t('mail.not_installed_hint')}</div>
     `;
   }
   const isActive = svc.activeState === 'active';
+  const isEnabled = svc.enabled === 'enabled';
   return `
-    <h3 style="margin:0 0 4px;font-size:15px;">
-      ${escapeHtml(title)}
-      <span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('mail.status_running') : t('mail.status_stopped')}</span>
-    </h3>
-    <p style="color:var(--muted);font-size:12px;margin:8px 0 14px;">${escapeHtml(svc.subState || '')}</p>
+    <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
+    <dl>
+      <dt data-i18n="services.unit"></dt><dd>${escapeHtml(svc.unit)}</dd>
+      <dt data-i18n="services.status"></dt><dd><span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span> (${escapeHtml(svc.subState)})</dd>
+      <dt data-i18n="services.enabled_label"></dt><dd>${isEnabled ? t('services.enabled') : t('services.disabled')}</dd>
+      <dt data-i18n="services.pid"></dt><dd>${svc.mainPid || '-'}</dd>
+      <dt data-i18n="services.since"></dt><dd>${escapeHtml(svc.since || '-')}</dd>
+    </dl>
     <div class="service-actions">
-      <button type="button" data-mail-key="${key}" data-action="start">${t('mail.start_button')}</button>
-      <button type="button" data-mail-key="${key}" data-action="restart">${t('mail.restart_button')}</button>
-      <button type="button" class="danger" data-mail-key="${key}" data-action="stop">${t('mail.stop_button')}</button>
+      <button type="button" data-mail-key="${key}" data-action="start">${t('services.action_start')}</button>
+      <button type="button" data-mail-key="${key}" data-action="restart">${t('services.action_restart')}</button>
+      <button type="button" class="danger" data-mail-key="${key}" data-action="stop">${t('services.action_stop')}</button>
     </div>
     <div class="action-msg" id="mail-${key}-msg"></div>
   `;
