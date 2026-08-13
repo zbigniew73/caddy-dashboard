@@ -233,7 +233,13 @@ async function refreshDynamicNav() {
   // nigdy zakladka w GLOWNE, tam trafiaja pojedyncze zainstalowane wersje
   // (klucze "phpXX", dolaczane przez serwer po istniejacych uslugach, wiec
   // wychodza na liscie po Redis - patrz server/routes/api.js phpServiceEntries()).
-  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm');
+  // "frankenphp" wykluczone z TEGO SAMEGO powodu co w renderServicesTab
+  // (Usluga -> Start tutaj to surowy `systemctl start frankenphp.service`,
+  // domyslna globalna jednostka kolidujaca z Caddy panelu) - TEN pasek
+  // nawigacji (nav-installed-extra) to OSOBNY mechanizm od listy w
+  // zakladce Uslugi, wiec wymaga wlasnego wykluczenia, mimo ze powod jest
+  // identyczny.
+  const installedExtra = services.filter((s) => s.found && !CORE_SERVICE_KEYS.includes(s.key) && s.key !== 'php-fpm' && s.key !== 'frankenphp');
   const installablePackages = services.filter((s) => s.installable);
 
   SERVICE_DETAIL_TABS = [...CORE_SERVICE_KEYS, ...installedExtra.map((s) => s.key)];
