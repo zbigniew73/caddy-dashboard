@@ -63,16 +63,30 @@ function sitePhpSocketPath(siteId, phpVersion) {
 }
 
 // Rozmiar poola PHP-FPM wyliczany Z LIMITU RAM PAKIETU konta (miekki,
-// konfiguracyjny sufit - pm.max_children x memory_limit - NIE twardy
-// limit cgroup/systemd-slice). Prawdziwy twardy limit per-konto (jak przy
-// Redis - Slice=user-<uid>.slice) jest tu NIEOSIAGALNY bez zlamania juz
+// konfiguracyjny sufit - TYLKO pm.max_children, czyli LICZBA
+// rownoleglych procesow roboczych - NIE twardy limit cgroup/systemd-
+// slice). Prawdziwy twardy limit per-konto (jak przy Redis -
+// Slice=user-<uid>.slice) jest tu NIEOSIAGALNY bez zlamania juz
 // istniejacego wzorca: wszystkie poole danej wersji PHP dziela JEDEN,
 // wspolny proces systemd (phpXX-php-fpm.service, patrz php-install.sh) -
 // przypisanie cgroup/slice dziala na poziomie CALEJ uslugi, nie
 // pojedynczego poola, wiec nie da sie przypisac wspoldzielonej uslugi do
 // slice'a JEDNEGO konta bez odejscia od modelu "jeden proces per wersja
-// PHP" juz uzywanego przez phpMyAdmin/Adminer. Stale ponizej to punkt
-// startowy do strojenia, nie objawienie.
+// PHP" juz uzywanego przez phpMyAdmin/Adminer.
+//
+// CELOWO NIE ustawiamy tu php_admin_value[memory_limit] per pool -
+// realny blad znaleziony na zywo: `php_admin_value` w configu poola ZAWSZE
+// wygrywa z php.ini/php.d/*.ini (to caly sens "admin_value" - nie da sie
+// go nadpisac ani przez ini_set(), ani przez zaladowany plik ini), wiec
+// gdyby to tu bylo ustawione, admin zmieniajacy globalny memory_limit dla
+// danej wersji PHP z panelu (php-set-settings.sh ->
+// /etc/opt/remi/phpXX/php.d/99-caddy-dashboard.ini) bylby CICHO
+// ignorowany dla kazdej hostowanej strony. PHP_WORKER_MB_ESTIMATE ponizej
+// sluzy WYLACZNIE do oszacowania, ile procesow roboczych zmiesci sie w
+// budzecie RAM konta - nie ma nic wspolnego z faktycznym
+// dyrektywa memory_limit, ktora zostaje calkowicie odziedziczona z
+// globalnej konfiguracji tej wersji PHP (ustawianej przez admina).
+// Stale ponizej to punkt startowy do strojenia, nie objawienie.
 const PHP_POOL_RAM_FRACTION = 0.4;
 const PHP_WORKER_MB_ESTIMATE = 64;
 const PHP_POOL_MAX_CHILDREN_MIN = 2;
@@ -84,7 +98,7 @@ function computePhpPoolSizing(ramLimitMb) {
     PHP_POOL_MAX_CHILDREN_MAX,
     Math.max(PHP_POOL_MAX_CHILDREN_MIN, Math.floor(budgetMb / PHP_WORKER_MB_ESTIMATE))
   );
-  return { maxChildren, memoryLimitMb: PHP_WORKER_MB_ESTIMATE };
+  return { maxChildren };
 }
 
 function validateProxyPort(proxyPort) {
@@ -354,9 +368,9 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
   const id = randomUUID();
   let phpSocketPath = null;
   if ((templateValue === 'php' || templateValue === 'wordpress') && phpVersionValue) {
-    const { maxChildren, memoryLimitMb } = computePhpPoolSizing(account.ramLimitMb);
+    const { maxChildren } = computePhpPoolSizing(account.ramLimitMb);
     const slug = sitePhpSlug(id);
-    await runPoolScript('apply', username, domainValue, phpVersionValue, slug, maxChildren, memoryLimitMb);
+    await runPoolScript('apply', username, domainValue, phpVersionValue, slug, maxChildren);
     phpSocketPath = sitePhpSocketPath(id, phpVersionValue);
   }
 

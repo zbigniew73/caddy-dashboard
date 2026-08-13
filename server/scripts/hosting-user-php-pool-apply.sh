@@ -13,11 +13,19 @@
 # wzorcem dla mechaniki ponizej, tylko sparametryzowanym per KONTO
 # HOSTINGOWE zamiast jednego, sztywnego narzedzia admina).
 #
-# Wszystkie wartosci liczbowe (max_children/memory_limit) sa WYLICZONE
-# WCZESNIEJ w Node (server/services/hostingUserSites.js,
-# computePhpPoolSizing() - z limitu RAM pakietu konta) - ten skrypt jest
-# celowo "gluchy"/mechaniczny: tylko waliduje i zapisuje, tak jak kazdy
-# inny skrypt sudo w tym projekcie.
+# pm.max_children jest WYLICZONE WCZESNIEJ w Node
+# (server/services/hostingUserSites.js, computePhpPoolSizing() - z limitu
+# RAM pakietu konta) - ten skrypt jest celowo "gluchy"/mechaniczny: tylko
+# waliduje i zapisuje, tak jak kazdy inny skrypt sudo w tym projekcie.
+#
+# CELOWO brak php_admin_value[memory_limit] w poolu - realny blad
+# znaleziony na zywo: `php_admin_value` w configu poola ZAWSZE wygrywa z
+# php.ini/php.d/*.ini (caly sens "admin_value"), wiec admin zmieniajacy
+# globalny memory_limit dla danej wersji PHP z panelu (php-set-settings.sh
+# -> /etc/opt/remi/phpXX/php.d/99-caddy-dashboard.ini) bylby CICHO
+# ignorowany dla kazdej hostowanej strony, gdyby ta dyrektywa tu byla.
+# memory_limit jest wiec w calosci odziedziczony z globalnej konfiguracji
+# tej wersji PHP.
 #
 # Katalog na sockety (/run/cd-hosting-php) jest WSPOLNY dla wszystkich
 # kont (w odroznieniu od /opt/caddy-dashboard/run uzywanego przez
@@ -30,7 +38,7 @@
 # "samoinstalujacy sie" wzorzec co szablon systemd Redisa w
 # hosting-user-redis-apply.sh - zero recznego kroku na VPS).
 #
-# apply <username> <domain> <phpVersion> <siteSlug> <maxChildren> <memoryLimitMb>
+# apply <username> <domain> <phpVersion> <siteSlug> <maxChildren>
 #   Zapisuje/nadpisuje plik poola i przeladowuje wspolna usluge PHP-FPM tej
 #   wersji (z kopia zapasowa + rollbackiem przy niepowodzeniu, ten sam
 #   wzorzec co php-set-settings.sh/phpmyadmin-install.sh).
@@ -92,7 +100,6 @@ case "$ACTION" in
     PHP_VERSION="${4:-}"
     SITE_SLUG="${5:-}"
     MAX_CHILDREN="${6:-}"
-    MEMORY_LIMIT_MB="${7:-}"
 
     if ! [[ "$DOMAIN" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
       err "Nieprawidlowa domena: '${DOMAIN}'"
@@ -106,15 +113,10 @@ case "$ACTION" in
     if ! [[ "$MAX_CHILDREN" =~ ^[0-9]+$ ]]; then
       err "Nieprawidlowa liczba procesow: '${MAX_CHILDREN}'"
     fi
-    if ! [[ "$MEMORY_LIMIT_MB" =~ ^[0-9]+$ ]]; then
-      err "Nieprawidlowy limit pamieci: '${MEMORY_LIMIT_MB}'"
-    fi
     # Defense-in-depth - Node juz przycina te wartosci, ale skrypt nie ma
     # ufac wylacznie wywolujacemu (ten sam duch co reszta projektu).
     [ "$MAX_CHILDREN" -lt 2 ] && MAX_CHILDREN=2
     [ "$MAX_CHILDREN" -gt 20 ] && MAX_CHILDREN=20
-    [ "$MEMORY_LIMIT_MB" -lt 16 ] && MEMORY_LIMIT_MB=16
-    [ "$MEMORY_LIMIT_MB" -gt 512 ] && MEMORY_LIMIT_MB=512
 
     rpm -q "php${PHP_VERSION}" >/dev/null 2>&1 \
       || err "PHP ${PHP_VERSION} nie jest zainstalowany - zainstaluj go najpierw z panelu admina (Runtime Manager)."
@@ -151,7 +153,6 @@ listen.mode = 0660
 pm = ondemand
 pm.max_children = ${MAX_CHILDREN}
 pm.process_idle_timeout = 30s
-php_admin_value[memory_limit] = ${MEMORY_LIMIT_MB}M
 php_admin_value[open_basedir] = ${PUBLIC_ROOT}:${USER_HOME}/tmp
 php_admin_value[upload_tmp_dir] = ${USER_HOME}/tmp
 php_admin_value[session.save_path] = ${USER_HOME}/tmp
