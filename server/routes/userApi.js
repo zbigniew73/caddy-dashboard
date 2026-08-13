@@ -8,6 +8,10 @@ import {
 } from '../services/hostingUserSites.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
+import {
+  getRepoSettings, saveRepoSettings, listJobs, createJob, updateJob, deleteJob, runJobNow,
+  listSnapshots, restoreSnapshot
+} from '../services/hostingUserBackup.js';
 
 const router = Router();
 
@@ -236,6 +240,82 @@ router.post('/ssh/keys/delete', async (req, res) => {
   try {
     const { keyData } = req.body || {};
     res.json({ keys: await deleteSshKey(req.hostingUser, keyData) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/backup/repo', async (req, res) => {
+  try {
+    res.json(await getRepoSettings(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/backup/repo', async (req, res) => {
+  try {
+    res.json(await saveRepoSettings(req.hostingUser, req.body || {}));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/backup/jobs', async (req, res) => {
+  try {
+    res.json(await listJobs(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/backup/jobs', async (req, res) => {
+  try {
+    const { name, schedule, siteIds, databaseIds, keepLast } = req.body || {};
+    res.json(await createJob(req.hostingUser, { name, schedule, siteIds, databaseIds, keepLast }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/backup/jobs/:id', async (req, res) => {
+  try {
+    const { name, schedule, siteIds, databaseIds, keepLast, enabled } = req.body || {};
+    res.json(await updateJob(req.hostingUser, req.params.id, { name, schedule, siteIds, databaseIds, keepLast, enabled }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/backup/jobs/:id', async (req, res) => {
+  try {
+    await deleteJob(req.hostingUser, req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/backup/jobs/:id/run', async (req, res) => {
+  try {
+    res.json(await runJobNow(req.hostingUser, req.params.id));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/backup/snapshots', async (req, res) => {
+  try {
+    res.json(await listSnapshots(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/backup/restore', async (req, res) => {
+  try {
+    const { snapshotId } = req.body || {};
+    res.json(await restoreSnapshot(req.hostingUser, snapshotId));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

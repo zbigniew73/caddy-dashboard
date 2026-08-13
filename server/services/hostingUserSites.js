@@ -91,6 +91,20 @@ async function listOwnSites(username) {
   };
 }
 
+// Dla funkcji Backup (hostingUserBackup.js) - rzeczywista sciezka
+// webroota strony na dysku, ten sam wzorzec co buildSiteBlock() nizej
+// (publicRoot). Zwraca null dla 'reverseproxy' - ten szablon proxuje do
+// lokalnego portu i NIE MA wlasnego katalogu public/ (patrz
+// buildSiteBlock: dostaje `reverse_proxy`, nie `root/file_server`), wiec
+// nie ma czego backupowac po sciezce - wywolujacy musi to przefiltrowac.
+function getSitePublicPath(username, id) {
+  const account = getAccount(username);
+  if (!account) throw badRequest('Nie znaleziono konta hostingowego.');
+  const record = findOwnRecord(loadData(), username, id);
+  if (record.template === 'reverseproxy') return null;
+  return `${account.homeDir}/domains/${record.domain}/public`;
+}
+
 // Dla naprawy uprawnien (caddy-ensure-logs.sh) - kto jest wlascicielem
 // ktorej domeny, zeby przywrocic chown <username>:caddy na pliku
 // /etc/caddy/sites/<domena>.caddy(.disabled), gdyby ktos recznie
@@ -357,5 +371,5 @@ async function deleteSite(username, id) {
 
 export {
   listOwnSites, createSite, updateSiteRedirect, toggleSite, deleteSite, listSiteOwners,
-  getSiteConfig, checkSiteConfig, updateSiteConfig
+  getSiteConfig, checkSiteConfig, updateSiteConfig, getSitePublicPath
 };

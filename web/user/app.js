@@ -220,12 +220,11 @@ function renderDashboard(content) {
   `;
 }
 
-// Szkielet zakladek "na razie tylko szkielet" (Strony/SSH/Backup/Redis) -
-// jeden rzad, dwa rowne klocki (ten sam wzorzec co Witaj+Info na
-// Dashboardzie), bez tresci - do wypelnienia w kolejnych krokach.
-const PLACEHOLDER_TABS = {
-  backup: 'nav.backup'
-};
+// Szkielet zakladek "na razie tylko szkielet" - jeden rzad, dwa rowne
+// klocki (ten sam wzorzec co Witaj+Info na Dashboardzie), bez tresci - do
+// wypelnienia w kolejnych krokach. Pusty teraz (Backup, ostatni szkielet,
+// dostal realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
+const PLACEHOLDER_TABS = {};
 
 function renderPlaceholderTab(content, titleKey) {
   content.innerHTML = `
@@ -1587,6 +1586,448 @@ async function refreshSitesTab(content) {
   }
 }
 
+// Backup (restic) - ostatni z 5 pierwotnych szkieletow, trzy PELNOSZEROKO-
+// SCIOWE klocki jedne pod drugim (nie 2-kolumnowy rzad - kazda sekcja jest
+// zbyt bogata w tresc na 50/50): Snapshoty i przywracanie, Ustawienia
+// (repozytorium), Zadania (co+kiedy+retencja). Kluczowa decyzja z planu:
+// harmonogram/enabled zadania zyje w PRAWDZIWYM crontabie usera (wlasny
+// marker "# cd-backup:", zupelnie niezalezny od "# cd-cron:" zakladki
+// Cron - patrz hostingUserBackup.js), a nazwa/zrodla/retencja w JSON,
+// polaczone po id przez backend - front dostaje juz gotowy, scalony
+// obiekt (GET /backup/jobs) i o tym rozdziale nie musi wiedziec.
+//
+// Strony z template 'reverseproxy' NIE MAJA katalogu public/ (proxuja do
+// lokalnego portu) - odfiltrowane z listy checkboxow w formularzu zadania
+// (backend i tak by je odrzucil, ale user nie powinien nawet widziec
+// niepasujacej opcji).
+let backupJobEditingId = null;
+
+function backupSnapshotRow(snap) {
+  return `
+    <tr>
+      <td style="font-family:var(--mono);">${escapeHtml(snap.shortId || snap.id || '-')}</td>
+      <td>${escapeHtml(snap.time ? new Date(snap.time).toLocaleString() : '-')}</td>
+      <td style="white-space:normal;word-break:break-all;">${escapeHtml((snap.paths || []).join(', '))}</td>
+      <td><button type="button" class="secondary" data-backup-restore="${escapeHtml(snap.id)}">${t('backup.restore_button')}</button></td>
+    </tr>
+  `;
+}
+
+function backupSnapshotsCardHtml(repo, snapshots) {
+  if (!repo) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('backup.snapshots_title')}</h3>
+      <div class="empty-state">${t('backup.snapshots_need_repo')}</div>
+    `;
+  }
+  const rows = snapshots.length
+    ? snapshots.map(backupSnapshotRow).join('')
+    : `<tr><td colspan="4" style="text-align:center;color:var(--muted);">${t('backup.snapshots_empty')}</td></tr>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('backup.snapshots_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('backup.snapshots_description')}</p>
+    <button type="button" class="secondary" id="backup-snapshots-refresh-btn">${t('backup.refresh_button')}</button>
+    <div class="action-msg" id="backup-restore-msg"></div>
+    <div style="overflow-x:auto;margin-top:14px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('backup.col_snapshot_id')}</th>
+            <th>${t('backup.col_time')}</th>
+            <th>${t('backup.col_paths')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Cztery typy repozytorium, jedno pole `<select>`, WSZYSTKIE grupy pol
+// zawsze w DOM (tylko show/hide przez JS przy zmianie selecta, ten sam
+// wzorzec co checkbox hasla w Redis) - prostsze niz przebudowywanie DOM
+// przy kazdej zmianie typu, i pozwala userowi wpisac dane dla kilku
+// typow na zapas bez ich utraty przy przelaczaniu (zapisywany jest tylko
+// AKTUALNIE wybrany typ).
+function backupSettingsCardHtml(repo) {
+  const type = repo?.type || 'local';
+  const creds = repo?.credentials || {};
+  const statusBadge = repo
+    ? `<span class="status-badge active">${t('backup.status_initialized')}</span>`
+    : `<span class="status-badge inactive">${t('backup.status_not_initialized')}</span>`;
+
+  const typeOptions = ['local', 's3', 'b2', 'sftp']
+    .map((v) => `<option value="${v}" ${type === v ? 'selected' : ''}>${t('backup.repo_type_' + v)}</option>`)
+    .join('');
+
+  const fieldStyle = (v) => `display:${type === v ? 'block' : 'none'};margin-bottom:10px;`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('backup.settings_title')} ${statusBadge}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('backup.settings_description')}</p>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_repo_type')}</label>
+    <select id="backup-repo-type" style="margin-bottom:14px;">${typeOptions}</select>
+
+    <div data-backup-fields="local" style="${fieldStyle('local')}">
+      <p style="margin:0;font-size:12px;color:var(--muted);">${t('backup.repo_type_local_hint')}</p>
+    </div>
+
+    <div data-backup-fields="s3" style="${fieldStyle('s3')}">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_bucket')}</label>
+      <input type="text" id="backup-s3-bucket" value="${escapeHtml(creds.bucket || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_endpoint')}</label>
+      <input type="text" id="backup-s3-endpoint" placeholder="s3.amazonaws.com" value="${escapeHtml(creds.endpoint || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_region')}</label>
+      <input type="text" id="backup-s3-region" value="${escapeHtml(creds.region || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_access_key')}</label>
+      <input type="text" id="backup-s3-access-key" value="${escapeHtml(creds.accessKeyId || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;font-family:var(--mono);">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_secret_key')}</label>
+      <input type="text" id="backup-s3-secret-key" value="${escapeHtml(creds.secretAccessKey || '')}" style="width:100%;box-sizing:border-box;font-family:var(--mono);">
+    </div>
+
+    <div data-backup-fields="b2" style="${fieldStyle('b2')}">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_b2_bucket')}</label>
+      <input type="text" id="backup-b2-bucket" value="${escapeHtml(creds.bucket || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_b2_account_id')}</label>
+      <input type="text" id="backup-b2-account-id" value="${escapeHtml(creds.accountId || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;font-family:var(--mono);">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_b2_account_key')}</label>
+      <input type="text" id="backup-b2-account-key" value="${escapeHtml(creds.accountKey || '')}" style="width:100%;box-sizing:border-box;font-family:var(--mono);">
+    </div>
+
+    <div data-backup-fields="sftp" style="${fieldStyle('sftp')}">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sftp_host')}</label>
+      <input type="text" id="backup-sftp-host" value="${escapeHtml(creds.host || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sftp_port')}</label>
+      <input type="number" id="backup-sftp-port" min="1" max="65535" value="${escapeHtml(creds.port || 22)}" style="margin-bottom:8px;width:120px;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sftp_username')}</label>
+      <input type="text" id="backup-sftp-username" value="${escapeHtml(creds.sftpUser || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sftp_path')}</label>
+      <input type="text" id="backup-sftp-path" value="${escapeHtml(creds.path || '')}" style="margin-bottom:8px;width:100%;box-sizing:border-box;font-family:var(--mono);">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sftp_private_key')}</label>
+      <textarea id="backup-sftp-private-key" rows="4" style="width:100%;box-sizing:border-box;font-family:var(--mono);font-size:12px;">${escapeHtml(creds.privateKey || '')}</textarea>
+    </div>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_password')}</label>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <input type="password" id="backup-repo-password" value="${escapeHtml(repo?.resticPassword || '')}" style="flex:1;font-family:var(--mono);">
+      <button type="button" class="secondary" id="backup-repo-password-toggle-btn" title="${t('backup.toggle_password')}">${EYE_ICON_SVG}</button>
+      <button type="button" class="secondary" id="backup-repo-password-generate-btn">${t('backup.generate_button')}</button>
+    </div>
+
+    <button type="button" id="backup-repo-save-btn">${t('backup.save_button')}</button>
+    <div class="action-msg" id="backup-repo-msg"></div>
+  `;
+}
+
+function backupJobRow(job, sitesById, dbsById) {
+  const siteNames = (job.siteIds || []).map((id) => sitesById.get(id)?.domain || id);
+  const dbNames = (job.databaseIds || []).map((id) => dbsById.get(id)?.dbName || id);
+  const sourcesText = [...siteNames, ...dbNames].join(', ') || '-';
+  const lastRunText = job.lastRunAt
+    ? `${new Date(job.lastRunAt).toLocaleString()} - ${job.lastRunStatus === 'success' ? t('backup.run_status_success') : t('backup.run_status_error')}`
+    : t('backup.run_status_never');
+
+  return `
+    <tr>
+      <td>${escapeHtml(job.name || '-')}</td>
+      <td style="font-family:var(--mono);">${escapeHtml(job.schedule)}</td>
+      <td style="white-space:normal;">${escapeHtml(sourcesText)}</td>
+      <td>${job.keepLast}</td>
+      <td><span class="status-badge ${job.enabled ? 'active' : 'inactive'}">${job.enabled ? t('backup.status_active') : t('backup.status_inactive')}</span></td>
+      <td style="white-space:normal;">${escapeHtml(lastRunText)}</td>
+      <td style="white-space:normal;">
+        <button type="button" class="secondary" data-backup-job-run="${job.id}">${t('backup.run_now')}</button>
+        <button type="button" class="secondary" data-backup-job-edit="${job.id}">${t('backup.edit')}</button>
+        <button type="button" class="secondary" data-backup-job-toggle="${job.id}" data-backup-job-enabled="${job.enabled}">${job.enabled ? t('backup.disable') : t('backup.enable')}</button>
+        <button type="button" class="danger" data-backup-job-delete="${job.id}">${t('backup.delete')}</button>
+      </td>
+    </tr>
+  `;
+}
+
+function backupJobFormHtml(sites, databases, editingJob) {
+  const eligibleSites = sites.filter((s) => s.template !== 'reverseproxy');
+  const siteCheckboxes = eligibleSites.length
+    ? eligibleSites.map((s) => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+          <input type="checkbox" name="backup-job-site" value="${s.id}" ${editingJob?.siteIds?.includes(s.id) ? 'checked' : ''}>
+          ${escapeHtml(s.domain)}
+        </label>
+      `).join('')
+    : `<span style="font-size:12px;color:var(--muted);">${t('backup.no_sites_hint')}</span>`;
+
+  const dbCheckboxes = databases.length
+    ? databases.map((d) => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+          <input type="checkbox" name="backup-job-db" value="${d.id}" ${editingJob?.databaseIds?.includes(d.id) ? 'checked' : ''}>
+          ${escapeHtml(d.dbName)}
+        </label>
+      `).join('')
+    : `<span style="font-size:12px;color:var(--muted);">${t('backup.no_databases_hint')}</span>`;
+
+  const presetsHtml = CRON_PRESETS.map(([key, value]) =>
+    `<button type="button" class="secondary" data-backup-preset="${escapeHtml(value)}">${t('cron.preset_' + key)}</button>`
+  ).join('');
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${editingJob ? t('backup.edit_title') : t('backup.add_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('backup.jobs_description')}</p>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_name')}</label>
+    <input type="text" id="backup-job-name" maxlength="100" value="${escapeHtml(editingJob?.name || '')}" style="margin-bottom:10px;width:100%;box-sizing:border-box;">
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_schedule')}</label>
+    <input type="text" id="backup-job-schedule" placeholder="0 3 * * *" value="${escapeHtml(editingJob?.schedule || '0 3 * * *')}" style="font-family:var(--mono);margin-bottom:6px;">
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${presetsHtml}</div>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_sites')}</label>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">${siteCheckboxes}</div>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_databases')}</label>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">${dbCheckboxes}</div>
+
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('backup.field_keep_last')}</label>
+    <input type="number" id="backup-job-keep-last" min="1" max="365" value="${editingJob?.keepLast ?? 7}" style="width:120px;margin-bottom:6px;">
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">${t('backup.keep_last_hint')}</div>
+
+    <button type="button" id="backup-job-submit-btn">${editingJob ? t('backup.save_button_job') : t('backup.add_button')}</button>
+    ${editingJob ? `<button type="button" class="secondary" id="backup-job-cancel-btn">${t('backup.cancel_button')}</button>` : ''}
+    <div class="action-msg" id="backup-job-msg"></div>
+  `;
+}
+
+function backupJobsCardHtml(jobs, sites, databases, editingJob) {
+  const sitesById = new Map(sites.map((s) => [s.id, s]));
+  const dbsById = new Map(databases.map((d) => [d.id, d]));
+  const rows = jobs.length
+    ? jobs.map((j) => backupJobRow(j, sitesById, dbsById)).join('')
+    : `<tr><td colspan="7" style="text-align:center;color:var(--muted);">${t('backup.empty')}</td></tr>`;
+
+  return `
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+      ${backupJobFormHtml(sites, databases, editingJob)}
+    </div>
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <h3 style="margin:0 0 12px;font-size:15px;">${t('backup.jobs_title')}</h3>
+      <div style="overflow-x:auto;">
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th>${t('backup.col_name')}</th>
+              <th>${t('backup.col_schedule')}</th>
+              <th>${t('backup.col_sources')}</th>
+              <th>${t('backup.col_keep_last')}</th>
+              <th>${t('backup.col_status')}</th>
+              <th>${t('backup.col_last_run')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderBackupSection(repo, jobs, snapshots, sites, databases) {
+  const editingJob = backupJobEditingId ? jobs.find((j) => j.id === backupJobEditingId) : null;
+  return `
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+      ${backupSnapshotsCardHtml(repo, snapshots)}
+    </div>
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+      ${backupSettingsCardHtml(repo)}
+    </div>
+    ${backupJobsCardHtml(jobs, sites, databases, editingJob)}
+  `;
+}
+
+function wireBackupSection(content) {
+  const typeSelect = document.getElementById('backup-repo-type');
+  if (typeSelect) {
+    typeSelect.onchange = () => {
+      content.querySelectorAll('[data-backup-fields]').forEach((el) => {
+        el.style.display = el.dataset.backupFields === typeSelect.value ? 'block' : 'none';
+      });
+    };
+  }
+
+  const pwInput = document.getElementById('backup-repo-password');
+  const pwToggleBtn = document.getElementById('backup-repo-password-toggle-btn');
+  if (pwToggleBtn) {
+    pwToggleBtn.onclick = () => { pwInput.type = pwInput.type === 'password' ? 'text' : 'password'; };
+  }
+  const pwGenBtn = document.getElementById('backup-repo-password-generate-btn');
+  if (pwGenBtn) pwGenBtn.onclick = () => { pwInput.value = generatePassword(); };
+
+  const repoSaveBtn = document.getElementById('backup-repo-save-btn');
+  if (repoSaveBtn) {
+    repoSaveBtn.onclick = async () => {
+      const type = typeSelect.value;
+      const msgEl = document.getElementById('backup-repo-msg');
+      msgEl.textContent = t('backup.saving');
+      msgEl.className = 'action-msg';
+      repoSaveBtn.disabled = true;
+      const payload = { type, password: pwInput.value };
+      if (type === 's3') {
+        payload.bucket = document.getElementById('backup-s3-bucket').value.trim();
+        payload.endpoint = document.getElementById('backup-s3-endpoint').value.trim();
+        payload.region = document.getElementById('backup-s3-region').value.trim();
+        payload.accessKeyId = document.getElementById('backup-s3-access-key').value.trim();
+        payload.secretAccessKey = document.getElementById('backup-s3-secret-key').value.trim();
+      } else if (type === 'b2') {
+        payload.bucket = document.getElementById('backup-b2-bucket').value.trim();
+        payload.accountId = document.getElementById('backup-b2-account-id').value.trim();
+        payload.accountKey = document.getElementById('backup-b2-account-key').value.trim();
+      } else if (type === 'sftp') {
+        payload.host = document.getElementById('backup-sftp-host').value.trim();
+        payload.port = document.getElementById('backup-sftp-port').value.trim();
+        payload.sftpUser = document.getElementById('backup-sftp-username').value.trim();
+        payload.path = document.getElementById('backup-sftp-path').value.trim();
+        payload.privateKey = document.getElementById('backup-sftp-private-key').value.trim();
+      }
+      try {
+        await api('PUT', '/backup/repo', payload);
+        await refreshBackupTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        repoSaveBtn.disabled = false;
+      }
+    };
+  }
+
+  content.querySelectorAll('[data-backup-preset]').forEach((btn) => {
+    btn.onclick = () => { document.getElementById('backup-job-schedule').value = btn.dataset.backupPreset; };
+  });
+
+  content.querySelectorAll('[data-backup-job-edit]').forEach((btn) => {
+    btn.onclick = () => { backupJobEditingId = btn.dataset.backupJobEdit; refreshBackupTab(content); };
+  });
+
+  const jobCancelBtn = document.getElementById('backup-job-cancel-btn');
+  if (jobCancelBtn) {
+    jobCancelBtn.onclick = () => { backupJobEditingId = null; refreshBackupTab(content); };
+  }
+
+  content.querySelectorAll('[data-backup-job-toggle]').forEach((btn) => {
+    btn.onclick = async () => {
+      const id = btn.dataset.backupJobToggle;
+      const enabled = btn.dataset.backupJobEnabled === 'true';
+      btn.disabled = true;
+      try {
+        await api('PUT', `/backup/jobs/${id}`, { enabled: !enabled });
+        await refreshBackupTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-backup-job-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('backup.confirm_delete'))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/backup/jobs/${btn.dataset.backupJobDelete}`);
+        await refreshBackupTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-backup-job-run]').forEach((btn) => {
+    btn.onclick = async () => {
+      const msgEl = document.getElementById('backup-job-msg');
+      btn.disabled = true;
+      msgEl.textContent = t('backup.running');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', `/backup/jobs/${btn.dataset.backupJobRun}/run`);
+        await refreshBackupTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const jobSubmitBtn = document.getElementById('backup-job-submit-btn');
+  if (jobSubmitBtn) {
+    jobSubmitBtn.onclick = async () => {
+      const name = document.getElementById('backup-job-name').value.trim();
+      const schedule = document.getElementById('backup-job-schedule').value.trim();
+      const keepLast = document.getElementById('backup-job-keep-last').value;
+      const siteIds = Array.from(content.querySelectorAll('input[name="backup-job-site"]:checked')).map((el) => el.value);
+      const databaseIds = Array.from(content.querySelectorAll('input[name="backup-job-db"]:checked')).map((el) => el.value);
+      const msgEl = document.getElementById('backup-job-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      jobSubmitBtn.disabled = true;
+      try {
+        if (backupJobEditingId) {
+          await api('PUT', `/backup/jobs/${backupJobEditingId}`, { name, schedule, siteIds, databaseIds, keepLast });
+          backupJobEditingId = null;
+        } else {
+          await api('POST', '/backup/jobs', { name, schedule, siteIds, databaseIds, keepLast });
+        }
+        await refreshBackupTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        jobSubmitBtn.disabled = false;
+      }
+    };
+  }
+
+  const snapRefreshBtn = document.getElementById('backup-snapshots-refresh-btn');
+  if (snapRefreshBtn) snapRefreshBtn.onclick = () => refreshBackupTab(content);
+
+  content.querySelectorAll('[data-backup-restore]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('backup.confirm_restore'))) return;
+      const msgEl = document.getElementById('backup-restore-msg');
+      btn.disabled = true;
+      msgEl.textContent = t('backup.restoring');
+      msgEl.className = 'action-msg';
+      try {
+        const result = await api('POST', '/backup/restore', { snapshotId: btn.dataset.backupRestore });
+        msgEl.textContent = t('backup.restore_success', { path: result.stagingPath || '' });
+        msgEl.className = 'action-msg success';
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+      } finally {
+        btn.disabled = false;
+      }
+    };
+  });
+}
+
+async function refreshBackupTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('backup.loading')}</div>`;
+  try {
+    const [repo, jobs, sitesData, dbData] = await Promise.all([
+      api('GET', '/backup/repo'),
+      api('GET', '/backup/jobs'),
+      api('GET', '/sites'),
+      api('GET', '/databases')
+    ]);
+    const snapshots = repo ? await api('GET', '/backup/snapshots').catch(() => []) : [];
+    content.innerHTML = renderBackupSection(repo, jobs, snapshots, sitesData.items, dbData.items);
+    wireBackupSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function renderTab() {
   const content = document.getElementById('content');
   document.querySelectorAll('nav button.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === currentTab));
@@ -1608,6 +2049,8 @@ function renderTab() {
     refreshSshTab(content);
   } else if (currentTab === 'sites') {
     refreshSitesTab(content);
+  } else if (currentTab === 'backup') {
+    refreshBackupTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
@@ -1619,6 +2062,7 @@ document.querySelectorAll('nav button.tab').forEach((btn) => {
     currentTab = btn.dataset.tab;
     cronEditingId = null;
     siteEditingId = null;
+    backupJobEditingId = null;
     renderTab();
   };
 });
