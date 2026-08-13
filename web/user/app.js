@@ -934,252 +934,175 @@ async function refreshRedisTab(content) {
   }
 }
 
-const PYTHON_FRAMEWORKS = ['django', 'flask', 'fastapi'];
+const PYTHON_FRAMEWORKS = ['django', 'flask', 'fastapi', 'manual'];
 
-function pythonAppControlHtml(status, appStatus, portInfo) {
-  if (status.frameworks.length === 0) {
-    return `<div class="empty-state" style="margin-top:16px;">${t('python.app_no_framework_hint')}</div>`;
+// Stan zakladki trzymany miedzy odswiezeniami (ten sam wzorzec co
+// siteEditingId/siteEditingContent dla Stron): pythonAppsCache pozwala
+// przerysowac SAMA liste (np. po otwarciu logow) bez ponownego odpytania
+// /python/versions i /python/free-port - a pythonLogsSlug/pythonLogsData
+// pamietaja, ktora aplikacja ma akurat rozwiniety panel logow.
+let pythonAppsCache = [];
+let pythonLogsSlug = null;
+let pythonLogsData = null;
+
+function pythonAppsFormCardHtml(versions, portInfo) {
+  if (versions.length === 0) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('python.manage_title')}</h3>
+      <div class="empty-state">${t('python.no_versions_hint')}</div>
+    `;
   }
-
-  const defaultPort = appStatus.running && appStatus.port
-    ? appStatus.port
-    : (portInfo && portInfo.free ? portInfo.port : '');
-
-  const stopButtonHtml = appStatus.running
-    ? `<button type="button" class="danger" id="python-app-stop-btn">${t('python.stop_button')}</button>`
-    : '';
-
-  return `
-    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-    <h4 style="margin:0 0 10px;font-size:14px;">${t('python.app_title')}</h4>
-    <div style="margin-bottom:10px;">
-      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_framework')}</label>
-      <select id="python-app-framework-select">
-        ${status.frameworks.map((fw) => `<option value="${fw}" ${appStatus.framework === fw ? 'selected' : ''}>${t(`python.framework_${fw}`)}</option>`).join('')}
-      </select>
-    </div>
-    <div style="margin-bottom:10px;">
-      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_port')}</label>
-      <input type="number" id="python-app-port-input" min="1" max="65535" value="${defaultPort ? escapeHtml(String(defaultPort)) : ''}">
-    </div>
-    <div style="display:flex;gap:8px;">
-      <button type="button" id="python-app-start-btn">${t('python.start_button')}</button>
-      ${stopButtonHtml}
-    </div>
-    <div class="action-msg" id="python-app-msg"></div>
-  `;
-}
-
-function pythonManageCardHtml(status, versions, appStatus, portInfo) {
-  const noVersionsHtml = versions.length === 0
-    ? `<div class="empty-state">${t('python.no_versions_hint')}</div>`
-    : '';
-
-  const selectHtml = versions.length > 0 ? `
-    <div style="margin-bottom:10px;">
-      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_version')}</label>
-      <select id="python-version-select">
-        ${versions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')}
-      </select>
-    </div>
-    <button type="button" id="python-create-btn" data-exists="${status.exists ? '1' : '0'}">${t('python.create_venv_button')}</button>
-  ` : '';
-
-  const frameworksHtml = status.exists ? `
-    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      ${PYTHON_FRAMEWORKS.map((fw) => {
-        const installed = status.frameworks.includes(fw);
-        return `
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <span>${t(`python.framework_${fw}`)}</span>
-            ${installed
-              ? `<span class="status-badge active">${t('python.installed_badge')}</span>`
-              : `<button type="button" class="secondary" id="python-install-${fw}-btn">${t('python.install_button')}</button>`}
-          </div>
-        `;
-      }).join('')}
-    </div>
-    ${pythonAppControlHtml(status, appStatus, portInfo)}
-    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-    <button type="button" class="danger" id="python-delete-btn">${t('python.delete_venv_button')}</button>
-  ` : '';
 
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('python.manage_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('python.manage_description')}</p>
-    ${noVersionsHtml}
-    ${selectHtml}
-    ${frameworksHtml}
-    <div class="action-msg" id="python-msg"></div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('python.field_name')}</label>
+        <input type="text" id="python-new-slug" placeholder="myapp" style="width:100%;box-sizing:border-box;">
+        <p style="margin:4px 0 0;color:var(--muted);font-size:11px;">${t('python.name_hint')}</p>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('python.field_version')}</label>
+        <select id="python-new-version" style="width:100%;box-sizing:border-box;">
+          ${versions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('python.field_framework')}</label>
+        <select id="python-new-framework" style="width:100%;box-sizing:border-box;">
+          ${PYTHON_FRAMEWORKS.map((fw) => `<option value="${fw}">${t(`python.framework_${fw}`)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('python.field_port')}</label>
+        <div style="display:flex;gap:8px;">
+          <input type="number" id="python-new-port" min="1" max="65535" value="${portInfo && portInfo.free ? escapeHtml(String(portInfo.port)) : ''}" style="flex:1;">
+          <button type="button" class="secondary" id="python-port-check-btn">${t('python.check_port_button')}</button>
+        </div>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:11px;">${t('python.free_port_label')}: ${portInfo ? escapeHtml(String(portInfo.port)) : '-'}</p>
+        <div class="action-msg" id="python-port-msg"></div>
+      </div>
+    </div>
+    <button type="button" id="python-create-app-btn" style="margin-top:14px;">${t('python.create_app_button')}</button>
+    <div class="action-msg" id="python-create-msg"></div>
+    <p style="margin:14px 0 0;color:var(--muted);font-size:11px;">${t('python.django_dev_hint')}</p>
   `;
 }
 
-function pythonStatsCardHtml(status, appStatus, portInfo) {
-  const statusBadge = `<span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('python.status_exists') : t('python.status_not_exists')}</span>`;
+function pythonAppRow(item) {
+  const isManual = item.framework === 'manual';
 
-  const versionRow = status.exists ? `
-    <div class="info-grid" style="margin-top:10px;">
-      <div class="info-label">${t('python.venv_python_version_label')}</div><div class="info-value">${escapeHtml(status.pythonVersion || '-')}</div>
-    </div>
+  // 'manual' nigdy nie ma uslugi systemd zalozonej przez panel (patrz
+  // startApp() w hostingUserPython.js - wprost odrzuca ten framework), wiec
+  // running/Uruchom/Zatrzymaj/Logi nie maja tu zastosowania - tylko
+  // neutralna etykieta i usuwanie.
+  const statusBadge = isManual
+    ? `<span class="status-badge inactive">${t('python.manual_status')}</span>`
+    : `<span class="status-badge ${item.running ? 'active' : 'inactive'}">${item.running ? t('python.app_status_running') : t('python.app_status_stopped')}</span>`;
+
+  const toggleButtonHtml = item.running
+    ? `<button type="button" class="secondary" data-app-stop="${escapeHtml(item.slug)}">${t('python.stop_button')}</button>`
+    : `<button type="button" class="secondary" data-app-start="${escapeHtml(item.slug)}" data-app-port="${item.port}">${t('python.start_button')}</button>`;
+
+  const actionsHtml = isManual
+    ? `<button type="button" class="danger" data-app-delete="${escapeHtml(item.slug)}">${t('python.delete_button')}</button>`
+    : `
+      ${toggleButtonHtml}
+      <button type="button" class="secondary" data-app-logs="${escapeHtml(item.slug)}">${t('python.logs_button')}</button>
+      <button type="button" class="danger" data-app-delete="${escapeHtml(item.slug)}">${t('python.delete_button')}</button>
+    `;
+
+  const logsOpen = !isManual && pythonLogsSlug === item.slug;
+  const logsRowHtml = logsOpen ? `
+    <tr>
+      <td colspan="5">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${t('python.app_logs_label')}</div>
+        ${pythonLogsData
+          ? (pythonLogsData.logs.length > 0
+              ? `<pre style="margin:0;max-height:160px;overflow:auto;font-size:11px;background:var(--bg-alt, rgba(128,128,128,0.08));padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(pythonLogsData.logs.join('\n'))}</pre>`
+              : `<div class="empty-state">${t('python.app_no_logs')}</div>`)
+          : `<div class="empty-state">${t('python.loading')}</div>`}
+      </td>
+    </tr>
   ` : '';
-
-  const frameworksText = status.exists && status.frameworks.length > 0
-    ? status.frameworks.map((fw) => t(`python.framework_${fw}`)).join(', ')
-    : t('python.none_installed');
-
-  const portValueHtml = portInfo
-    ? `${portInfo.port} <span class="status-badge ${portInfo.free ? 'active' : 'inactive'}">${portInfo.free ? t('python.port_free') : t('python.port_taken')}</span>`
-    : '-';
-
-  const appBadge = `<span class="status-badge ${appStatus.running ? 'active' : 'inactive'}">${appStatus.running ? t('python.app_status_running') : t('python.app_status_stopped')}</span>`;
-  const appInfoHtml = appStatus.running ? `
-    <div class="info-grid" style="margin-top:10px;">
-      <div class="info-label">${t('python.field_framework')}</div><div class="info-value">${escapeHtml(appStatus.framework ? t(`python.framework_${appStatus.framework}`) : '-')}</div>
-      <div class="info-label">${t('python.field_port')}</div><div class="info-value">${escapeHtml(appStatus.port ? String(appStatus.port) : '-')}</div>
-    </div>
-  ` : '';
-  const logsHtml = appStatus.logs.length > 0
-    ? `<pre style="margin:8px 0 0;max-height:160px;overflow:auto;font-size:11px;background:var(--bg-alt, rgba(128,128,128,0.08));padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(appStatus.logs.join('\n'))}</pre>`
-    : `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.app_no_logs')}</div>`;
 
   return `
-    <h3 style="margin:0 0 4px;font-size:15px;">${t('python.stats_title')} ${statusBadge}</h3>
-    ${versionRow}
-    <div class="info-grid" style="margin-top:10px;">
-      <div class="info-label">${t('python.installed_frameworks_label')}</div><div class="info-value">${escapeHtml(frameworksText)}</div>
-    </div>
-    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-    <h4 style="margin:0 0 6px;font-size:14px;">${t('python.app_title')} ${appBadge}</h4>
-    ${appInfoHtml}
-    <div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.app_logs_label')}</div>
-    ${logsHtml}
-    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
-    <div style="font-size:13px;margin-bottom:8px;">${t('python.free_port_label')}: <strong>${portValueHtml}</strong></div>
-    <div style="display:flex;gap:8px;">
-      <input type="number" id="python-port-input" min="1" max="65535" placeholder="${portInfo ? escapeHtml(String(portInfo.port)) : ''}" style="flex:1;">
-      <button type="button" class="secondary" id="python-port-check-btn">${t('python.check_port_button')}</button>
-    </div>
-    <div class="action-msg" id="python-port-msg"></div>
-    <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('python.reverseproxy_hint')}</div>
-    ${status.exists && status.frameworks.includes('django') ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.django_dev_hint')}</div>` : ''}
+    <tr>
+      <td>${escapeHtml(item.slug)}</td>
+      <td>${t(`python.framework_${item.framework}`)}</td>
+      <td>${item.port}</td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap;">
+        ${actionsHtml}
+      </td>
+    </tr>
+    ${logsRowHtml}
   `;
 }
 
-function renderPythonSection(status, versions, appStatus, portInfo) {
+function pythonAppsListCardHtml(apps) {
+  const tableHtml = apps.length ? `
+    <div style="overflow-x:auto;margin-top:14px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('python.col_name')}</th>
+            <th>${t('python.col_framework')}</th>
+            <th>${t('python.col_port')}</th>
+            <th>${t('python.col_status')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${apps.map(pythonAppRow).join('')}</tbody>
+      </table>
+    </div>
+  ` : `<div class="empty-state">${t('python.empty_apps')}</div>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('python.apps_list_title')}</h3>
+    ${tableHtml}
+    <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('python.reverseproxy_hint')}</div>
+  `;
+}
+
+function pythonHelpCardHtml() {
+  const sections = PYTHON_FRAMEWORKS.map((fw) => `
+    <div>
+      <h4 style="margin:0 0 4px;font-size:14px;">${t(`python.framework_${fw}`)}</h4>
+      <p style="margin:0;color:var(--muted);font-size:13px;">${t(`python.help_${fw}`)}</p>
+    </div>
+  `).join('');
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('python.help_title')}</h3>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:10px;">
+      ${sections}
+    </div>
+  `;
+}
+
+function renderPythonSection(versions, apps, portInfo) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${pythonManageCardHtml(status, versions, appStatus, portInfo)}
+        ${pythonAppsFormCardHtml(versions, portInfo)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${pythonStatsCardHtml(status, appStatus, portInfo)}
+      <div class="system-info-card" id="python-apps-list-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${pythonAppsListCardHtml(apps)}
       </div>
+    </div>
+    <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
+      ${pythonHelpCardHtml()}
     </div>
   `;
 }
 
-function wirePythonSection(content) {
-  const msgEl = document.getElementById('python-msg');
-
-  const createBtn = document.getElementById('python-create-btn');
-  if (createBtn) {
-    createBtn.onclick = async () => {
-      if (createBtn.dataset.exists === '1' && !window.confirm(t('python.confirm_recreate_venv'))) return;
-      const pythonId = document.getElementById('python-version-select').value;
-      createBtn.disabled = true;
-      msgEl.textContent = t('python.creating_venv');
-      msgEl.className = 'action-msg';
-      try {
-        await api('POST', '/python/venv', { pythonId });
-        await refreshPythonTab(content);
-      } catch (e) {
-        msgEl.textContent = e.message;
-        msgEl.className = 'action-msg error';
-        createBtn.disabled = false;
-      }
-    };
-  }
-
-  PYTHON_FRAMEWORKS.forEach((fw) => {
-    const installBtn = document.getElementById(`python-install-${fw}-btn`);
-    if (installBtn) {
-      installBtn.onclick = async () => {
-        installBtn.disabled = true;
-        msgEl.textContent = t('python.installing');
-        msgEl.className = 'action-msg';
-        try {
-          await api('POST', '/python/venv/install', { framework: fw });
-          await refreshPythonTab(content);
-        } catch (e) {
-          msgEl.textContent = e.message;
-          msgEl.className = 'action-msg error';
-          installBtn.disabled = false;
-        }
-      };
-    }
-  });
-
-  const deleteBtn = document.getElementById('python-delete-btn');
-  if (deleteBtn) {
-    deleteBtn.onclick = async () => {
-      if (!window.confirm(t('python.confirm_delete_venv'))) return;
-      deleteBtn.disabled = true;
-      msgEl.textContent = '';
-      msgEl.className = 'action-msg';
-      try {
-        await api('DELETE', '/python/venv');
-        await refreshPythonTab(content);
-      } catch (e) {
-        msgEl.textContent = e.message;
-        msgEl.className = 'action-msg error';
-        deleteBtn.disabled = false;
-      }
-    };
-  }
-
-  const appMsgEl = document.getElementById('python-app-msg');
-
-  const appStartBtn = document.getElementById('python-app-start-btn');
-  if (appStartBtn) {
-    appStartBtn.onclick = async () => {
-      const framework = document.getElementById('python-app-framework-select').value;
-      const port = document.getElementById('python-app-port-input').value;
-      appStartBtn.disabled = true;
-      appMsgEl.textContent = t('python.starting');
-      appMsgEl.className = 'action-msg';
-      try {
-        await api('POST', '/python/app/start', { framework, port });
-        await refreshPythonTab(content);
-      } catch (e) {
-        appMsgEl.textContent = e.message;
-        appMsgEl.className = 'action-msg error';
-        appStartBtn.disabled = false;
-      }
-    };
-  }
-
-  const appStopBtn = document.getElementById('python-app-stop-btn');
-  if (appStopBtn) {
-    appStopBtn.onclick = async () => {
-      appStopBtn.disabled = true;
-      appMsgEl.textContent = t('python.stopping');
-      appMsgEl.className = 'action-msg';
-      try {
-        await api('POST', '/python/app/stop');
-        await refreshPythonTab(content);
-      } catch (e) {
-        appMsgEl.textContent = e.message;
-        appMsgEl.className = 'action-msg error';
-        appStopBtn.disabled = false;
-      }
-    };
-  }
-
+function wirePythonCreateForm(content) {
   const portCheckBtn = document.getElementById('python-port-check-btn');
   if (portCheckBtn) {
     portCheckBtn.onclick = async () => {
-      const portInput = document.getElementById('python-port-input');
+      const portInput = document.getElementById('python-new-port');
       const portMsgEl = document.getElementById('python-port-msg');
       const portValue = portInput.value.trim();
       portCheckBtn.disabled = true;
@@ -1198,18 +1121,120 @@ function wirePythonSection(content) {
       }
     };
   }
+
+  const createBtn = document.getElementById('python-create-app-btn');
+  if (!createBtn) return;
+  createBtn.onclick = async () => {
+    const slug = document.getElementById('python-new-slug').value.trim();
+    const pythonId = document.getElementById('python-new-version').value;
+    const framework = document.getElementById('python-new-framework').value;
+    const port = document.getElementById('python-new-port').value;
+    const msgEl = document.getElementById('python-create-msg');
+    createBtn.disabled = true;
+    msgEl.textContent = t('python.creating_app');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/python/apps', { slug, pythonId, framework, port });
+      await refreshPythonTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      createBtn.disabled = false;
+    }
+  };
+}
+
+function rerenderPythonAppsList(content) {
+  const card = document.getElementById('python-apps-list-card');
+  if (card) card.innerHTML = pythonAppsListCardHtml(pythonAppsCache);
+  wirePythonAppsList(content);
+}
+
+function wirePythonAppsList(content) {
+  content.querySelectorAll('[data-app-start]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = t('python.starting');
+      try {
+        await api('POST', `/python/apps/${btn.dataset.appStart}/start`, { port: btn.dataset.appPort });
+        await refreshPythonTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+        btn.textContent = t('python.start_button');
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-stop]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = t('python.stopping');
+      try {
+        await api('POST', `/python/apps/${btn.dataset.appStop}/stop`);
+        await refreshPythonTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+        btn.textContent = t('python.stop_button');
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('python.confirm_delete_app', { slug: btn.dataset.appDelete }))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/python/apps/${btn.dataset.appDelete}`);
+        if (pythonLogsSlug === btn.dataset.appDelete) { pythonLogsSlug = null; pythonLogsData = null; }
+        await refreshPythonTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-logs]').forEach((btn) => {
+    btn.onclick = async () => {
+      const slug = btn.dataset.appLogs;
+      if (pythonLogsSlug === slug) {
+        pythonLogsSlug = null;
+        pythonLogsData = null;
+        rerenderPythonAppsList(content);
+        return;
+      }
+      pythonLogsSlug = slug;
+      pythonLogsData = null;
+      rerenderPythonAppsList(content);
+      try {
+        pythonLogsData = await api('GET', `/python/apps/${slug}/logs`);
+      } catch (e) {
+        pythonLogsData = { running: false, logs: [e.message] };
+      }
+      rerenderPythonAppsList(content);
+    };
+  });
+}
+
+function wirePythonSection(content) {
+  wirePythonCreateForm(content);
+  wirePythonAppsList(content);
 }
 
 async function refreshPythonTab(content) {
   content.innerHTML = `<div class="empty-state">${t('python.loading')}</div>`;
+  pythonLogsSlug = null;
+  pythonLogsData = null;
   try {
-    const [status, versions, appStatus, portInfo] = await Promise.all([
-      api('GET', '/python'),
+    const [versions, apps, portInfo] = await Promise.all([
       api('GET', '/python/versions'),
-      api('GET', '/python/app'),
+      api('GET', '/python/apps'),
       api('GET', '/python/free-port').catch(() => null)
     ]);
-    content.innerHTML = renderPythonSection(status, versions, appStatus, portInfo);
+    pythonAppsCache = apps;
+    content.innerHTML = renderPythonSection(versions, apps, portInfo);
     wirePythonSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

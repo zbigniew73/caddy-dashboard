@@ -9,8 +9,7 @@ import {
 import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import {
-  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort,
-  getAppStatus, startApp, stopApp
+  listPythonVersions, listApps, createApp, startApp, stopApp, deleteApp, getAppLogs, findFreePort
 } from '../services/hostingUserPython.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 import {
@@ -249,40 +248,6 @@ router.get('/python/versions', async (req, res) => {
   }
 });
 
-router.get('/python', async (req, res) => {
-  try {
-    res.json(await getVenvStatus(req.hostingUser));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.post('/python/venv', async (req, res) => {
-  try {
-    const { pythonId } = req.body || {};
-    res.json(await createVenv(req.hostingUser, pythonId));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.post('/python/venv/install', async (req, res) => {
-  try {
-    const { framework } = req.body || {};
-    res.json(await installFramework(req.hostingUser, framework));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
-router.delete('/python/venv', async (req, res) => {
-  try {
-    res.json(await deleteVenv(req.hostingUser));
-  } catch (e) {
-    res.status(e.status || 500).json({ error: e.message });
-  }
-});
-
 router.get('/python/free-port', async (req, res) => {
   try {
     res.json(await findFreePort(req.query.port));
@@ -291,26 +256,52 @@ router.get('/python/free-port', async (req, res) => {
   }
 });
 
-router.get('/python/app', async (req, res) => {
+router.get('/python/apps', async (req, res) => {
   try {
-    res.json(await getAppStatus(req.hostingUser));
+    res.json(await listApps(req.hostingUser));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
 });
 
-router.post('/python/app/start', async (req, res) => {
+router.post('/python/apps', async (req, res) => {
   try {
-    const { framework, port } = req.body || {};
-    res.json(await startApp(req.hostingUser, { framework, port }));
+    const { slug, pythonId, framework, port } = req.body || {};
+    res.json(await createApp(req.hostingUser, { slug, pythonId, framework, port }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
 });
 
-router.post('/python/app/stop', async (req, res) => {
+router.delete('/python/apps/:slug', async (req, res) => {
   try {
-    res.json(await stopApp(req.hostingUser));
+    await deleteApp(req.hostingUser, req.params.slug);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/apps/:slug/start', async (req, res) => {
+  try {
+    const { port } = req.body || {};
+    res.json(await startApp(req.hostingUser, req.params.slug, port));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/apps/:slug/stop', async (req, res) => {
+  try {
+    res.json(await stopApp(req.hostingUser, req.params.slug));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/python/apps/:slug/logs', async (req, res) => {
+  try {
+    res.json(await getAppLogs(req.hostingUser, req.params.slug));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

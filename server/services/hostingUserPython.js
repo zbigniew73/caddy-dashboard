@@ -1,34 +1,60 @@
-import { spawn } from 'child_process';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { spawn, execFile } from 'child_process';
+import { promisify } from 'util';
 import fs from 'fs';
 import net from 'net';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { listUsedProxyPorts } from './hostingUserSites.js';
 
+const execFileAsync = promisify(execFile);
+
+const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../data');
+const DATA_PATH = path.join(DATA_DIR, 'hosting-python-apps.json');
 const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
-const SCRIPT_NAME = 'hosting-user-python-venv.sh';
 const APP_SCRIPT_NAME = 'hosting-user-python-app.sh';
 
-const FRAMEWORKS = ['django', 'flask', 'fastapi'];
-// Nazwa pakietu w `pip list --format=freeze` uzywana do wykrycia "czy
-// framework juz zainstalowany" - dolna litera, bo pip normalizuje nazwy
-// (Django -> django) w tym formacie wyjscia.
-const FRAMEWORK_PACKAGE_NAME = { django: 'django', flask: 'flask', fastapi: 'fastapi' };
+// 'manual' = tylko czysty venv (bez pakietow, bez szkieletu) - user
+// instaluje i uruchamia swoja aplikacje samodzielnie przez SSH. Dlatego
+// startApp() nizej wprost odrzuca 'manual' - panel nigdy nie tworzy dla
+// niej uslugi systemd (sudo script tez to blokuje, patrz akcja 'start' w
+// hosting-user-python-app.sh - podwojna walidacja, jak wszedzie w tym
+// projekcie).
+const FRAMEWORKS = ['django', 'flask', 'fastapi', 'manual'];
+// Jak etykieta domeny (DOMAIN_RE w hostingUserSites.js), tylko krotsza -
+// slug jest jedynym identyfikatorem aplikacji (unikalnym per-konto, patrz
+// createApp), wchodzi wprost do sciezek na dysku i do nazwy uslugi
+// systemd (cd-pyapp-<username>-<slug>.service).
+const SLUG_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
 
 function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
 }
 
-function sudoErrorMessage(scriptName, stderr) {
+function loadApps() {
+  try {
+    const parsed = JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
+    return Array.isArray(parsed.apps) ? parsed.apps : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveApps(apps) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(DATA_PATH, JSON.stringify({ apps }, null, 2), { mode: 0o600 });
+}
+
+function sudoErrorMessage(stderr) {
   if (/password is required/i.test(stderr)) {
-    return `Brak uprawnien sudo bez hasla dla ${scriptName} - sprawdz /etc/sudoers.d/caddy-dashboard`;
+    return `Brak uprawnien sudo bez hasla dla ${APP_SCRIPT_NAME} - sprawdz /etc/sudoers.d/caddy-dashboard`;
   }
   return stderr.trim() || null;
 }
 
-function runScript(scriptName, action, args, stdinContent) {
+function runAppScript(action, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/${scriptName}`, action, ...args]);
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/${APP_SCRIPT_NAME}`, action, ...args]);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });
@@ -36,20 +62,11 @@ function runScript(scriptName, action, args, stdinContent) {
     child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
     child.on('close', (code) => {
       if (code === 0) { resolve(stdout); return; }
-      const message = sudoErrorMessage(scriptName, stderr);
+      const message = sudoErrorMessage(stderr);
       reject(Object.assign(new Error(message || stdout.trim() || `exit code ${code}`), { status: message ? 403 : 500 }));
     });
-    if (stdinContent !== undefined) child.stdin.write(stdinContent);
     child.stdin.end();
   });
-}
-
-function runVenvScript(action, args, stdinContent) {
-  return runScript(SCRIPT_NAME, action, args, stdinContent);
-}
-
-function runAppScript(action, args) {
-  return runScript(APP_SCRIPT_NAME, action, args);
 }
 
 // Prawdziwe, zainstalowane binarki Python - NIE zgadujemy, czytamy
@@ -80,114 +97,163 @@ function validatePythonPath(pythonPath) {
   return match.path;
 }
 
-// Parsuje wyjscie akcji 'status' skryptu (EXISTS=/PYVERSION=/PKG=<linia>
-// - patrz komentarz w hosting-user-python-venv.sh) - stan czytany ZAWSZE
-// na zywo z dysku wewnatrz skryptu, nigdy nie trzymany w JSON tutaj, zeby
-// nie rozjechac sie z rzeczywistoscia, gdyby user recznie doinstalowal/
-// odinstalowal cos przez SSH.
-function parseStatusOutput(raw) {
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const exists = lines.some((l) => l === 'EXISTS=1');
-  if (!exists) return { exists: false, pythonVersion: null, packages: [], frameworks: [] };
-
-  const pyLine = lines.find((l) => l.startsWith('PYVERSION='));
-  const pythonVersion = pyLine ? pyLine.slice('PYVERSION='.length) : null;
-  const packages = lines
-    .filter((l) => l.startsWith('PKG='))
-    .map((l) => l.slice('PKG='.length));
-
-  const installedNames = new Set(packages.map((p) => p.split('==')[0].toLowerCase()));
-  const frameworks = FRAMEWORKS.filter((f) => installedNames.has(FRAMEWORK_PACKAGE_NAME[f]));
-
-  return { exists: true, pythonVersion, packages, frameworks };
+function validateSlug(slug) {
+  if (!SLUG_RE.test(slug || '')) {
+    throw badRequest('Nieprawidlowa nazwa aplikacji (male litery, cyfry, myslnik, 1-32 znaki).');
+  }
+  return slug;
 }
 
-async function getVenvStatus(username) {
-  const raw = await runVenvScript('status', [username]);
-  return parseStatusOutput(raw);
-}
-
-async function createVenv(username, pythonId) {
-  const versions = listPythonVersions();
-  const chosen = versions.find((v) => v.id === pythonId);
-  if (!chosen) throw badRequest('Wybierz wersje Pythona z listy.');
-  // Odtworzenie venv (rm -rf + od nowa) pod nogami dzialajacej aplikacji
-  // (gunicorn/uvicorn) to dokladnie ten typ cichego psucia, ktory juz
-  // raz naprawialismy w tym projekcie (memory_limit) - zatrzymujemy
-  // aplikacje najpierw, best-effort (brak aplikacji/bledu tu nie jest
-  // powodem do przerywania tworzenia venv).
-  await runAppScript('stop', [username]).catch(() => {});
-  await runVenvScript('create', [username, validatePythonPath(chosen.path)]);
-  return getVenvStatus(username);
-}
-
-async function installFramework(username, framework) {
-  if (!FRAMEWORKS.includes(framework)) throw badRequest('Nieznany framework.');
-  await runVenvScript('install', [username, framework]);
-  return getVenvStatus(username);
-}
-
-async function deleteVenv(username) {
-  await runAppScript('stop', [username]).catch(() => {});
-  await runVenvScript('remove', [username]);
-  return getVenvStatus(username);
-}
-
-// Parsuje wyjscie akcji 'status' skryptu hosting-user-python-app.sh
-// (ACTIVE=/FRAMEWORK=/PORT=/LOG=<linia> - patrz komentarz w tym
-// skrypcie). Podobnie jak status venv, ZAWSZE czytany na zywo z systemd/
-// journalctl, nigdy nie trzymany w JSON.
-function parseAppStatusOutput(raw) {
-  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
-  const activeLine = lines.find((l) => l.startsWith('ACTIVE='));
-  const running = activeLine ? activeLine.slice('ACTIVE='.length) === 'active' : false;
-
-  const frameworkLine = lines.find((l) => l.startsWith('FRAMEWORK='));
-  const framework = frameworkLine ? frameworkLine.slice('FRAMEWORK='.length) : null;
-
-  const portLine = lines.find((l) => l.startsWith('PORT='));
-  const port = portLine ? parseInt(portLine.slice('PORT='.length), 10) : null;
-
-  const logs = lines.filter((l) => l.startsWith('LOG=')).map((l) => l.slice('LOG='.length));
-
-  return { running, framework, port: Number.isInteger(port) ? port : null, logs };
-}
-
-async function getAppStatus(username) {
-  const raw = await runAppScript('status', [username]);
-  return parseAppStatusOutput(raw);
-}
-
-async function startApp(username, { framework, port }) {
-  if (!FRAMEWORKS.includes(framework)) throw badRequest('Nieznany framework.');
+function validatePort(port) {
   const portNum = parseInt(port, 10);
   if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
     throw badRequest('Nieprawidlowy numer portu (1-65535).');
   }
-  await runAppScript('start', [username, framework, String(portNum)]);
-  return getAppStatus(username);
+  return portNum;
 }
 
-async function stopApp(username) {
-  await runAppScript('stop', [username]);
-  return getAppStatus(username);
+// Biezacy stan uslugi z systemd - bez sudo, samo "systemctl show" na
+// dowolnej jednostce nie wymaga uprawnien (ten sam mechanizm co
+// getUnitActiveState w hostingUserRedis.js) - dzieki temu listApps() dla
+// CALEJ listy aplikacji nie odpala ani jednego procesu sudo.
+async function getUnitActiveState(username, slug) {
+  try {
+    const { stdout } = await execFileAsync('systemctl', [
+      'show', `cd-pyapp-${username}-${slug}.service`, '--no-page', '-p', 'ActiveState'
+    ]);
+    const match = /ActiveState=(\S+)/.exec(stdout);
+    return match ? match[1] : 'unknown';
+  } catch {
+    return 'unknown';
+  }
 }
 
-// Sprawdzenie "wolnego portu" - DWA niezalezne sygnaly, oba musza wyjsc
-// czysto:
-//   1) rejestr: czy ten port jest juz PRZYPISANY do strony reverseproxy
-//      JAKIEGOKOLWIEK konta (data/hosting-sites.json, patrz
-//      listUsedProxyPorts() w hostingUserSites.js) - lapie porty
-//      "zarezerwowane", nawet jesli akurat nic na nich teraz nie dziala.
-//   2) zywy test bindowania - lapie WSZYSTKO co faktycznie nasluchuje TERAZ
-//      (Caddy, baza danych, juz dzialajaca aplikacja innego usera spoza
-//      tego panelu, cokolwiek) - to jest sygnal, ktory NAPRAWDE
-//      gwarantuje wolny port, rejestr sam w sobie by tego nie zlapal.
-// PORT_RANGE to tylko PUNKT STARTOWY przeszukiwania przy szukaniu wolnego
-// portu - nie jest zrodlem prawdy o tym, co jest "bezpieczne" (to robi
-// zywy test), tylko wygodny, udokumentowany zakres do zaczecia (ponizej
-// typowych portow uslug, ponizej typowego zakresu efemerycznych portow
-// wychodzacych Linuksa).
+function toPublic(record) {
+  return {
+    slug: record.slug,
+    framework: record.framework,
+    pythonId: record.pythonId,
+    port: record.port,
+    createdAt: record.createdAt
+  };
+}
+
+async function listApps(username) {
+  const records = loadApps().filter((a) => a.accountUsername === username);
+  return Promise.all(records.map(async (r) => ({
+    ...toPublic(r),
+    running: (await getUnitActiveState(username, r.slug)) === 'active'
+  })));
+}
+
+async function createApp(username, { slug, pythonId, framework, port }) {
+  const slugValue = validateSlug(slug);
+  if (!FRAMEWORKS.includes(framework)) throw badRequest('Nieznany framework.');
+  const portValue = validatePort(port);
+
+  const versions = listPythonVersions();
+  const chosen = versions.find((v) => v.id === pythonId);
+  if (!chosen) throw badRequest('Wybierz wersje Pythona z listy.');
+
+  const all = loadApps();
+  if (all.some((a) => a.accountUsername === username && a.slug === slugValue)) {
+    throw badRequest('Aplikacja o tej nazwie juz istnieje.');
+  }
+
+  await runAppScript('create', [username, slugValue, validatePythonPath(chosen.path), framework]);
+
+  const record = {
+    accountUsername: username,
+    slug: slugValue,
+    framework,
+    pythonId,
+    port: portValue,
+    createdAt: new Date().toISOString()
+  };
+  all.push(record);
+  saveApps(all);
+  return { ...toPublic(record), running: false };
+}
+
+function getOwnApp(username, slug) {
+  const record = loadApps().find((a) => a.accountUsername === username && a.slug === slug);
+  if (!record) throw badRequest('Nie znaleziono aplikacji.');
+  return record;
+}
+
+async function startApp(username, slug, port) {
+  const record = getOwnApp(username, slug);
+  if (record.framework === 'manual') {
+    throw badRequest('Aplikacje typu Manual uruchamiasz samodzielnie przez SSH - panel nie zarzadza tym procesem.');
+  }
+  const portValue = validatePort(port);
+  await runAppScript('start', [username, slug, record.framework, String(portValue)]);
+
+  if (portValue !== record.port) {
+    const all = loadApps();
+    const idx = all.findIndex((a) => a.accountUsername === username && a.slug === slug);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], port: portValue };
+      saveApps(all);
+    }
+  }
+
+  return { ...toPublic({ ...record, port: portValue }), running: true };
+}
+
+async function stopApp(username, slug) {
+  getOwnApp(username, slug);
+  await runAppScript('stop', [username, slug]);
+  return { ...toPublic(getOwnApp(username, slug)), running: false };
+}
+
+async function deleteApp(username, slug) {
+  getOwnApp(username, slug);
+  await runAppScript('delete', [username, slug]);
+  const all = loadApps().filter((a) => !(a.accountUsername === username && a.slug === slug));
+  saveApps(all);
+}
+
+// Logi sa pobierane TYLKO na zadanie (przycisk "Pokaz logi" per
+// aplikacja), nigdy przy odswiezeniu calej listy - w odroznieniu od
+// running (listApps), ktore czyta sie bez sudo, journalctl wymaga roota,
+// wiec kazde wywolanie to osobny proces sudo - nie chcemy N takich przy
+// kazdym renderze listy.
+async function getAppLogs(username, slug) {
+  getOwnApp(username, slug);
+  const raw = await runAppScript('status', [username, slug]);
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const activeLine = lines.find((l) => l.startsWith('ACTIVE='));
+  const running = activeLine ? activeLine.slice('ACTIVE='.length) === 'active' : false;
+  const logs = lines.filter((l) => l.startsWith('LOG=')).map((l) => l.slice('LOG='.length));
+  return { running, logs };
+}
+
+// Porty JUZ PRZYPISANE do jakiejkolwiek aplikacji Python, DOWOLNEGO konta
+// - drugi rejestr obok listUsedProxyPorts() (strony reverseproxy) w
+// hostingUserSites.js - findFreePort/isPortFree ponizej musza sprawdzac
+// OBA, bo aplikacja Python i strona reverseproxy moga kolidowac o ten sam
+// port tak samo jak dwie aplikacje Python miedzy soba.
+function listUsedPythonAppPorts() {
+  return loadApps().map((a) => a.port).filter((p) => Number.isInteger(p));
+}
+
+// Sprawdzenie "wolnego portu" - TRZY niezalezne sygnaly, wszystkie musza
+// wyjsc czysto:
+//   1) rejestr stron: port juz PRZYPISANY do strony reverseproxy
+//      JAKIEGOKOLWIEK konta (listUsedProxyPorts() w hostingUserSites.js).
+//   2) rejestr aplikacji Python: port juz PRZYPISANY do innej aplikacji
+//      Python, tego samego lub innego konta (listUsedPythonAppPorts()
+//      powyzej) - lapie porty "zarezerwowane", nawet jesli akurat nic na
+//      nich teraz nie dziala (np. aplikacja jeszcze nie wystartowana).
+//   3) zywy test bindowania - lapie WSZYSTKO co faktycznie nasluchuje
+//      TERAZ (Caddy, baza danych, cokolwiek spoza obu rejestrow) - to
+//      jedyny sygnal, ktory NAPRAWDE gwarantuje wolny port.
+// PORT_RANGE to tylko PUNKT STARTOWY przeszukiwania - nie jest zrodlem
+// prawdy o tym, co jest "bezpieczne" (to robia powyzsze sygnaly), tylko
+// wygodny, udokumentowany zakres do zaczecia (ponizej typowych portow
+// uslug, ponizej typowego zakresu efemerycznych portow wychodzacych
+// Linuksa).
 const PORT_RANGE = [20000, 29999];
 
 function panelOwnPort() {
@@ -208,17 +274,14 @@ function isPortListening(port) {
 
 async function isPortFree(port) {
   if (port === panelOwnPort()) return false;
-  const usedByAccounts = await Promise.resolve(listUsedProxyPorts());
-  if (usedByAccounts.includes(port)) return false;
+  if (listUsedProxyPorts().includes(port)) return false;
+  if (listUsedPythonAppPorts().includes(port)) return false;
   return isPortListening(port);
 }
 
 async function findFreePort(preferredPort) {
   if (preferredPort !== undefined && preferredPort !== null && preferredPort !== '') {
-    const port = parseInt(preferredPort, 10);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw badRequest('Nieprawidlowy numer portu (1-65535).');
-    }
+    const port = validatePort(preferredPort);
     return { port, free: await isPortFree(port) };
   }
 
@@ -230,6 +293,6 @@ async function findFreePort(preferredPort) {
 }
 
 export {
-  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort,
-  getAppStatus, startApp, stopApp
+  listPythonVersions, listApps, createApp, startApp, stopApp, deleteApp, getAppLogs,
+  listUsedPythonAppPorts, findFreePort
 };
