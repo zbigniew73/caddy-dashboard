@@ -73,6 +73,14 @@ case "$TEMPLATE" in
   html|php|wordpress|reverseproxy) ;;
   *) TEMPLATE="html" ;;
 esac
+# WP_INSTALL tylko dla 'apply' + TEMPLATE=wordpress (patrz IS_NEW nizej) -
+# ten sam fallback-na-argv-shape co TEMPLATE wyzej, zeby sudoers mial
+# spojna liczbe argumentow dla kazdej akcji.
+WP_INSTALL="${5:-none}"
+case "$WP_INSTALL" in
+  none|en|pl) ;;
+  *) WP_INSTALL="none" ;;
+esac
 
 if ! [[ "$USERNAME" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
   echo "BLAD: nieprawidlowa nazwa uzytkownika: '${USERNAME}'" >&2
@@ -283,12 +291,70 @@ case "$ACTION" in
   }
 '
 
-        if [ "$TEMPLATE" = "php" ] || [ "$TEMPLATE" = "wordpress" ]; then
-          # PHP/WordPress: index.php (jak index.html, ale ujawnia zywa
-          # wersje PHP przez phpversion() - potwierdzenie, ze pool
-          # PHP-FPM faktycznie dziala) + info.php (phpinfo() - diagnostyka
-          # ustawien). Heredoc NIE jest cytowany (`<<PHP`, nie `<<'PHP'`),
-          # bo ${DOMAIN} (juz zwalidowany regexem wyzej) MA sie
+        if [ "$TEMPLATE" = "wordpress" ] && [ "$WP_INSTALL" != "none" ]; then
+          # WordPress: pobierz oficjalne archiwum (EN/PL, URL sztywno
+          # zaszyty ponizej - NIGDY nie budowany z danych usera, wiec brak
+          # ryzyka SSRF) i rozpakuj BEZPOSREDNIO do public/ - index.php i
+          # info.php (patrz nizej) sa w tym przypadku CELOWO pomijane,
+          # WordPress ma wlasny index.php. Pobieranie/rozpakowanie dzieje
+          # sie jako SAM user (`runuser`, nie jako root) - to jego wlasny,
+          # juz-nalezacy-do-niego katalog public/, ten sam duch co pool
+          # PHP-FPM dzialajacy jako ten user (najmniejsze mozliwe
+          # uprawnienia do tej konkretnej operacji).
+          case "$WP_INSTALL" in
+            en) WP_ZIP_URL="https://wordpress.org/latest.zip" ;;
+            pl) WP_ZIP_URL="https://pl.wordpress.org/latest-pl_PL.zip" ;;
+          esac
+
+          # unzip nie jest czescia minimalnej instalacji AlmaLinux/Rocky -
+          # doinstalowanie go tu (idempotentne, `command -v` sprawdza
+          # najpierw) to swiadoma decyzja: to malutkie, nieszkodliwe
+          # narzedzie (nie usluga jak MariaDB/Redis/etc, ktorych instalacja
+          # zostaje wylacznie decyzja admina) - bez niego funkcja
+          # "Zainstaluj WordPress" bylaby martwym punktem koncowym dla
+          # kazdego hostingowca, ktory jej uzyje.
+          if ! command -v unzip >/dev/null 2>&1; then
+            dnf install -y unzip >/dev/null 2>&1 || true
+          fi
+          if ! command -v unzip >/dev/null 2>&1; then
+            echo "BLAD: narzedzie 'unzip' nie jest zainstalowane w systemie i nie udalo sie go doinstalowac automatycznie - zainstaluj recznie (dnf install unzip) i sprobuj ponownie." >&2
+            exit 1
+          fi
+
+          WP_TMP_DIR="${USER_HOME}/tmp/wp-install-$(date +%s)"
+          mkdir -p "$WP_TMP_DIR"
+          chown "${USERNAME}:${USERNAME}" "$WP_TMP_DIR"
+          chmod 0700 "$WP_TMP_DIR"
+
+          if ! runuser -u "$USERNAME" -- curl -fsSL --max-time 120 -o "${WP_TMP_DIR}/wordpress.zip" "$WP_ZIP_URL"; then
+            rm -rf "$WP_TMP_DIR"
+            echo "BLAD: pobranie WordPressa (${WP_INSTALL}) z ${WP_ZIP_URL} nie powiodlo sie." >&2
+            exit 1
+          fi
+          if ! runuser -u "$USERNAME" -- unzip -q "${WP_TMP_DIR}/wordpress.zip" -d "$WP_TMP_DIR"; then
+            rm -rf "$WP_TMP_DIR"
+            echo "BLAD: rozpakowanie archiwum WordPressa nie powiodlo sie." >&2
+            exit 1
+          fi
+          if [ ! -d "${WP_TMP_DIR}/wordpress" ]; then
+            rm -rf "$WP_TMP_DIR"
+            echo "BLAD: archiwum WordPressa ma nieoczekiwana strukture (brak katalogu wordpress/ po rozpakowaniu)." >&2
+            exit 1
+          fi
+          # dotglob - zeby ewentualne pliki/katalogi zaczynajace sie od
+          # kropki w archiwum tez zostaly przeniesione, nie tylko "widoczne".
+          if ! runuser -u "$USERNAME" -- bash -c 'shopt -s dotglob; mv "$1"/wordpress/* "$2"/' -- "$WP_TMP_DIR" "${DOMAIN_DIR}/public"; then
+            rm -rf "$WP_TMP_DIR"
+            echo "BLAD: przeniesienie plikow WordPressa do public/ nie powiodlo sie." >&2
+            exit 1
+          fi
+          rm -rf "$WP_TMP_DIR"
+        elif [ "$TEMPLATE" = "php" ] || [ "$TEMPLATE" = "wordpress" ]; then
+          # PHP/WordPress (bez instalatora): index.php (jak index.html, ale
+          # ujawnia zywa wersje PHP przez phpversion() - potwierdzenie, ze
+          # pool PHP-FPM faktycznie dziala) + info.php (phpinfo() -
+          # diagnostyka ustawien). Heredoc NIE jest cytowany (`<<PHP`, nie
+          # `<<'PHP'`), bo ${DOMAIN} (juz zwalidowany regexem wyzej) MA sie
           # rozwinac - kazdy PHP-owy znak `$` jest wiec celowo
           # eskejpowany (`\$`), zeby bash go NIE dotykal.
           cat > "${DOMAIN_DIR}/public/index.php" <<PHP

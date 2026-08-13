@@ -25,13 +25,21 @@ const DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
 const REDIRECT_MODES = ['www-to-apex', 'apex-to-www', 'none'];
 // 'php' i 'wordpress' MAJA prawdziwy PHP-FPM za soba (dedykowany pool per
 // strona, patrz computePhpPoolSizing/buildSiteBlock/createSite nizej) -
-// jedyna roznica miedzy nimi to 'wordpress' NIE ma (jeszcze) wlasnego
-// instalatora WordPressa - user i tak wgrywa jego pliki sam przez
-// SSH/SFTP do juz-dzialajacego PHP, dokladnie jak przy 'php'. 'reverseproxy'
-// to jeden, generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel
+// jedyna roznica miedzy nimi to 'wordpress' MOZE dodatkowo dostac
+// prawdziwy, gotowy WordPress (patrz WP_INSTALL_MODES nizej) - jesli user
+// wybierze "Brak", zachowuje sie identycznie jak 'php' (user wgrywa swoje
+// pliki sam przez SSH/SFTP do juz-dzialajacego PHP). 'reverseproxy' to
+// jeden, generyczny szablon zamiast osobnych "Next"/"Ghost"/etc: panel
 // tylko robi `reverse_proxy 127.0.0.1:<port>`, wlasny proces (Python/venv,
 // Node, cokolwiek) user uruchamia i utrzymuje sam przez SSH.
 const TEMPLATES = ['html', 'php', 'wordpress', 'reverseproxy'];
+// Instalator WordPressa (tylko dla template 'wordpress') - 'none' zachowuje
+// sie jak zwykly PHP (index.php/info.php), 'en'/'pl' pobieraja i rozpakowuja
+// oficjalne archiwum wordpress.org BEZPOSREDNIO do public/ zamiast pisac
+// placeholder (patrz IS_NEW w hosting-user-site.sh). URL kazdej wersji jest
+// SZTYWNO zaszyty w tamtym skrypcie (nigdy nie budowany z danych usera) -
+// tu tylko wybieramy ktory z dwoch trybow.
+const WP_INSTALL_MODES = ['none', 'en', 'pl'];
 // Dwucyfrowy identyfikator wersji PHP (np. "83") - ten sam format co
 // server/runtime-manager/routes/php.js (i to, co zwraca
 // runtimeManagerClient.getInstalledPhp(), skad panel bierze liste
@@ -257,14 +265,14 @@ function sudoErrorMessage(stderr) {
   return stderr.trim() || null;
 }
 
-// `template` idzie na argv TYLKO dla akcji 'apply' (jedyna, ktora go
-// czyta - IS_NEW placeholder w hosting-user-site.sh) - inne akcje
+// `template`/`wpInstall` ida na argv TYLKO dla akcji 'apply' (jedyna,
+// ktora je czyta - IS_NEW placeholder w hosting-user-site.sh) - inne akcje
 // (check/get/enable/disable/delete) maja niezmieniony, 2-argumentowy
 // ksztalt, zgodny z sudoers.
-function runSiteScript(action, username, domain, stdinContent, template) {
+function runSiteScript(action, username, domain, stdinContent, template, wpInstall) {
   return new Promise((resolve, reject) => {
     const args = action === 'apply'
-      ? [SCRIPT_PATH, action, username, domain, template || 'html']
+      ? [SCRIPT_PATH, action, username, domain, template || 'html', wpInstall || 'none']
       : [SCRIPT_PATH, action, username, domain];
     const child = spawn('sudo', ['-n', ...args]);
     let stderr = '';
@@ -343,11 +351,14 @@ function validateRedirectMode(redirectMode) {
   return redirectMode;
 }
 
-async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort }) {
+async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall }) {
   const redirectValue = validateRedirectMode(redirectMode);
   const domainValue = validateDomain(domain, redirectValue === 'none');
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
   const phpVersionValue = (templateValue !== 'html' && PHP_VERSION_RE.test(phpVersion)) ? phpVersion : null;
+  // wpInstall ma sens WYLACZNIE dla template 'wordpress' - dla kazdego
+  // innego szablonu wymuszamy 'none', niezaleznie co przyszlo z klienta.
+  const wpInstallValue = templateValue === 'wordpress' && WP_INSTALL_MODES.includes(wpInstall) ? wpInstall : 'none';
   // proxyPort jest FUNKCJONALNIE wymagany dla reverseproxy (buildSiteBlock
   // nie ma sensownego fallbacku) - w odroznieniu od phpVersion (na razie
   // czyste metadane) blad walidacji tu faktycznie blokuje utworzenie
@@ -380,7 +391,7 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
   }
 
   const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath);
-  await runSiteScript('apply', username, domainValue, content, templateValue);
+  await runSiteScript('apply', username, domainValue, content, templateValue, wpInstallValue);
 
   const record = {
     id,
@@ -424,7 +435,7 @@ async function updateSiteRedirect(username, id, redirectMode) {
     ? sitePhpSocketPath(record.id, record.phpVersion)
     : null;
   const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort, phpSocketPath);
-  await runSiteScript('apply', username, record.domain, content, record.template);
+  await runSiteScript('apply', username, record.domain, content, record.template, 'none');
 
   record.redirectMode = redirectValue;
   saveData(all);
@@ -462,7 +473,7 @@ async function updateSiteConfig(username, id, content) {
   if (typeof content !== 'string' || !content.trim()) {
     throw badRequest('Pusta tresc konfiguracji.');
   }
-  await runSiteScript('apply', username, record.domain, content, record.template);
+  await runSiteScript('apply', username, record.domain, content, record.template, 'none');
   return toPublic(record);
 }
 

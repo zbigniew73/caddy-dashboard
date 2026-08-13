@@ -1146,6 +1146,15 @@ function siteTemplateRadios(name, selected, phpVersions) {
     let extra = '';
     if (key === 'php' || key === 'wordpress') {
       extra = `<select name="${name}-phpversion-${key}" ${phpVersions.length ? '' : 'disabled'}>${versionOptions}</select>`;
+      if (key === 'wordpress') {
+        extra += `
+          <select name="${name}-wpinstall" style="margin-left:8px;">
+            <option value="none">${t('sites.wp_install_none')}</option>
+            <option value="en">${t('sites.wp_install_en')}</option>
+            <option value="pl">${t('sites.wp_install_pl')}</option>
+          </select>
+        `;
+      }
     } else if (key === 'reverseproxy') {
       extra = `<input type="number" name="${name}-proxyport-${key}" min="1" max="65535" placeholder="${t('sites.template_reverseproxy_port_placeholder')}" style="width:110px;">`;
     }
@@ -1159,6 +1168,7 @@ function siteTemplateRadios(name, selected, phpVersions) {
       </label>
       ${key === 'reverseproxy' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_reverseproxy_hint')}</p>` : ''}
       ${(key === 'php' || key === 'wordpress') ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.template_php_pool_hint')}</p>` : ''}
+      ${key === 'wordpress' ? `<p style="margin:0 0 0 24px;color:var(--muted);font-size:11px;">${t('sites.wp_install_hint')}</p>` : ''}
     `;
   }).join('');
 }
@@ -1555,6 +1565,9 @@ function wireSitesSection(content) {
       const phpVersionSelect = (templateValue === 'php' || templateValue === 'wordpress')
         ? content.querySelector(`select[name="site-new-template-phpversion-${templateValue}"]`)
         : null;
+      const wpInstallSelect = templateValue === 'wordpress'
+        ? content.querySelector('select[name="site-new-template-wpinstall"]')
+        : null;
       const proxyPortInput = templateValue === 'reverseproxy'
         ? content.querySelector('input[name="site-new-template-proxyport-reverseproxy"]')
         : null;
@@ -1569,6 +1582,7 @@ function wireSitesSection(content) {
           redirectMode: selected ? selected.value : 'www-to-apex',
           template: templateValue,
           phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined,
+          wpInstall: wpInstallSelect ? wpInstallSelect.value : undefined,
           proxyPort: proxyPortInput ? proxyPortInput.value : undefined
         });
         await refreshSitesTab(content);
