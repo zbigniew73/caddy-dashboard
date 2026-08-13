@@ -23,11 +23,14 @@
 #                                strony (aktywny/zatrzymany - edycja NIE
 #                                zmienia stanu). Przy PIERWSZYM utworzeniu
 #                                (brak obu plikow) zaklada tez
-#                                ~<username>/domains/<domain>/{public,tmp}
+#                                ~<username>/domains/<domain>/public
 #                                z placeholderem index.html (tylko jesli
-#                                public/ jest puste). Logi Caddy ida do
-#                                wspolnego /var/log/caddy/<domain>.log, nie
-#                                pod ~/domains.
+#                                public/ jest puste) - katalog tmp/ per-
+#                                strona NIE jest juz zakladany, user ma
+#                                jeden wspolny ~/tmp na konto (patrz
+#                                hosting-account-create.sh). Logi Caddy ida
+#                                do wspolnego /var/log/caddy/<domain>.log,
+#                                nie pod ~/domains.
 # check <username> <domain>   - tresc bloku Caddy na stdin, TYLKO fmt +
 #                                adapt + validate (jako niezalezny
 #                                Caddyfile) - NIC nie zapisuje na dysk, nie
@@ -133,7 +136,8 @@ case "$ACTION" in
     # Log NIE idzie do ~/domains/<domena>/logs (usuniete - Caddy jako
     # caddy:caddy i tak nie ma tam prawa zapisu bez dodatkowych sztuczek z
     # uprawnieniami), tylko do wspolnego /var/log/caddy/ (patrz nizej) -
-    # zostaja wiec tylko public/ i tmp/.
+    # zostaje wiec tylko public/ (tmp/ per-strona zrezygnowane, user ma
+    # wspolny ~/tmp na konto).
     #
     # /var/log/caddy powinien juz istniec i byc caddy:caddy z pakietu
     # Caddy - `mkdir -p`+chown ponizej to tylko zabezpieczenie (idempotentne,
@@ -160,24 +164,101 @@ case "$ACTION" in
     if [ "$IS_NEW" = "1" ]; then
       USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
       DOMAIN_DIR="${USER_HOME}/domains/${DOMAIN}"
-      mkdir -p "${DOMAIN_DIR}/public" "${DOMAIN_DIR}/tmp"
-      chown -R "${USERNAME}:caddy" "$DOMAIN_DIR"
-      # 2750 = 0750 + SGID - bez SGID nowe pliki/podkatalogi, ktore
-      # wlasciciel wgra pozniej przez SSH/SFTP, dziedziczylyby JEGO
-      # prywatna grupe (np. srv_1001), nie caddy - i Caddy (dziala jako
-      # caddy:caddy, bez bitu "other" na tych katalogach) przestalby je
-      # widziec. SGID na katalogu wymusza, ze kazdy nowy plik/podkatalog
-      # utworzony w srodku dziedziczy grupe RODZICA (caddy), a nowe
-      # podkatalogi dodatkowo dziedzicza sam bit SGID (propagacja w dol).
-      find "$DOMAIN_DIR" -type d -exec chmod 2750 {} \;
+      mkdir -p "${DOMAIN_DIR}/public"
+      chown "${USERNAME}:${USERNAME}" "$DOMAIN_DIR"
+      # DirectAdmin-style, bez grupy caddy: DOMAIN_DIR samo w sobie ma
+      # o+x BEZ o+r (0711, tylko przejscie - `ls ~/domains/<domena>` z
+      # zewnatrz nic nie pokaze), a public/ ponizej ma o+r+x (0755) -
+      # to JEDYNY faktycznie czytelny/serwowalny katalog. Domyslny umask
+      # (022) na koncie usera sam nadaje "other read/execute" nowym
+      # plikom/podkatalogom wgrywanym pozniej przez SSH/SFTP - w
+      # odroznieniu od poprzedniego modelu (grupa caddy + SGID) nie
+      # trzeba juz niczego wymuszac rekurencyjnie.
+      chmod 0711 "$DOMAIN_DIR"
+      chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public"
+      chmod 0755 "${DOMAIN_DIR}/public"
       if [ -z "$(ls -A "${DOMAIN_DIR}/public" 2>/dev/null)" ]; then
         cat > "${DOMAIN_DIR}/public/index.html" <<HTML
 <!doctype html>
-<html><head><meta charset="utf-8"><title>${DOMAIN}</title></head>
-<body><p>Strona ${DOMAIN} zostala utworzona. Wgraj swoje pliki przez SSH/SFTP do katalogu ~/domains/${DOMAIN}/public.</p></body></html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${DOMAIN}</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f5f7;
+    color: #1f2328;
+  }
+  .card {
+    max-width: 460px;
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #e2e4e8;
+    border-radius: 12px;
+    padding: 40px 36px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+  .badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #0969da;
+    background: #ddf1ff;
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    font-size: 22px;
+    line-height: 1.3;
+    margin: 0 0 12px;
+    word-break: break-word;
+  }
+  p {
+    margin: 0 0 12px;
+    line-height: 1.55;
+    color: #56606a;
+  }
+  code {
+    background: #f0f1f3;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.92em;
+  }
+  .path { margin-bottom: 0; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0d1117; color: #e6edf3; }
+    .card { background: #161b22; border-color: #30363d; box-shadow: none; }
+    .badge { color: #58a6ff; background: rgba(56, 139, 253, 0.15); }
+    p { color: #9198a1; }
+    code { background: #21262d; color: #e6edf3; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">Strona utworzona</span>
+    <h1>${DOMAIN}</h1>
+    <p>Ta strona zostala wlasnie zalozona w panelu hostingowym i czeka na Twoje pliki.</p>
+    <p class="path">Wgraj je przez SSH/SFTP do katalogu <code>~/domains/${DOMAIN}/public</code>.</p>
+  </div>
+</body>
+</html>
 HTML
-        chown "${USERNAME}:caddy" "${DOMAIN_DIR}/public/index.html"
-        chmod 0640 "${DOMAIN_DIR}/public/index.html"
+        chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/index.html"
+        chmod 0644 "${DOMAIN_DIR}/public/index.html"
       fi
     fi
 

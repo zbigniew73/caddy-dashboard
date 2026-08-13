@@ -30,23 +30,28 @@
 # Naprawa wlasciciela plikow per-domena (chown <wlasciciel>:caddy 0640 -
 # ten sam wzorzec co hosting-user-site.sh apply: wlasciciel strony ma
 # prawo modyfikacji (rw-), grupa caddy ma prawo odczytu (r--) zeby usluga
-# Caddy mogla zaimportowac config), samego katalogu ze strona
-# (~<wlasciciel>/domains/<domena>/{public,tmp,...} - chown -R
-# <wlasciciel>:caddy + chmod 2750 na katalogach, ten sam wzorzec i
-# uzasadnienie SGID co w hosting-user-site.sh), a takze KATALOGU DOMOWEGO
-# i ~/domains (chown <wlasciciel>:caddy, chmod 0710 na homie / 0750 na
-# domains - wzorzec z hosting-account-create.sh) jest OPCJONALNA - wymaga
-# par "<username> <domena>" na stdin (jedna para na linie; wysyla je panel
-# na podstawie data/hosting-sites.json - patrz
+# Caddy mogla zaimportowac config - TO jest jedyne miejsce gdzie grupa
+# caddy jeszcze wystepuje, dotyczy samego pliku *.caddy w SITES_BASE_DIR,
+# nie tresci strony), a takze KATALOGU DOMOWEGO, ~/domains, katalogu
+# strony i public/ (DirectAdmin-style - bez grupy caddy, same uprawnienia
+# "other": chown <wlasciciel>:<wlasciciel> + chmod 0711 na
+# home/domains/<domena>, chmod 0755 na public/ - wzorzec z
+# hosting-account-create.sh / hosting-user-site.sh) jest OPCJONALNA -
+# wymaga par "<username> <domena>" na stdin (jedna para na linie; wysyla
+# je panel na podstawie data/hosting-sites.json - patrz
 # server/services/caddyLogs.js). Uruchomienie recznie bez potoku (stdin =
 # terminal) pomija ten krok.
 #
 # Katalog domowy jest NAJCZESTSZYM realnym zrodlem 403 z Caddy - jesli ma
 # domyslne uprawnienia z `useradd -m` (0700, wlasciciel:wlasciciel, bez
-# bitu x dla grupy/other), Caddy nie dotrze do niczego ponizej (~/domains,
+# bitu x dla "other"), Caddy nie dotrze do niczego ponizej (~/domains,
 # ~/domains/<domena>/public), NIEZALEZNIE jak dobre sa uprawnienia
 # glebiej w sciezce - dotyczy to zwlaszcza kont zalozonych PRZED
-# wprowadzeniem poprawki 0710 w hosting-account-create.sh.
+# wprowadzeniem poprawki 0711 w hosting-account-create.sh. Naprawa NIE
+# schodzi rekurencyjnie w glab public/ (i celowo nie dotyka ~/tmp,
+# ktory nie jest serwowany) - domyslny umask (022) na koncie usera sam
+# nadaje "other read/execute" nowym plikom wgrywanym przez SSH/SFTP,
+# wiec wystarczy poprawic tylko strukture zalozona przez panel.
 #
 # Uzycie: caddy-ensure-logs.sh (bez argumentow, dziala jako root; pary
 # "<username> <domena>" opcjonalnie na stdin)
@@ -126,19 +131,19 @@ if [ ! -t 0 ]; then
     if [ -n "$SITE_USER_HOME" ]; then
       # Katalog domowy i ~/domains naprawiane RAZ na uzytkownika (nie per
       # domena) - to samo konto moze miec kilka stron. Bez poprawnego
-      # 0710 (grupa caddy, tylko przejscie) na SAMYM katalogu domowym,
+      # 0711 (tylko przejscie dla "other") na SAMYM katalogu domowym,
       # Caddy nie dotrze do niczego ponizej, NIEZALEZNIE jak dobre sa
       # uprawnienia glebiej w sciezce (patrz komentarz w
       # hosting-account-create.sh) - konta zalozone PRZED wprowadzeniem
       # tej poprawki maja czesto katalog domowy 0700 wlasciciel:wlasciciel
       # (domyslne useradd -m), co daje dokladnie 403 z Caddy.
       if [ -z "${HOME_DIR_DONE[$SITE_USER]:-}" ] && [ -d "$SITE_USER_HOME" ]; then
-        chown "${SITE_USER}:caddy" "$SITE_USER_HOME"
-        chmod 0710 "$SITE_USER_HOME"
+        chown "${SITE_USER}:${SITE_USER}" "$SITE_USER_HOME"
+        chmod 0711 "$SITE_USER_HOME"
         USER_DOMAINS_DIR="${SITE_USER_HOME}/domains"
         if [ -d "$USER_DOMAINS_DIR" ]; then
-          chown "${SITE_USER}:caddy" "$USER_DOMAINS_DIR"
-          chmod 0750 "$USER_DOMAINS_DIR"
+          chown "${SITE_USER}:${SITE_USER}" "$USER_DOMAINS_DIR"
+          chmod 0711 "$USER_DOMAINS_DIR"
         fi
         HOME_DIR_DONE[$SITE_USER]=1
         FIXED_HOME_DIRS=$((FIXED_HOME_DIRS + 1))
@@ -146,8 +151,12 @@ if [ ! -t 0 ]; then
 
       DOMAIN_DIR="${SITE_USER_HOME}/domains/${SITE_DOMAIN}"
       if [ -d "$DOMAIN_DIR" ]; then
-        chown -R "${SITE_USER}:caddy" "$DOMAIN_DIR"
-        find "$DOMAIN_DIR" -type d -exec chmod 2750 {} \;
+        chown "${SITE_USER}:${SITE_USER}" "$DOMAIN_DIR"
+        chmod 0711 "$DOMAIN_DIR"
+        if [ -d "${DOMAIN_DIR}/public" ]; then
+          chown "${SITE_USER}:${SITE_USER}" "${DOMAIN_DIR}/public"
+          chmod 0755 "${DOMAIN_DIR}/public"
+        fi
         FIXED_DOMAIN_DIRS=$((FIXED_DOMAIN_DIRS + 1))
       fi
     fi

@@ -173,8 +173,8 @@ async function getProcessUsage(username) {
   }
 }
 
-// Liczba stron (plikow *.caddy) konta - katalog nalezy do
-// <username>:caddy (0750), panel dziala jako osobny user serwisowy bez
+// Liczba stron (plikow *.caddy) konta - katalog /etc/caddy/sites nalezy
+// do root:caddy (0751), panel dziala jako osobny user serwisowy bez
 // dostepu do niego, wiec liczenie idzie przez skrypt sudo (root), patrz
 // hosting-account-sites-count.sh.
 function countSites(username) {

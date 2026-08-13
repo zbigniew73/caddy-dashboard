@@ -34,11 +34,25 @@
 # plikow strony widzial config Caddy'ego. Config zostaje w SITES_BASE_DIR
 # (patrz wyzej), zarzadzany przez panel/root, nie przez usera.
 #
-# Zeby Caddy (dziala jako caddy:caddy) dotarl do plikow w
-# ~/domains/<domena>/public, katalog domowy MUSI dawac grupie caddy
-# prawo PRZEJSCIA (0710, execute-only, bez odczytu) - patrz nizej. Sam
-# ~/domains i wszystko pod nim (tworzone pozniej przez flow "dodaj
-# strone") to juz 0750 (grupa caddy ma r-x - moze czytac/listowac).
+# Uklad uprawnien PONIZEJ = DirectAdmin-style: Caddy NIE jest w zadnej
+# grupie z userem (usunieta grupa "caddy" na katalogach z tresc stron -
+# grupa caddy zostaje TYLKO na plikach *.caddy w SITES_BASE_DIR, patrz
+# wyzej, to inny mechanizm). Zamiast tego wszystko idzie na uprawnienia
+# "other" (Caddy jest tu zwyklym "other", nie ma zadnego uprzywilejowania):
+# ~/home, ~/domains i ~/domains/<domena> maja o+x BEZ o+r (0711,
+# execute-only = przejscie, ale bez `ls`), a dopiero
+# ~/domains/<domena>/public ma o+r (0755, patrz hosting-user-site.sh) -
+# to jest jedyny katalog naprawde czytelny/serwowalny z zewnatrz. Domyslny
+# umask (022) na koncie usera sam nadaje nowym plikom/podkatalogom
+# wgrywanym przez SSH/SFTP prawa "other read/execute" - w odroznieniu od
+# poprzedniego modelu (grupa caddy + SGID) NIE trzeba juz nic
+# wymuszac/dziedziczyc rekurencyjnie.
+#
+# ~/tmp: kontowy (NIE per-strona) prywatny katalog robocze usera - istnieje
+# juz po `useradd -m` (kopiowany z /etc/skel), tu tylko naprawiamy
+# wlasciciela/uprawnienia na 0700 <username>:<username> (wylacznie
+# wlasciciel, zaden dostep dla "other"/Caddy - to NIE jest katalog
+# serwowany).
 #
 # Uzycie: hosting-account-create.sh <username> <home_base_dir>
 
@@ -91,15 +105,16 @@ chmod 0751 "$SITES_BASE_DIR"
 
 USER_HOME="${HOME_BASE_DIR}/${USERNAME}"
 
-# Katalog domowy sam w sobie musi dawac grupie "caddy" prawo PRZEJSCIA
-# (bez odczytu/listowania) - inaczej Caddy nie dotrze do
-# domains/<domena>/public ponizej, nawet jesli TE podkatalogi maja
-# poprawne uprawnienia. 0710 = owner rwx, grupa --x (tylko przejscie,
-# NIE ls), other brak - reszta zawartosci home (.ssh, .bashrc itp.)
-# zostaje niewidoczna/nieosiagalna dla caddy, dostepny jest tylko
-# swiadomie ustawiony podkatalog domains/.
-chown "${USERNAME}:caddy" "$USER_HOME"
-chmod 0710 "$USER_HOME"
+# Katalog domowy sam w sobie musi dawac "other" (Caddy nie jest w zadnej
+# grupie z userem w tym modelu) prawo PRZEJSCIA (bez odczytu/listowania) -
+# inaczej Caddy nie dotrze do domains/<domena>/public ponizej, nawet
+# jesli TE podkatalogi maja poprawne uprawnienia. 0711 = owner rwx,
+# grupa/other --x (tylko przejscie, NIE ls) - reszta zawartosci home
+# (.ssh, .bashrc, tmp/ itp.) zostaje niewidoczna/nieosiagalna dla
+# Caddy/innych userow, dostepny jest tylko swiadomie ustawiony podkatalog
+# domains/.
+chown "${USERNAME}:${USERNAME}" "$USER_HOME"
+chmod 0711 "$USER_HOME"
 
 USER_DOMAINS_DIR="${USER_HOME}/domains"
 # /etc/skel moze zawierac pusty katalog "domains" (kopiowany przez
@@ -112,7 +127,18 @@ if [ -L "$USER_DOMAINS_DIR" ] || { [ -e "$USER_DOMAINS_DIR" ] && [ ! -d "$USER_D
   rm -f "$USER_DOMAINS_DIR"
 fi
 mkdir -p "$USER_DOMAINS_DIR"
-chown "${USERNAME}:caddy" "$USER_DOMAINS_DIR"
-chmod 0750 "$USER_DOMAINS_DIR"
+chown "${USERNAME}:${USERNAME}" "$USER_DOMAINS_DIR"
+chmod 0711 "$USER_DOMAINS_DIR"
+
+USER_TMP_DIR="${USER_HOME}/tmp"
+# Tak samo jak domains/ wyzej - /etc/skel go juz kopiuje (useradd -m),
+# tu tylko naprawiamy wlasciciela/uprawnienia (i typ, na wypadek starego
+# symlinku/pliku o tej nazwie).
+if [ -L "$USER_TMP_DIR" ] || { [ -e "$USER_TMP_DIR" ] && [ ! -d "$USER_TMP_DIR" ]; }; then
+  rm -f "$USER_TMP_DIR"
+fi
+mkdir -p "$USER_TMP_DIR"
+chown "${USERNAME}:${USERNAME}" "$USER_TMP_DIR"
+chmod 0700 "$USER_TMP_DIR"
 
 echo "OK: utworzono konto ${USERNAME} (katalog domowy ${USER_HOME}, SSH haslo tymczasowe wymaga zmiany przy pierwszym logowaniu, katalog stron ${SITES_BASE_DIR}, katalog na tresc stron ${USER_DOMAINS_DIR})"
