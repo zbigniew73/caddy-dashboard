@@ -333,6 +333,22 @@ function wireSystemRebootButton() {
   };
 }
 
+// Szkielet "na razie tylko szkielet" - jeden rzad, dwa rowne klocki (ten
+// sam wzorzec co placeholdery Python/Node mialy w panelu klienta przed
+// rozbudowa) - bez tresci, do wypelnienia w kolejnym kroku.
+function renderMailTab(content) {
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0;font-size:15px;">${t('mail.title')}</h3>
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <h3 style="margin:0;font-size:15px;">${t('mail.info_title')}</h3>
+      </div>
+    </div>
+  `;
+}
+
 async function renderTab() {
   const content = document.getElementById('content');
   if (currentTab !== 'system') stopSystemAutoRefresh();
@@ -343,6 +359,10 @@ async function renderTab() {
   }
   if (currentTab === 'accounts') {
     await renderAccountsTab(content);
+    return;
+  }
+  if (currentTab === 'mail') {
+    renderMailTab(content);
     return;
   }
   if (currentTab === 'services') {

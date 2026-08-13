@@ -10,6 +10,7 @@
   "nav.system": "Dashboard",
   "nav.packages": "PACKAGES",
   "nav.accounts": "ACCOUNTS",
+  "nav.mail": "MAIL",
   "nav.services": "SERVICES",
   "nav.ssh": "SSH",
   "nav.firewall": "FIREWALL",
@@ -486,5 +487,7 @@
   "accounts.form_title_edit": "Edit account",
   "accounts.save_button": "Save",
   "accounts.cancel_button": "Cancel",
-  "accounts.saving": "Saving..."
+  "accounts.saving": "Saving...",
+  "mail.title": "Mail",
+  "mail.info_title": "Info"
 }
