@@ -225,7 +225,7 @@ case "$ACTION" in
     color: #1f2328;
   }
   .card {
-    max-width: 460px;
+    max-width: 960px;
     width: 100%;
     background: #ffffff;
     border: 1px solid #e2e4e8;
@@ -319,6 +319,14 @@ PHP
           chown "${USERNAME}:${USERNAME}" "${DOMAIN_DIR}/public/index.php"
           chmod 0644 "${DOMAIN_DIR}/public/index.php"
 
+          # info.php: phpinfo() SAMO w sobie generuje KOMPLETNY, samodzielny
+          # dokument (wlasny <html><head><style>...<body>) - zagniezdzenie
+          # go bezposrednio w naszej wlasnej stronie dawaloby podwojne
+          # <html>/<body> (nieprawidlowy HTML). Zamiast tego lapiemy jego
+          # wyjscie przez output buffering i wycinamy TYLKO wlasny <style>
+          # (zeby zachowac formatowanie tabel phpinfo) oraz zawartosc jego
+          # <body> - nasz banner ostrzegawczy (1 rzad, 1 kolumna, szerokosc
+          # jak .card) zostaje NAD tym wycinkiem, w jednej, spojnej stronie.
           cat > "${DOMAIN_DIR}/public/info.php" <<PHP
 <!doctype html>
 <html lang="pl">
@@ -326,7 +334,10 @@ PHP
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>info.php - ${DOMAIN}</title>
-<style>${PLACEHOLDER_CSS}</style>
+<style>${PLACEHOLDER_CSS}
+  body { display: block; padding: 40px 24px; }
+  .card { margin: 0 auto 24px; }
+</style>
 </head>
 <body>
   <div class="card">
@@ -334,7 +345,19 @@ PHP
     <p>Ta strona ujawnia szczegoly konfiguracji serwera (wersje, sciezki, zaladowane moduly). Usun ten plik po zakonczeniu diagnostyki.</p>
     <p class="path">This page discloses server configuration details (versions, paths, loaded modules). Delete this file once you're done diagnosing.</p>
   </div>
-  <?php phpinfo(); ?>
+  <?php
+    ob_start();
+    phpinfo();
+    \$__cddash_phpinfo = ob_get_clean();
+    if (preg_match('%<style[^>]*>.*?</style>%is', \$__cddash_phpinfo, \$__cddash_style)) {
+      echo \$__cddash_style[0];
+    }
+    if (preg_match('%<body[^>]*>(.*)</body>%is', \$__cddash_phpinfo, \$__cddash_body)) {
+      echo \$__cddash_body[1];
+    } else {
+      echo \$__cddash_phpinfo;
+    }
+  ?>
 </body>
 </html>
 PHP
