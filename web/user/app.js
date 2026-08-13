@@ -1214,7 +1214,6 @@ const SECURITY_MARK_END = '# END caddy-dashboard-security';
 function securityBlockLines() {
   return [
     `\t${SECURITY_MARK_START}`,
-    '\t# Bezpieczenstwo',
     '\theader {',
     '\t\tStrict-Transport-Security "max-age=63072000; includeSubDomains; preload"',
     '\t\tContent-Security-Policy "upgrade-insecure-requests"',
