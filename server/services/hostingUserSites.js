@@ -63,10 +63,10 @@ function sitePhpSocketPath(siteId, phpVersion) {
 }
 
 // Rozmiar poola PHP-FPM wyliczany Z LIMITU RAM PAKIETU konta (miekki,
-// konfiguracyjny sufit - TYLKO pm.max_children, czyli LICZBA
-// rownoleglych procesow roboczych - NIE twardy limit cgroup/systemd-
-// slice). Prawdziwy twardy limit per-konto (jak przy Redis -
-// Slice=user-<uid>.slice) jest tu NIEOSIAGALNY bez zlamania juz
+// konfiguracyjny sufit - pm.max_children (liczba rownoleglych procesow
+// roboczych) ORAZ php_admin_value[memory_limit] - NIE twardy limit
+// cgroup/systemd-slice). Prawdziwy twardy limit per-konto (jak przy
+// Redis - Slice=user-<uid>.slice) jest tu NIEOSIAGALNY bez zlamania juz
 // istniejacego wzorca: wszystkie poole danej wersji PHP dziela JEDEN,
 // wspolny proces systemd (phpXX-php-fpm.service, patrz php-install.sh) -
 // przypisanie cgroup/slice dziala na poziomie CALEJ uslugi, nie
@@ -74,31 +74,36 @@ function sitePhpSocketPath(siteId, phpVersion) {
 // slice'a JEDNEGO konta bez odejscia od modelu "jeden proces per wersja
 // PHP" juz uzywanego przez phpMyAdmin/Adminer.
 //
-// CELOWO NIE ustawiamy tu php_admin_value[memory_limit] per pool -
-// realny blad znaleziony na zywo: `php_admin_value` w configu poola ZAWSZE
-// wygrywa z php.ini/php.d/*.ini (to caly sens "admin_value" - nie da sie
-// go nadpisac ani przez ini_set(), ani przez zaladowany plik ini), wiec
-// gdyby to tu bylo ustawione, admin zmieniajacy globalny memory_limit dla
-// danej wersji PHP z panelu (php-set-settings.sh ->
-// /etc/opt/remi/phpXX/php.d/99-caddy-dashboard.ini) bylby CICHO
-// ignorowany dla kazdej hostowanej strony. PHP_WORKER_MB_ESTIMATE ponizej
-// sluzy WYLACZNIE do oszacowania, ile procesow roboczych zmiesci sie w
-// budzecie RAM konta - nie ma nic wspolnego z faktycznym
-// dyrektywa memory_limit, ktora zostaje calkowicie odziedziczona z
-// globalnej konfiguracji tej wersji PHP (ustawianej przez admina).
-// Stale ponizej to punkt startowy do strojenia, nie objawienie.
+// memory_limit W POOLU = dokladnie limit RAM pakietu konta (nie jakas
+// arbitralna, mniejsza stala) - user ma to widziec jako "Local Value" w
+// phpinfo() (info.php), rozne od "Master Value" (globalny php.ini/php.d,
+// ustawiany przez admina - php-set-settings.sh ->
+// /etc/opt/remi/phpXX/php.d/99-caddy-dashboard.ini). Wczesniejsza wersja
+// tego kodu w ogole NIE ustawiala tej dyrektywy w poolu (celowo, po
+// znalezieniu realnego bledu - `php_admin_value` zawsze wygrywa z
+// php.ini/php.d, wiec sztywna wartosc estymacji per-worker (64M)
+// nadpisywala globalne ustawienie admina) - to nadal prawda dla SAMEJ
+// mechaniki nadpisywania, ale user chce, zeby ta nadpisujaca wartosc
+// bylabyla SENSOWNA (limit pakietu), nie generyczna stala. Jesli admin
+// ustawi Master Value NIZSZY niz limit pakietu konta, PHP i tak uzyje
+// mniejszej z obu wartosci (standardowe zachowanie memory_limit) - user
+// nigdy nie dostaje WIECEJ niz admin globalnie dopuszcza.
+// PHP_WORKER_MB_ESTIMATE ponizej sluzy WYLACZNIE do oszacowania, ile
+// procesow roboczych zmiesci sie w budzecie RAM konta przy liczeniu
+// pm.max_children - nie ma zwiazku z memory_limit.
 const PHP_POOL_RAM_FRACTION = 0.4;
 const PHP_WORKER_MB_ESTIMATE = 64;
 const PHP_POOL_MAX_CHILDREN_MIN = 2;
 const PHP_POOL_MAX_CHILDREN_MAX = 20;
 
 function computePhpPoolSizing(ramLimitMb) {
-  const budgetMb = Math.round((ramLimitMb || 512) * PHP_POOL_RAM_FRACTION);
+  const effectiveRamLimitMb = ramLimitMb || 512;
+  const budgetMb = Math.round(effectiveRamLimitMb * PHP_POOL_RAM_FRACTION);
   const maxChildren = Math.min(
     PHP_POOL_MAX_CHILDREN_MAX,
     Math.max(PHP_POOL_MAX_CHILDREN_MIN, Math.floor(budgetMb / PHP_WORKER_MB_ESTIMATE))
   );
-  return { maxChildren };
+  return { maxChildren, memoryLimitMb: effectiveRamLimitMb };
 }
 
 function validateProxyPort(proxyPort) {
@@ -368,9 +373,9 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
   const id = randomUUID();
   let phpSocketPath = null;
   if ((templateValue === 'php' || templateValue === 'wordpress') && phpVersionValue) {
-    const { maxChildren } = computePhpPoolSizing(account.ramLimitMb);
+    const { maxChildren, memoryLimitMb } = computePhpPoolSizing(account.ramLimitMb);
     const slug = sitePhpSlug(id);
-    await runPoolScript('apply', username, domainValue, phpVersionValue, slug, maxChildren);
+    await runPoolScript('apply', username, domainValue, phpVersionValue, slug, maxChildren, memoryLimitMb);
     phpSocketPath = sitePhpSocketPath(id, phpVersionValue);
   }
 

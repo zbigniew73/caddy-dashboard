@@ -573,9 +573,17 @@ HTML
     USER_HOME="$(getent passwd "$USERNAME" | cut -d: -f6)"
     if [ -n "$USER_HOME" ]; then
       rm -rf "${USER_HOME:?}/domains/${DOMAIN:?}"
+      # Dowiazanie ~/logs/<domena>.log (zakladane przy kazdym apply, patrz
+      # wyzej) - samo NIE znika wraz z ~/domains, bo zyje w OSOBNYM,
+      # prywatnym katalogu ~/logs.
+      rm -f "${USER_HOME}/logs/${DOMAIN}.log"
     fi
+    # Realny plik loga Caddy - zyje POZA katalogiem usera (patrz komentarz
+    # przy LOG_FILE w akcji 'apply' - Caddy caddy:caddy nie ma prawa pisac
+    # do ~/domains), wiec trzeba go skasowac tu, osobno.
+    rm -f "/var/log/caddy/${DOMAIN}.log"
 
-    echo "OK: konfiguracja i pliki strony ${DOMAIN} usuniete (~/domains/${DOMAIN} skasowany)."
+    echo "OK: konfiguracja i pliki strony ${DOMAIN} usuniete (~/domains/${DOMAIN}, log Caddy i dowiazanie ~/logs skasowane)."
     ;;
 
   *)
