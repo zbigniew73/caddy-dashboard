@@ -9,8 +9,16 @@ import {
 import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import {
-  listPythonVersions, listApps, createApp, startApp, stopApp, deleteApp, getAppLogs, findFreePort
+  listPythonVersions,
+  listApps as listPythonApps, createApp as createPythonApp, startApp as startPythonApp,
+  stopApp as stopPythonApp, deleteApp as deletePythonApp, getAppLogs as getPythonAppLogs
 } from '../services/hostingUserPython.js';
+import {
+  listNodeVersionsWithLabels,
+  listApps as listNodeApps, createApp as createNodeApp, startApp as startNodeApp,
+  stopApp as stopNodeApp, deleteApp as deleteNodeApp, getAppLogs as getNodeAppLogs
+} from '../services/hostingUserNode.js';
+import { findFreePort } from '../services/hostingUserPorts.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 import {
   getRepoSettings, saveRepoSettings, listJobs, createJob, updateJob, deleteJob, runJobNow,
@@ -258,7 +266,7 @@ router.get('/python/free-port', async (req, res) => {
 
 router.get('/python/apps', async (req, res) => {
   try {
-    res.json(await listApps(req.hostingUser));
+    res.json(await listPythonApps(req.hostingUser));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -267,7 +275,7 @@ router.get('/python/apps', async (req, res) => {
 router.post('/python/apps', async (req, res) => {
   try {
     const { slug, pythonId, framework, port } = req.body || {};
-    res.json(await createApp(req.hostingUser, { slug, pythonId, framework, port }));
+    res.json(await createPythonApp(req.hostingUser, { slug, pythonId, framework, port }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -275,7 +283,7 @@ router.post('/python/apps', async (req, res) => {
 
 router.delete('/python/apps/:slug', async (req, res) => {
   try {
-    await deleteApp(req.hostingUser, req.params.slug);
+    await deletePythonApp(req.hostingUser, req.params.slug);
     res.json({ success: true });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -285,7 +293,7 @@ router.delete('/python/apps/:slug', async (req, res) => {
 router.post('/python/apps/:slug/start', async (req, res) => {
   try {
     const { port } = req.body || {};
-    res.json(await startApp(req.hostingUser, req.params.slug, port));
+    res.json(await startPythonApp(req.hostingUser, req.params.slug, port));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -293,7 +301,7 @@ router.post('/python/apps/:slug/start', async (req, res) => {
 
 router.post('/python/apps/:slug/stop', async (req, res) => {
   try {
-    res.json(await stopApp(req.hostingUser, req.params.slug));
+    res.json(await stopPythonApp(req.hostingUser, req.params.slug));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
@@ -301,7 +309,74 @@ router.post('/python/apps/:slug/stop', async (req, res) => {
 
 router.get('/python/apps/:slug/logs', async (req, res) => {
   try {
-    res.json(await getAppLogs(req.hostingUser, req.params.slug));
+    res.json(await getPythonAppLogs(req.hostingUser, req.params.slug));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/node/versions', async (req, res) => {
+  try {
+    res.json(await listNodeVersionsWithLabels());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/node/free-port', async (req, res) => {
+  try {
+    res.json(await findFreePort(req.query.port));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/node/apps', async (req, res) => {
+  try {
+    res.json(await listNodeApps(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/node/apps', async (req, res) => {
+  try {
+    const { slug, nodeId, framework, port } = req.body || {};
+    res.json(await createNodeApp(req.hostingUser, { slug, nodeId, framework, port }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/node/apps/:slug', async (req, res) => {
+  try {
+    await deleteNodeApp(req.hostingUser, req.params.slug);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/node/apps/:slug/start', async (req, res) => {
+  try {
+    const { port } = req.body || {};
+    res.json(await startNodeApp(req.hostingUser, req.params.slug, port));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/node/apps/:slug/stop', async (req, res) => {
+  try {
+    res.json(await stopNodeApp(req.hostingUser, req.params.slug));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/node/apps/:slug/logs', async (req, res) => {
+  try {
+    res.json(await getNodeAppLogs(req.hostingUser, req.params.slug));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

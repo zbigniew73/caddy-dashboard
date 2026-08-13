@@ -222,11 +222,9 @@ function renderDashboard(content) {
 
 // Szkielet zakladek "na razie tylko szkielet" - jeden rzad, dwa rowne
 // klocki (ten sam wzorzec co Witaj+Info na Dashboardzie), bez tresci - do
-// wypelnienia w kolejnych krokach. Pusty teraz (Backup i Python dostaly
-// realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
-const PLACEHOLDER_TABS = {
-  node: 'nav.node'
-};
+// wypelnienia w kolejnych krokach. Pusty teraz (Backup, Python i Node
+// dostaly realna funkcjonalnosc) - mechanizm zostaje na przyszlosc.
+const PLACEHOLDER_TABS = {};
 
 function renderPlaceholderTab(content, titleKey) {
   content.innerHTML = `
@@ -1236,6 +1234,309 @@ async function refreshPythonTab(content) {
     pythonAppsCache = apps;
     content.innerHTML = renderPythonSection(versions, apps, portInfo);
     wirePythonSection(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+const NODE_FRAMEWORKS = ['express', 'fastify', 'koa', 'manual'];
+
+// Stan zakladki trzymany miedzy odswiezeniami - ten sam wzorzec co
+// pythonAppsCache/pythonLogsSlug/pythonLogsData, osobny od Pythona.
+let nodeAppsCache = [];
+let nodeLogsSlug = null;
+let nodeLogsData = null;
+
+function nodeAppsFormCardHtml(versions, portInfo) {
+  if (versions.length === 0) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('node.manage_title')}</h3>
+      <div class="empty-state">${t('node.no_versions_hint')}</div>
+    `;
+  }
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('node.manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('node.manage_description')}</p>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('node.field_name')}</label>
+        <input type="text" id="node-new-slug" placeholder="myapp" style="width:100%;box-sizing:border-box;">
+        <p style="margin:4px 0 0;color:var(--muted);font-size:11px;">${t('node.name_hint')}</p>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('node.field_version')}</label>
+        <select id="node-new-version" style="width:100%;box-sizing:border-box;">
+          ${versions.map((v) => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.version)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('node.field_framework')}</label>
+        <select id="node-new-framework" style="width:100%;box-sizing:border-box;">
+          ${NODE_FRAMEWORKS.map((fw) => `<option value="${fw}">${t(`node.framework_${fw}`)}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('node.field_port')}</label>
+        <div style="display:flex;gap:8px;">
+          <input type="number" id="node-new-port" min="1" max="65535" value="${portInfo && portInfo.free ? escapeHtml(String(portInfo.port)) : ''}" style="flex:1;">
+          <button type="button" class="secondary" id="node-port-check-btn">${t('node.check_port_button')}</button>
+        </div>
+        <p style="margin:4px 0 0;color:var(--muted);font-size:11px;">${t('node.free_port_label')}: ${portInfo ? escapeHtml(String(portInfo.port)) : '-'}</p>
+        <div class="action-msg" id="node-port-msg"></div>
+      </div>
+    </div>
+    <button type="button" id="node-create-app-btn" style="margin-top:14px;">${t('node.create_app_button')}</button>
+    <div class="action-msg" id="node-create-msg"></div>
+  `;
+}
+
+function nodeAppRow(item) {
+  const isManual = item.framework === 'manual';
+
+  // 'manual' nigdy nie ma uslugi systemd zalozonej przez panel (patrz
+  // startApp() w hostingUserNode.js - wprost odrzuca ten framework), wiec
+  // running/Uruchom/Zatrzymaj/Logi nie maja tu zastosowania - tylko
+  // neutralna etykieta i usuwanie.
+  const statusBadge = isManual
+    ? `<span class="status-badge inactive">${t('node.manual_status')}</span>`
+    : `<span class="status-badge ${item.running ? 'active' : 'inactive'}">${item.running ? t('node.app_status_running') : t('node.app_status_stopped')}</span>`;
+
+  const toggleButtonHtml = item.running
+    ? `<button type="button" class="secondary" data-app-stop="${escapeHtml(item.slug)}">${t('node.stop_button')}</button>`
+    : `<button type="button" class="secondary" data-app-start="${escapeHtml(item.slug)}" data-app-port="${item.port}">${t('node.start_button')}</button>`;
+
+  const actionsHtml = isManual
+    ? `<button type="button" class="danger" data-app-delete="${escapeHtml(item.slug)}">${t('node.delete_button')}</button>`
+    : `
+      ${toggleButtonHtml}
+      <button type="button" class="secondary" data-app-logs="${escapeHtml(item.slug)}">${t('node.logs_button')}</button>
+      <button type="button" class="danger" data-app-delete="${escapeHtml(item.slug)}">${t('node.delete_button')}</button>
+    `;
+
+  const logsOpen = !isManual && nodeLogsSlug === item.slug;
+  const logsRowHtml = logsOpen ? `
+    <tr>
+      <td colspan="5">
+        <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">${t('node.app_logs_label')}</div>
+        ${nodeLogsData
+          ? (nodeLogsData.logs.length > 0
+              ? `<pre style="margin:0;max-height:160px;overflow:auto;font-size:11px;background:var(--bg-alt, rgba(128,128,128,0.08));padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(nodeLogsData.logs.join('\n'))}</pre>`
+              : `<div class="empty-state">${t('node.app_no_logs')}</div>`)
+          : `<div class="empty-state">${t('node.loading')}</div>`}
+      </td>
+    </tr>
+  ` : '';
+
+  return `
+    <tr>
+      <td>${escapeHtml(item.slug)}</td>
+      <td>${t(`node.framework_${item.framework}`)}</td>
+      <td>${item.port}</td>
+      <td>${statusBadge}</td>
+      <td style="white-space:nowrap;">
+        ${actionsHtml}
+      </td>
+    </tr>
+    ${logsRowHtml}
+  `;
+}
+
+function nodeAppsListCardHtml(apps) {
+  const tableHtml = apps.length ? `
+    <div style="overflow-x:auto;margin-top:14px;">
+      <table class="firewall-table">
+        <thead>
+          <tr>
+            <th>${t('node.col_name')}</th>
+            <th>${t('node.col_framework')}</th>
+            <th>${t('node.col_port')}</th>
+            <th>${t('node.col_status')}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>${apps.map(nodeAppRow).join('')}</tbody>
+      </table>
+    </div>
+  ` : `<div class="empty-state">${t('node.empty_apps')}</div>`;
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('node.apps_list_title')}</h3>
+    ${tableHtml}
+    <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('node.reverseproxy_hint')}</div>
+  `;
+}
+
+function nodeHelpCardHtml() {
+  const sections = NODE_FRAMEWORKS.map((fw) => `
+    <div>
+      <h4 style="margin:0 0 4px;font-size:14px;">${t(`node.framework_${fw}`)}</h4>
+      <p style="margin:0;color:var(--muted);font-size:13px;">${t(`node.help_${fw}`)}</p>
+    </div>
+  `).join('');
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('node.help_title')}</h3>
+    <div style="display:flex;flex-direction:column;gap:14px;margin-top:10px;">
+      ${sections}
+    </div>
+  `;
+}
+
+function renderNodeSection(versions, apps, portInfo) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${nodeAppsFormCardHtml(versions, portInfo)}
+      </div>
+      <div class="system-info-card" id="node-apps-list-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${nodeAppsListCardHtml(apps)}
+      </div>
+    </div>
+    <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
+      ${nodeHelpCardHtml()}
+    </div>
+  `;
+}
+
+function wireNodeCreateForm(content) {
+  const portCheckBtn = document.getElementById('node-port-check-btn');
+  if (portCheckBtn) {
+    portCheckBtn.onclick = async () => {
+      const portInput = document.getElementById('node-new-port');
+      const portMsgEl = document.getElementById('node-port-msg');
+      const portValue = portInput.value.trim();
+      portCheckBtn.disabled = true;
+      portMsgEl.textContent = '';
+      portMsgEl.className = 'action-msg';
+      try {
+        const query = portValue ? `?port=${encodeURIComponent(portValue)}` : '';
+        const result = await api('GET', `/node/free-port${query}`);
+        portMsgEl.textContent = `${result.port}: ${result.free ? t('node.port_free') : t('node.port_taken')}`;
+        portMsgEl.className = `action-msg ${result.free ? 'success' : 'error'}`;
+      } catch (e) {
+        portMsgEl.textContent = e.message;
+        portMsgEl.className = 'action-msg error';
+      } finally {
+        portCheckBtn.disabled = false;
+      }
+    };
+  }
+
+  const createBtn = document.getElementById('node-create-app-btn');
+  if (!createBtn) return;
+  createBtn.onclick = async () => {
+    const slug = document.getElementById('node-new-slug').value.trim();
+    const nodeId = document.getElementById('node-new-version').value;
+    const framework = document.getElementById('node-new-framework').value;
+    const port = document.getElementById('node-new-port').value;
+    const msgEl = document.getElementById('node-create-msg');
+    createBtn.disabled = true;
+    msgEl.textContent = t('node.creating_app');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/node/apps', { slug, nodeId, framework, port });
+      await refreshNodeTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      createBtn.disabled = false;
+    }
+  };
+}
+
+function rerenderNodeAppsList(content) {
+  const card = document.getElementById('node-apps-list-card');
+  if (card) card.innerHTML = nodeAppsListCardHtml(nodeAppsCache);
+  wireNodeAppsList(content);
+}
+
+function wireNodeAppsList(content) {
+  content.querySelectorAll('[data-app-start]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = t('node.starting');
+      try {
+        await api('POST', `/node/apps/${btn.dataset.appStart}/start`, { port: btn.dataset.appPort });
+        await refreshNodeTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+        btn.textContent = t('node.start_button');
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-stop]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = t('node.stopping');
+      try {
+        await api('POST', `/node/apps/${btn.dataset.appStop}/stop`);
+        await refreshNodeTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+        btn.textContent = t('node.stop_button');
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!window.confirm(t('node.confirm_delete_app', { slug: btn.dataset.appDelete }))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/node/apps/${btn.dataset.appDelete}`);
+        if (nodeLogsSlug === btn.dataset.appDelete) { nodeLogsSlug = null; nodeLogsData = null; }
+        await refreshNodeTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-app-logs]').forEach((btn) => {
+    btn.onclick = async () => {
+      const slug = btn.dataset.appLogs;
+      if (nodeLogsSlug === slug) {
+        nodeLogsSlug = null;
+        nodeLogsData = null;
+        rerenderNodeAppsList(content);
+        return;
+      }
+      nodeLogsSlug = slug;
+      nodeLogsData = null;
+      rerenderNodeAppsList(content);
+      try {
+        nodeLogsData = await api('GET', `/node/apps/${slug}/logs`);
+      } catch (e) {
+        nodeLogsData = { running: false, logs: [e.message] };
+      }
+      rerenderNodeAppsList(content);
+    };
+  });
+}
+
+function wireNodeSection(content) {
+  wireNodeCreateForm(content);
+  wireNodeAppsList(content);
+}
+
+async function refreshNodeTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('node.loading')}</div>`;
+  nodeLogsSlug = null;
+  nodeLogsData = null;
+  try {
+    const [versions, apps, portInfo] = await Promise.all([
+      api('GET', '/node/versions'),
+      api('GET', '/node/apps'),
+      api('GET', '/node/free-port').catch(() => null)
+    ]);
+    nodeAppsCache = apps;
+    content.innerHTML = renderNodeSection(versions, apps, portInfo);
+    wireNodeSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
@@ -2389,6 +2690,8 @@ function renderTab() {
     refreshBackupTab(content);
   } else if (currentTab === 'python') {
     refreshPythonTab(content);
+  } else if (currentTab === 'node') {
+    refreshNodeTab(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }
