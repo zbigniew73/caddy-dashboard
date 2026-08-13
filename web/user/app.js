@@ -936,7 +936,41 @@ async function refreshRedisTab(content) {
 
 const PYTHON_FRAMEWORKS = ['django', 'flask', 'fastapi'];
 
-function pythonManageCardHtml(status, versions) {
+function pythonAppControlHtml(status, appStatus, portInfo) {
+  if (status.frameworks.length === 0) {
+    return `<div class="empty-state" style="margin-top:16px;">${t('python.app_no_framework_hint')}</div>`;
+  }
+
+  const defaultPort = appStatus.running && appStatus.port
+    ? appStatus.port
+    : (portInfo && portInfo.free ? portInfo.port : '');
+
+  const stopButtonHtml = appStatus.running
+    ? `<button type="button" class="danger" id="python-app-stop-btn">${t('python.stop_button')}</button>`
+    : '';
+
+  return `
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    <h4 style="margin:0 0 10px;font-size:14px;">${t('python.app_title')}</h4>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_framework')}</label>
+      <select id="python-app-framework-select">
+        ${status.frameworks.map((fw) => `<option value="${fw}" ${appStatus.framework === fw ? 'selected' : ''}>${t(`python.framework_${fw}`)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="display:block;font-size:13px;margin-bottom:4px;">${t('python.field_port')}</label>
+      <input type="number" id="python-app-port-input" min="1" max="65535" value="${defaultPort ? escapeHtml(String(defaultPort)) : ''}">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" id="python-app-start-btn">${t('python.start_button')}</button>
+      ${stopButtonHtml}
+    </div>
+    <div class="action-msg" id="python-app-msg"></div>
+  `;
+}
+
+function pythonManageCardHtml(status, versions, appStatus, portInfo) {
   const noVersionsHtml = versions.length === 0
     ? `<div class="empty-state">${t('python.no_versions_hint')}</div>`
     : '';
@@ -966,7 +1000,9 @@ function pythonManageCardHtml(status, versions) {
         `;
       }).join('')}
     </div>
-    <button type="button" class="danger" id="python-delete-btn" style="margin-top:16px;">${t('python.delete_venv_button')}</button>
+    ${pythonAppControlHtml(status, appStatus, portInfo)}
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    <button type="button" class="danger" id="python-delete-btn">${t('python.delete_venv_button')}</button>
   ` : '';
 
   return `
@@ -979,7 +1015,7 @@ function pythonManageCardHtml(status, versions) {
   `;
 }
 
-function pythonStatsCardHtml(status, portInfo) {
+function pythonStatsCardHtml(status, appStatus, portInfo) {
   const statusBadge = `<span class="status-badge ${status.exists ? 'active' : 'inactive'}">${status.exists ? t('python.status_exists') : t('python.status_not_exists')}</span>`;
 
   const versionRow = status.exists ? `
@@ -996,12 +1032,28 @@ function pythonStatsCardHtml(status, portInfo) {
     ? `${portInfo.port} <span class="status-badge ${portInfo.free ? 'active' : 'inactive'}">${portInfo.free ? t('python.port_free') : t('python.port_taken')}</span>`
     : '-';
 
+  const appBadge = `<span class="status-badge ${appStatus.running ? 'active' : 'inactive'}">${appStatus.running ? t('python.app_status_running') : t('python.app_status_stopped')}</span>`;
+  const appInfoHtml = appStatus.running ? `
+    <div class="info-grid" style="margin-top:10px;">
+      <div class="info-label">${t('python.field_framework')}</div><div class="info-value">${escapeHtml(appStatus.framework ? t(`python.framework_${appStatus.framework}`) : '-')}</div>
+      <div class="info-label">${t('python.field_port')}</div><div class="info-value">${escapeHtml(appStatus.port ? String(appStatus.port) : '-')}</div>
+    </div>
+  ` : '';
+  const logsHtml = appStatus.logs.length > 0
+    ? `<pre style="margin:8px 0 0;max-height:160px;overflow:auto;font-size:11px;background:var(--bg-alt, rgba(128,128,128,0.08));padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-all;">${escapeHtml(appStatus.logs.join('\n'))}</pre>`
+    : `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.app_no_logs')}</div>`;
+
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('python.stats_title')} ${statusBadge}</h3>
     ${versionRow}
     <div class="info-grid" style="margin-top:10px;">
       <div class="info-label">${t('python.installed_frameworks_label')}</div><div class="info-value">${escapeHtml(frameworksText)}</div>
     </div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
+    <h4 style="margin:0 0 6px;font-size:14px;">${t('python.app_title')} ${appBadge}</h4>
+    ${appInfoHtml}
+    <div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.app_logs_label')}</div>
+    ${logsHtml}
     <hr style="border:none;border-top:1px solid var(--border);margin:16px 0;">
     <div style="font-size:13px;margin-bottom:8px;">${t('python.free_port_label')}: <strong>${portValueHtml}</strong></div>
     <div style="display:flex;gap:8px;">
@@ -1010,17 +1062,18 @@ function pythonStatsCardHtml(status, portInfo) {
     </div>
     <div class="action-msg" id="python-port-msg"></div>
     <div style="font-size:12px;color:var(--muted);margin-top:14px;">${t('python.reverseproxy_hint')}</div>
+    ${status.exists && status.frameworks.includes('django') ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${t('python.django_dev_hint')}</div>` : ''}
   `;
 }
 
-function renderPythonSection(status, versions, portInfo) {
+function renderPythonSection(status, versions, appStatus, portInfo) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${pythonManageCardHtml(status, versions)}
+        ${pythonManageCardHtml(status, versions, appStatus, portInfo)}
       </div>
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${pythonStatsCardHtml(status, portInfo)}
+        ${pythonStatsCardHtml(status, appStatus, portInfo)}
       </div>
     </div>
   `;
@@ -1085,6 +1138,44 @@ function wirePythonSection(content) {
     };
   }
 
+  const appMsgEl = document.getElementById('python-app-msg');
+
+  const appStartBtn = document.getElementById('python-app-start-btn');
+  if (appStartBtn) {
+    appStartBtn.onclick = async () => {
+      const framework = document.getElementById('python-app-framework-select').value;
+      const port = document.getElementById('python-app-port-input').value;
+      appStartBtn.disabled = true;
+      appMsgEl.textContent = t('python.starting');
+      appMsgEl.className = 'action-msg';
+      try {
+        await api('POST', '/python/app/start', { framework, port });
+        await refreshPythonTab(content);
+      } catch (e) {
+        appMsgEl.textContent = e.message;
+        appMsgEl.className = 'action-msg error';
+        appStartBtn.disabled = false;
+      }
+    };
+  }
+
+  const appStopBtn = document.getElementById('python-app-stop-btn');
+  if (appStopBtn) {
+    appStopBtn.onclick = async () => {
+      appStopBtn.disabled = true;
+      appMsgEl.textContent = t('python.stopping');
+      appMsgEl.className = 'action-msg';
+      try {
+        await api('POST', '/python/app/stop');
+        await refreshPythonTab(content);
+      } catch (e) {
+        appMsgEl.textContent = e.message;
+        appMsgEl.className = 'action-msg error';
+        appStopBtn.disabled = false;
+      }
+    };
+  }
+
   const portCheckBtn = document.getElementById('python-port-check-btn');
   if (portCheckBtn) {
     portCheckBtn.onclick = async () => {
@@ -1112,12 +1203,13 @@ function wirePythonSection(content) {
 async function refreshPythonTab(content) {
   content.innerHTML = `<div class="empty-state">${t('python.loading')}</div>`;
   try {
-    const [status, versions, portInfo] = await Promise.all([
+    const [status, versions, appStatus, portInfo] = await Promise.all([
       api('GET', '/python'),
       api('GET', '/python/versions'),
+      api('GET', '/python/app'),
       api('GET', '/python/free-port').catch(() => null)
     ]);
-    content.innerHTML = renderPythonSection(status, versions, portInfo);
+    content.innerHTML = renderPythonSection(status, versions, appStatus, portInfo);
     wirePythonSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

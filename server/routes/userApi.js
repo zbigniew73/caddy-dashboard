@@ -9,7 +9,8 @@ import {
 import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import {
-  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort
+  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort,
+  getAppStatus, startApp, stopApp
 } from '../services/hostingUserPython.js';
 import { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey } from '../services/hostingUserSsh.js';
 import {
@@ -285,6 +286,31 @@ router.delete('/python/venv', async (req, res) => {
 router.get('/python/free-port', async (req, res) => {
   try {
     res.json(await findFreePort(req.query.port));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/python/app', async (req, res) => {
+  try {
+    res.json(await getAppStatus(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/app/start', async (req, res) => {
+  try {
+    const { framework, port } = req.body || {};
+    res.json(await startApp(req.hostingUser, { framework, port }));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/python/app/stop', async (req, res) => {
+  try {
+    res.json(await stopApp(req.hostingUser));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

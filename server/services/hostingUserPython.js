@@ -7,6 +7,7 @@ import { listUsedProxyPorts } from './hostingUserSites.js';
 
 const SCRIPTS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts');
 const SCRIPT_NAME = 'hosting-user-python-venv.sh';
+const APP_SCRIPT_NAME = 'hosting-user-python-app.sh';
 
 const FRAMEWORKS = ['django', 'flask', 'fastapi'];
 // Nazwa pakietu w `pip list --format=freeze` uzywana do wykrycia "czy
@@ -18,16 +19,16 @@ function badRequest(message) {
   return Object.assign(new Error(message), { status: 400 });
 }
 
-function sudoErrorMessage(stderr) {
+function sudoErrorMessage(scriptName, stderr) {
   if (/password is required/i.test(stderr)) {
-    return `Brak uprawnien sudo bez hasla dla ${SCRIPT_NAME} - sprawdz /etc/sudoers.d/caddy-dashboard`;
+    return `Brak uprawnien sudo bez hasla dla ${scriptName} - sprawdz /etc/sudoers.d/caddy-dashboard`;
   }
   return stderr.trim() || null;
 }
 
-function runVenvScript(action, args, stdinContent) {
+function runScript(scriptName, action, args, stdinContent) {
   return new Promise((resolve, reject) => {
-    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/${SCRIPT_NAME}`, action, ...args]);
+    const child = spawn('sudo', ['-n', `${SCRIPTS_DIR}/${scriptName}`, action, ...args]);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });
@@ -35,12 +36,20 @@ function runVenvScript(action, args, stdinContent) {
     child.on('error', (e) => reject(Object.assign(new Error(e.message), { status: 500 })));
     child.on('close', (code) => {
       if (code === 0) { resolve(stdout); return; }
-      const message = sudoErrorMessage(stderr);
+      const message = sudoErrorMessage(scriptName, stderr);
       reject(Object.assign(new Error(message || stdout.trim() || `exit code ${code}`), { status: message ? 403 : 500 }));
     });
     if (stdinContent !== undefined) child.stdin.write(stdinContent);
     child.stdin.end();
   });
+}
+
+function runVenvScript(action, args, stdinContent) {
+  return runScript(SCRIPT_NAME, action, args, stdinContent);
+}
+
+function runAppScript(action, args) {
+  return runScript(APP_SCRIPT_NAME, action, args);
 }
 
 // Prawdziwe, zainstalowane binarki Python - NIE zgadujemy, czytamy
@@ -102,6 +111,12 @@ async function createVenv(username, pythonId) {
   const versions = listPythonVersions();
   const chosen = versions.find((v) => v.id === pythonId);
   if (!chosen) throw badRequest('Wybierz wersje Pythona z listy.');
+  // Odtworzenie venv (rm -rf + od nowa) pod nogami dzialajacej aplikacji
+  // (gunicorn/uvicorn) to dokladnie ten typ cichego psucia, ktory juz
+  // raz naprawialismy w tym projekcie (memory_limit) - zatrzymujemy
+  // aplikacje najpierw, best-effort (brak aplikacji/bledu tu nie jest
+  // powodem do przerywania tworzenia venv).
+  await runAppScript('stop', [username]).catch(() => {});
   await runVenvScript('create', [username, validatePythonPath(chosen.path)]);
   return getVenvStatus(username);
 }
@@ -113,8 +128,49 @@ async function installFramework(username, framework) {
 }
 
 async function deleteVenv(username) {
+  await runAppScript('stop', [username]).catch(() => {});
   await runVenvScript('remove', [username]);
   return getVenvStatus(username);
+}
+
+// Parsuje wyjscie akcji 'status' skryptu hosting-user-python-app.sh
+// (ACTIVE=/FRAMEWORK=/PORT=/LOG=<linia> - patrz komentarz w tym
+// skrypcie). Podobnie jak status venv, ZAWSZE czytany na zywo z systemd/
+// journalctl, nigdy nie trzymany w JSON.
+function parseAppStatusOutput(raw) {
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const activeLine = lines.find((l) => l.startsWith('ACTIVE='));
+  const running = activeLine ? activeLine.slice('ACTIVE='.length) === 'active' : false;
+
+  const frameworkLine = lines.find((l) => l.startsWith('FRAMEWORK='));
+  const framework = frameworkLine ? frameworkLine.slice('FRAMEWORK='.length) : null;
+
+  const portLine = lines.find((l) => l.startsWith('PORT='));
+  const port = portLine ? parseInt(portLine.slice('PORT='.length), 10) : null;
+
+  const logs = lines.filter((l) => l.startsWith('LOG=')).map((l) => l.slice('LOG='.length));
+
+  return { running, framework, port: Number.isInteger(port) ? port : null, logs };
+}
+
+async function getAppStatus(username) {
+  const raw = await runAppScript('status', [username]);
+  return parseAppStatusOutput(raw);
+}
+
+async function startApp(username, { framework, port }) {
+  if (!FRAMEWORKS.includes(framework)) throw badRequest('Nieznany framework.');
+  const portNum = parseInt(port, 10);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    throw badRequest('Nieprawidlowy numer portu (1-65535).');
+  }
+  await runAppScript('start', [username, framework, String(portNum)]);
+  return getAppStatus(username);
+}
+
+async function stopApp(username) {
+  await runAppScript('stop', [username]);
+  return getAppStatus(username);
 }
 
 // Sprawdzenie "wolnego portu" - DWA niezalezne sygnaly, oba musza wyjsc
@@ -174,5 +230,6 @@ async function findFreePort(preferredPort) {
 }
 
 export {
-  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort
+  listPythonVersions, getVenvStatus, createVenv, installFramework, deleteVenv, findFreePort,
+  getAppStatus, startApp, stopApp
 };
