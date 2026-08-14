@@ -407,6 +407,9 @@ async function renderMailAccessSection() {
       <td>${escapeHtml(a.username)}</td>
       <td>${escapeHtml(a.fullName || a.email || '-')}</td>
       <td><span class="status-badge ${a.mailEnabled ? 'active' : 'inactive'}">${a.mailEnabled ? t('mail.access_enabled') : t('mail.access_disabled')}</span></td>
+      <td>${t('mail.limit_value', { mailboxes: a.mailLimit.mailboxes, aliases: a.mailLimit.aliases })}
+        <button type="button" class="secondary" data-mail-limit-user="${escapeHtml(a.username)}" data-mail-limit-mailboxes="${a.mailLimit.mailboxes}" data-mail-limit-aliases="${a.mailLimit.aliases}">${t('mail.limit_edit_button')}</button>
+      </td>
       <td>${a.mailEnabled
         ? `<button type="button" class="danger" data-mail-access-user="${escapeHtml(a.username)}" data-mail-access-action="disable">${t('mail.disable_button')}</button>`
         : `<button type="button" data-mail-access-user="${escapeHtml(a.username)}" data-mail-access-action="enable">${t('mail.enable_button')}</button>`}
@@ -425,6 +428,7 @@ async function renderMailAccessSection() {
               <th>${t('mail.column_account')}</th>
               <th>${t('mail.column_contact')}</th>
               <th>${t('mail.column_access')}</th>
+              <th>${t('mail.column_limit')}</th>
               <th></th>
             </tr>
           </thead>
@@ -457,6 +461,34 @@ function wireMailAccessSection(content) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
         content.querySelectorAll('[data-mail-access-user]').forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-mail-limit-user]').forEach((btn) => {
+    btn.onclick = async () => {
+      const username = btn.dataset.mailLimitUser;
+      const mailboxesInput = window.prompt(t('mail.limit_prompt_mailboxes', { account: username }), btn.dataset.mailLimitMailboxes);
+      if (mailboxesInput === null) return;
+      const mailboxes = parseInt(mailboxesInput, 10);
+      if (!Number.isInteger(mailboxes) || mailboxes < 0) {
+        window.alert(t('mail.limit_invalid'));
+        return;
+      }
+      const aliasesInput = window.prompt(t('mail.limit_prompt_aliases', { account: username }), btn.dataset.mailLimitAliases);
+      if (aliasesInput === null) return;
+      const aliases = parseInt(aliasesInput, 10);
+      if (!Number.isInteger(aliases) || aliases < 0) {
+        window.alert(t('mail.limit_invalid'));
+        return;
+      }
+      btn.disabled = true;
+      try {
+        await api('PUT', `/mail/access/${username}/limit`, { mailboxes, aliases });
+        await renderMailTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
       }
     };
   });

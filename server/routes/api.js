@@ -45,6 +45,7 @@ import {
 } from '../services/runtimeManagerClient.js';
 import { detectBaseDomain, applyCaddyConfig, removeCaddyConfig, getCaddyConfigStatus } from '../services/roundcubeSite.js';
 import { getRoundcubeConfig, setRoundcubeConfig, clearRoundcubeConfig } from '../services/roundcubeConfig.js';
+import { getAllMailLimits, setMailLimit, DEFAULT_LIMIT as DEFAULT_MAIL_LIMIT } from '../services/mailLimits.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -604,11 +605,13 @@ router.post('/mail/install', async (req, res) => {
 router.get('/mail/access', (req, res) => {
   try {
     const disabled = readDisabledUsernames();
+    const limits = getAllMailLimits();
     const accounts = listAccounts().map((a) => ({
       username: a.username,
       fullName: a.fullName,
       email: a.email,
-      mailEnabled: !disabled.has(a.username)
+      mailEnabled: !disabled.has(a.username),
+      mailLimit: limits[a.username] ? { ...DEFAULT_MAIL_LIMIT, ...limits[a.username] } : { ...DEFAULT_MAIL_LIMIT }
     }));
     res.json({ accounts });
   } catch (e) {
@@ -620,6 +623,17 @@ router.post('/mail/access/:username', async (req, res) => {
   try {
     const result = await setMailAccess(req.params.username, !!req.body?.enabled);
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/mail/access/:username/limit', (req, res) => {
+  try {
+    const mailboxes = parseInt(req.body?.mailboxes, 10);
+    const aliases = parseInt(req.body?.aliases, 10);
+    const result = setMailLimit(req.params.username, { mailboxes, aliases });
+    res.json({ success: true, mailLimit: result });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
