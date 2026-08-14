@@ -4,6 +4,7 @@ import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import tls from 'tls';
+import { X509Certificate } from 'crypto';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/mail-install.sh');
@@ -140,12 +141,30 @@ const LE_CERT_PATH = '/etc/pki/tls/certs/mail-letsencrypt.crt';
 // istnienia pliku) - to jedyny wiarygodny sposob, zeby wiedziec, KTORY
 // certyfikat jest aktywny TERAZ, niezaleznie od tego czy plik
 // self-signed/letsencrypt akurat istnieje na dysku.
+//
+// Waznosc czytana z PLIKU aktywnego certyfikatu (nie z live polaczenia
+// TLS jak checkMailCertTrusted powyzej) - to dokladnie ten certyfikat,
+// ktory Postfix/Dovecot NAPRAWDE maja teraz zaladowany (kopia zrobiona
+// przy "Wlacz" - patrz mail-tls-swap.sh - moze nieznacznie odbiegac od
+// najnowszego certu w magazynie Caddy, jesli Caddy zdazyl juz odnowic).
+// Pliki .crt sa world-readable (`/etc/pki/tls/certs` to standardowy
+// katalog RHEL na publiczne certyfikaty, w odroznieniu od /private),
+// wiec bez sudo.
 async function getMailTlsStatus() {
   try {
     const { stdout } = await execFileAsync('postconf', ['-h', 'smtpd_tls_cert_file']);
-    return { active: stdout.trim() === LE_CERT_PATH ? 'letsencrypt' : 'selfsigned' };
+    const certPath = stdout.trim();
+    const active = certPath === LE_CERT_PATH ? 'letsencrypt' : 'selfsigned';
+    let daysRemaining = null;
+    try {
+      const cert = new X509Certificate(readFileSync(certPath));
+      daysRemaining = Math.ceil((new Date(cert.validTo).getTime() - Date.now()) / 86400000);
+    } catch {
+      daysRemaining = null;
+    }
+    return { active, daysRemaining };
   } catch {
-    return { active: null };
+    return { active: null, daysRemaining: null };
   }
 }
 

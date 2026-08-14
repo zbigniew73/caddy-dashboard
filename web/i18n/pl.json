@@ -557,6 +557,7 @@
   "mail.stats_tls_label": "Certyfikat TLS",
   "mail.stats_tls_value": "tymczasowy (self-signed)",
   "mail.stats_tls_value_le": "Let's Encrypt",
+  "mail.stats_tls_value_le_days": "Let's Encrypt (ważny jeszcze {days} dni)",
   "mail.tls_enable_button": "Włącz",
   "mail.tls_disable_button": "Wyłącz",
   "mail.tls_working": "Zapisywanie...",

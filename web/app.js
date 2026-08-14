@@ -488,12 +488,18 @@ async function renderMailStatsSection() {
   const queueText = queueCount === null ? t('mail.stats_queue_unavailable') : t('mail.stats_queue_value', { count: queueCount });
 
   let tlsActive = null;
+  let tlsDaysRemaining = null;
   try {
-    tlsActive = (await api('GET', '/mail/tls-status')).active;
+    const tlsStatus = await api('GET', '/mail/tls-status');
+    tlsActive = tlsStatus.active;
+    tlsDaysRemaining = tlsStatus.daysRemaining;
   } catch {
     tlsActive = null;
+    tlsDaysRemaining = null;
   }
-  const tlsValueText = tlsActive === 'letsencrypt' ? t('mail.stats_tls_value_le') : t('mail.stats_tls_value');
+  const tlsValueText = tlsActive === 'letsencrypt'
+    ? (tlsDaysRemaining === null ? t('mail.stats_tls_value_le') : t('mail.stats_tls_value_le_days', { days: tlsDaysRemaining }))
+    : t('mail.stats_tls_value');
 
   let certRow = '';
   try {
