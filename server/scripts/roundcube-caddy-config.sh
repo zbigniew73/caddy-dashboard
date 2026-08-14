@@ -68,19 +68,57 @@ case "$ACTION" in
     ERR_LOG="$(mktemp)"
     trap 'rm -f "$TMP" "$ERR_LOG"' EXIT
 
-    # Blok dopisywany NA KONCU pliku, nigdy na poczatku - jesli admin ma
-    # juz skonfigurowany profil wydajnosci Caddy (caddy-set-performance.sh),
+    # Blok NIGDY nie ladujemy na sam POCZATEK - jesli admin ma juz
+    # skonfigurowany profil wydajnosci Caddy (caddy-set-performance.sh),
     # to blok BEZ klucza domeny (globalne opcje `{ admin ... }`), a Caddy
     # wymaga, zeby taki blok byl ZAWSZE pierwszy w pliku - wstawienie
     # czegokolwiek przed nim psuje adaptacje ("server block without any
-    # key ... must be first"). Dopisywanie na koncu nigdy nie narusza tej
-    # kolejnosci, niezaleznie czy blok wydajnosci istnieje czy nie.
+    # key ... must be first").
+    #
+    # W ramach reszty pliku blok Roundcube ma isc TUZ PRZED sekcja
+    # `import /etc/caddy/sites/...` (wraz z ewentualnymi komentarzami
+    # bezposrednio ja poprzedzajacymi, np. recznie dopisanym
+    # "# start website") - user chce go tam, nie po calej tej sekcji.
+    # Jesli linii `import ...` nie ma (nietypowy Caddyfile), bezpieczny
+    # fallback to koniec pliku.
     STRIPPED="$(read_current | strip_block)"
+    mapfile -t LINES <<< "$STRIPPED"
+
+    IMPORT_IDX=-1
+    for i in "${!LINES[@]}"; do
+      if [[ "${LINES[$i]}" =~ ^[[:space:]]*import[[:space:]] ]]; then
+        IMPORT_IDX=$i
+        break
+      fi
+    done
+
+    INSERT_IDX=$IMPORT_IDX
+    if [ "$IMPORT_IDX" -ge 0 ]; then
+      j=$IMPORT_IDX
+      while [ "$j" -gt 0 ]; do
+        prev="$(printf '%s' "${LINES[$((j-1))]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+        if [ -z "$prev" ] || [[ "$prev" == \#* ]]; then
+          j=$((j-1))
+        else
+          break
+        fi
+      done
+      INSERT_IDX=$j
+    fi
+
     {
-      printf '%s' "$STRIPPED"
-      printf '\n\n%s\n' "$MARK_START"
-      printf '%s\n' "$NEW_BLOCK"
-      printf '%s\n' "$MARK_END"
+      if [ "$IMPORT_IDX" -ge 0 ]; then
+        for ((k=0; k<INSERT_IDX; k++)); do printf '%s\n' "${LINES[$k]}"; done
+        printf '%s\n' "$MARK_START"
+        printf '%s\n' "$NEW_BLOCK"
+        printf '%s\n\n' "$MARK_END"
+        for ((k=INSERT_IDX; k<${#LINES[@]}; k++)); do printf '%s\n' "${LINES[$k]}"; done
+      else
+        printf '%s' "$STRIPPED"
+        printf '\n\n%s\n' "$MARK_START"
+        printf '%s\n' "$NEW_BLOCK"
+        printf '%s\n' "$MARK_END"
+      fi
     } > "$TMP"
 
     caddy fmt --overwrite "$TMP" >"$ERR_LOG" 2>&1 || err "caddy fmt nie powiodlo sie: $(cat "$ERR_LOG")"
