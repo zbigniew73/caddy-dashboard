@@ -27,6 +27,15 @@
 # = accept po cichu przepuszcza poczte BEZ PODPISU DKIM. Druga polowka
 # tej naprawy (Socket w opendkim.conf) jest w dkim-install.sh - oba
 # trzeba kliknac razem.
+#
+# Naprawia TEZ inet_interfaces = localhost (domyslny stan z pakietu RPM)
+# -> "all" - bez tego Postfix NIGDY nie nasluchuje na porcie 25 na
+# publicznym interfejsie (tylko 127.0.0.1/::1), wiec ZADNA poczta
+# przychodzaca z internetu nie dociera, mimo poprawnego DNS/MX i
+# otwartego firewalla. TA zmiana wymaga PELNEGO restartu (nie samego
+# reload) - Postfix nie rebinduje listenera na nowy interfejs przy samym
+# SIGHUP/reload, dlatego ponizej warunkowo uzywamy `systemctl restart`
+# zamiast `reload`, TYLKO gdy inet_interfaces faktycznie sie zmienia.
 
 set -uo pipefail
 
@@ -43,6 +52,7 @@ OLD_MESSAGE="$(postconf -h message_size_limit 2>/dev/null || true)"
 OLD_HOME_MAILBOX="$(postconf -h home_mailbox 2>/dev/null || true)"
 OLD_SMTPD_MILTERS="$(postconf -h smtpd_milters 2>/dev/null || true)"
 OLD_NON_SMTPD_MILTERS="$(postconf -h non_smtpd_milters 2>/dev/null || true)"
+OLD_INET_INTERFACES="$(postconf -h inet_interfaces 2>/dev/null || true)"
 
 rollback() {
   [ -n "$OLD_MAILBOX" ] && postconf -e "mailbox_size_limit=${OLD_MAILBOX}" >/dev/null 2>&1
@@ -50,7 +60,8 @@ rollback() {
   [ -n "$OLD_HOME_MAILBOX" ] && postconf -e "home_mailbox=${OLD_HOME_MAILBOX}" >/dev/null 2>&1
   [ -n "$OLD_SMTPD_MILTERS" ] && postconf -e "smtpd_milters=${OLD_SMTPD_MILTERS}" >/dev/null 2>&1
   [ -n "$OLD_NON_SMTPD_MILTERS" ] && postconf -e "non_smtpd_milters=${OLD_NON_SMTPD_MILTERS}" >/dev/null 2>&1
-  systemctl reload postfix >/dev/null 2>&1 || true
+  [ -n "$OLD_INET_INTERFACES" ] && postconf -e "inet_interfaces=${OLD_INET_INTERFACES}" >/dev/null 2>&1
+  systemctl restart postfix >/dev/null 2>&1 || true
 }
 
 postconf -e "mailbox_size_limit=${MAILBOX_LIMIT}"
@@ -64,6 +75,11 @@ fi
 if [[ "$OLD_NON_SMTPD_MILTERS" == *localhost* ]]; then
   postconf -e "non_smtpd_milters=inet:127.0.0.1:8891"
 fi
+NEED_RESTART=""
+if [ "$OLD_INET_INTERFACES" != "all" ]; then
+  postconf -e 'inet_interfaces = all'
+  NEED_RESTART="1"
+fi
 
 if ! postfix check 2>/tmp/postfix-set-limits.err; then
   MSG="$(cat /tmp/postfix-set-limits.err 2>/dev/null)"
@@ -73,7 +89,14 @@ if ! postfix check 2>/tmp/postfix-set-limits.err; then
 fi
 rm -f /tmp/postfix-set-limits.err
 
-if ! systemctl reload postfix 2>/tmp/postfix-set-limits.err; then
+# inet_interfaces wymaga PELNEGO restartu (rebind listenera) - samo
+# `reload` (SIGHUP) tego nie robi, patrz komentarz na gorze pliku.
+if [ -n "$NEED_RESTART" ]; then
+  RELOAD_CMD="restart"
+else
+  RELOAD_CMD="reload"
+fi
+if ! systemctl "$RELOAD_CMD" postfix 2>/tmp/postfix-set-limits.err; then
   MSG="$(cat /tmp/postfix-set-limits.err 2>/dev/null)"
   rm -f /tmp/postfix-set-limits.err
   rollback

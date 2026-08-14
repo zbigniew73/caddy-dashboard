@@ -107,6 +107,14 @@ dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (90-caddy-dashboard.con
 # na zywym serwerze 2026-08-14 (test cdadmin<->konto hostingowe, poczta
 # znikala).
 postconf -e "home_mailbox=Maildir/"
+# Domyslny main.cf z pakietu RPM (AlmaLinux/Rocky) ma "inet_interfaces =
+# localhost" (swiadomie bezpieczny stan przy instalacji) - bez tego
+# Postfix NIGDY nie nasluchuje na publicznym interfejsie na porcie 25,
+# tylko na 127.0.0.1/::1 (widac to w `ss -tlnp`), wiec ZADNA poczta
+# przychodzaca z internetu nigdy nie dociera, mimo poprawnego DNS/MX i
+# otwartego firewalla. Potwierdzone na zywym serwerze 2026-08-14 (Gmail
+# odpowiedz do cdadmin@20z.eu nigdy nie dotarla).
+postconf -e 'inet_interfaces = all'
 postconf -e "smtpd_tls_cert_file=${CERT_FILE}"
 postconf -e "smtpd_tls_key_file=${KEY_FILE}"
 postconf -e 'smtpd_tls_security_level = may'
