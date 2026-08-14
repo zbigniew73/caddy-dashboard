@@ -4471,6 +4471,33 @@ function confirmMessageFor(key, action) {
   return t('services.confirm_action', { action: t('services.action_' + action) });
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Caddy jest reverse proxy CALEGO panelu (panel.20z.eu -> Caddy ->
+// 127.0.0.1:PORT) - kiedy ta akcja to restart/stop/start Caddy, samo
+// polaczenie przegladarki, ktorym leci ta prosba, przechodzi PRZEZ
+// Caddy. `systemctl restart` najpierw zabija proces (zrywajac to
+// polaczenie), dopiero potem go podnosi - przegladarka dostaje siecowy
+// blad (np. "Failed to fetch" w Chrome), NIE odpowiedz HTTP, mimo ze
+// akcja najpewniej sie udala. Zamiast pokazywac to od razu jako blad,
+// odczekaj chwile (kilka prob, Caddy zwykle wraca w ulamku sekundy) i
+// sprawdz prawdziwy status jeszcze raz, zanim uznasz, ze naprawde sie
+// nie udalo.
+async function waitForServiceStatus(key, { attempts = 4, delayMs = 1500 } = {}) {
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    await sleep(delayMs);
+    try {
+      return await api('GET', `/services/${key}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr;
+}
+
 function wireServiceActions(key) {
   document.querySelectorAll('#content [data-action]').forEach((btn) => {
     btn.onclick = async () => {
@@ -4481,8 +4508,8 @@ function wireServiceActions(key) {
       document.querySelectorAll('#content [data-action]').forEach((b) => { b.disabled = true; });
       msgEl.textContent = t('services.action_pending');
       msgEl.className = 'action-msg';
-      try {
-        const svc = await api('POST', `/services/${key}/${action}`);
+
+      const applySuccess = async (svc) => {
         const phpMatch = /^php(\d{2})$/.exec(key);
         let html = serviceDetailHtml(svc, serviceTitleFor(svc));
         if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
@@ -4514,7 +4541,21 @@ function wireServiceActions(key) {
         const successEl = document.getElementById(`${key}-action-msg`);
         successEl.textContent = t('services.action_success');
         successEl.className = 'action-msg success';
+      };
+
+      try {
+        const svc = await api('POST', `/services/${key}/${action}`);
+        await applySuccess(svc);
       } catch (e) {
+        if (key === 'caddy') {
+          try {
+            const svc = await waitForServiceStatus(key);
+            await applySuccess(svc);
+            return;
+          } catch {
+            // dalej sie nie udalo - pokaz oryginalny blad ponizej
+          }
+        }
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
         document.querySelectorAll('#content [data-action]').forEach((b) => { b.disabled = false; });
