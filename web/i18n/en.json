@@ -226,6 +226,7 @@
   "install.mail.description": "Installs a mail server: Postfix (SMTP) + Dovecot (IMAP) + OpenDKIM, using stable versions from system repositories. Access: IMAP/IMAPS and SMTP/SMTPS (ports 587/465) - no POP3/POP3S. Login uses the same password as SSH (PAM), each hosting account gets one mailbox (~/Maildir, system group mail - like in DirectAdmin). A self-signed TLS certificate is used to start (replace with your own later), and OpenDKIM is enabled without per-domain keys configured yet - that's a later step.",
   "install.mail.installed_hint": "Installed. Control Postfix and Dovecot (start/stop/restart) from the Mail tab.",
   "install.mail.confirm_install": "Install mail server (Postfix + Dovecot + OpenDKIM)? This may take a few minutes.",
+  "install.mail.recheck_button": "Check / update configuration",
   "adminer.requires_php83": "Requires PHP 8.3 first - install it from the PHP-FPM tile.",
   "adminer.version_label": "Version",
   "adminer.docroot_label": "Files",

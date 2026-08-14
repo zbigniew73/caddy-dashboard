@@ -226,6 +226,7 @@
   "install.mail.description": "Instaluje serwer pocztowy: Postfix (SMTP) + Dovecot (IMAP) + OpenDKIM, w stabilnych wersjach z repozytoriów systemowych. Dostęp: IMAP/IMAPS oraz SMTP/SMTPS (porty 587/465) - bez POP3/POP3S. Logowanie tym samym hasłem co SSH (PAM), każde konto hostingowe dostaje jedną skrzynkę (~/Maildir, grupa systemowa mail - jak w DirectAdmin). Na start zostanie użyty certyfikat TLS self-signed (do podmiany na własny później), a OpenDKIM zostanie włączony bez jeszcze skonfigurowanych kluczy per-domena - to kolejny krok.",
   "install.mail.installed_hint": "Zainstalowano. Sterowanie Postfixem i Dovecotem (start/stop/restart) znajdziesz w zakładce Poczta.",
   "install.mail.confirm_install": "Zainstalować serwer pocztowy (Postfix + Dovecot + OpenDKIM)? To może potrwać kilka minut.",
+  "install.mail.recheck_button": "Sprawdź / zaktualizuj konfigurację",
   "adminer.requires_php83": "Wymaga najpierw PHP 8.3 - zainstaluj go z kafelka PHP-FPM.",
   "adminer.version_label": "Wersja",
   "adminer.docroot_label": "Pliki",

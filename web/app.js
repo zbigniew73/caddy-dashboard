@@ -2223,6 +2223,8 @@ function mailInstallTileHtml(svc) {
         </div>
         <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0;">${escapeHtml(description)}</p>
         <p style="color:var(--muted);font-size:12px;margin-top:10px;">${t('install.mail.installed_hint')}</p>
+        <button type="button" class="secondary" id="mail-install-btn" data-mail-install-recheck="1" style="margin-top:12px;">${t('install.mail.recheck_button')}</button>
+        <div class="action-msg" id="mail-install-msg"></div>
       </div>
     `;
   }
@@ -2242,8 +2244,10 @@ function wireMailInstallTile() {
   if (!btn) return;
   const msgEl = document.getElementById('mail-install-msg');
 
+  const isRecheck = btn.dataset.mailInstallRecheck === '1';
+
   btn.onclick = async () => {
-    if (!window.confirm(t('install.mail.confirm_install'))) return;
+    if (!isRecheck && !window.confirm(t('install.mail.confirm_install'))) return;
 
     btn.disabled = true;
     msgEl.textContent = t('install.installing');
@@ -2253,6 +2257,7 @@ function wireMailInstallTile() {
       const svc = await api('GET', '/services/mail');
       document.getElementById('content').innerHTML = mailInstallTileHtml(svc);
       applyTranslations();
+      wireMailInstallTile();
       const successEl = document.getElementById('mail-install-msg');
       if (successEl) {
         successEl.textContent = t('install.install_success');
