@@ -49,6 +49,35 @@ async function detectBaseDomain() {
   return { detected, suggested };
 }
 
+// Naglowki bezpieczenstwa dla webmail.<domena> - dobrane 2026-08-14 razem
+// z userem, ktory po kolei ocenil kazdy z jego listy:
+// - HSTS BEZ "preload" (swiadomie) - wpis na twardo zaszytej liscie
+//   przegladarek jest trudny do cofniecia (tygodnie/miesiace), zbedne
+//   ryzyko dla pojedynczej subdomeny webmaila.
+// - BEZ X-Frame-Options - Roundcube i tak juz go sam ustawia (widoczne w
+//   zywych odpowiedziach), dopisanie drugiej wartosci mogloby dac
+//   zduplikowany naglowek (niejednoznaczna obsluga w czesci przegladarek).
+// - Cross-Origin-Embedder-Policy "unsafe-none" ZOSTAJE mimo ze to
+//   dokladnie wartosc domyslna (no-op) - user chcial to jawnie widziec w
+//   configu.
+// - BEZ X-XSS-Protection - przestarzaly, usuniety z Chrome/Edge/Safari,
+//   w starych przegladarkach bywal zrodlem wlasnych podatnosci.
+// - Content-Security-Policy tylko "upgrade-insecure-requests" (NIE pelna
+//   restrykcyjna polityka script-src/style-src) - Roundcube renderuje
+//   podglad HTML maili we wlasnym, oddzielnie sandboxowanym iframe, ale
+//   pelny CSP na poziomie strony i tak latwo zepsulby jego wlasny UI -
+//   poza zakresem tej prosby, tu tylko wymuszenie HTTPS na zasobach.
+const SECURITY_HEADERS_BLOCK = `header {
+		-X-Powered-By
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		Content-Security-Policy "upgrade-insecure-requests"
+		Permissions-Policy "geolocation=(self), microphone=(), camera=(), payment=()"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		Cross-Origin-Opener-Policy "same-origin-allow-popups"
+		Cross-Origin-Embedder-Policy "unsafe-none"
+	}`;
+
 function buildCaddyBlock(domain, gate) {
   const webmailHost = `webmail.${domain}`;
   const mailHost = `mail.${domain}`;
@@ -61,14 +90,14 @@ function buildCaddyBlock(domain, gate) {
 		forward_auth 127.0.0.1:${process.env.PORT || '4300'} {
 			uri /rc-gate/check
 		}
-		header -X-Powered-By
+		${SECURITY_HEADERS_BLOCK}
 		root * /opt/webmail/public_html
 		php_fastcgi unix//opt/webmail/run/roundcube.sock
 		file_server
 	}
 }`
     : `${webmailHost} {
-	header -X-Powered-By
+	${SECURITY_HEADERS_BLOCK}
 	root * /opt/webmail/public_html
 	php_fastcgi unix//opt/webmail/run/roundcube.sock
 	file_server
