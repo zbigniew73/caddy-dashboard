@@ -2202,6 +2202,22 @@ async function renderServicesTab(content) {
   }
 }
 
+// Ta sama rezolucja nazwy co w serviceCard() (siatka "Uslugi") i
+// refreshDynamicNav() (lewy pasek nawigacji) - svc.name z serwera (np.
+// "PHP 8.3" dla dynamicznych wersji PHP), a w braku tego i18n
+// "services.<key>.name" dla stalych wpisow (SSH, FIREWALL, CADDY...).
+// UWAGA: svc.name przychodzi tylko z listy GET /services (patrz
+// phpServiceEntries() w server/routes/api.js) - pojedynczy GET
+// /services/:key (uzywany na zakladce szczegolow, tu wlasnie) go NIE
+// ma, wiec dla "phpXX" dokladamy wlasny fallback z klucza zamiast
+// pokazywac surowy, nieprzetlumaczony klucz i18n.
+function serviceTitleFor(svc) {
+  if (svc.name) return svc.name;
+  const phpMatch = /^php(\d)(\d)$/.exec(svc.key);
+  if (phpMatch) return `PHP ${phpMatch[1]}.${phpMatch[2]}`;
+  return t(`services.${svc.key}.name`);
+}
+
 // 'title' to opcjonalny naglowek karty (wzor jak w redisadmin) - uzywany
 // tam, gdzie kilka kart uslug wystepuje razem na jednej zakladce (np.
 // Poczta: Postfix + Dovecot) i trzeba je podpisac.
@@ -4008,7 +4024,7 @@ function wireServiceActions(key) {
       try {
         const svc = await api('POST', `/services/${key}/${action}`);
         const phpMatch = /^php(\d{2})$/.exec(key);
-        let html = serviceDetailHtml(svc);
+        let html = serviceDetailHtml(svc, serviceTitleFor(svc));
         if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
         if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
         if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
@@ -4079,7 +4095,7 @@ async function renderServiceDetailTab(key, content) {
     }
     const svc = await api('GET', `/services/${key}`);
     const phpMatch = /^php(\d{2})$/.exec(key);
-    let html = serviceDetailHtml(svc);
+    let html = serviceDetailHtml(svc, serviceTitleFor(svc));
     if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
     if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
     if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
