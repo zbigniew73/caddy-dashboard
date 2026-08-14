@@ -8,6 +8,14 @@
 # jej nie ma. Walidacja (`doveconf -n`) PRZED przeladowaniem, backup+
 # rollback jesli sie nie powiedzie.
 #
+# SAMONAPRAWCZE (przy okazji, przy KAZDYM uruchomieniu): dopisuje tez
+# auth_username_format = %n, jesli jeszcze go nie ma - na instalacjach
+# Poczty sprzed tej poprawki logowanie w Roundcube pelnym adresem
+# (user@domena) failowalo, bo PAM zna tylko gole nazwy systemowe. Ten sam
+# wzorzec co pam_listfile w mail-toggle-access.sh - kliknij "Zapisz" na
+# tym kafelku (nawet bez zmiany wartosci), zeby naprawic juz dzialajaca
+# instalacje bez ponownego uruchamiania mail-install.sh.
+#
 # Uzycie: dovecot-set-limits.sh <mail_max_userip_connections>
 
 set -uo pipefail
@@ -27,6 +35,10 @@ if grep -q '^mail_max_userip_connections = ' "$DOVECOT_CONF"; then
   sed -i "s|^mail_max_userip_connections = .*|mail_max_userip_connections = ${VALUE}|" "$DOVECOT_CONF"
 else
   printf '\nmail_max_userip_connections = %s\n' "$VALUE" >> "$DOVECOT_CONF"
+fi
+
+if ! grep -q '^auth_username_format = ' "$DOVECOT_CONF"; then
+  printf '\nauth_username_format = %%n\n' >> "$DOVECOT_CONF"
 fi
 
 if ! doveconf -n >/dev/null 2>/tmp/dovecot-set-limits.err; then

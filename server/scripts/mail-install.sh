@@ -58,6 +58,14 @@ ssl_key = <${KEY_FILE}
 
 disable_plaintext_auth = yes
 
+# PAM zna tylko GOLE nazwy uzytkownikow systemowych (np. "cdadmin"), nie
+# "cdadmin@domena" - bez tego logowanie pelnym adresem (user@domena)
+# zawsze by failowalo, mimo ze sam login "user" dziala. %n obcina
+# wszystko od "@" wlacznie przed przekazaniem do PAM, wiec
+# "cdadmin@20z.eu" i "cdadmin" loguja sie identycznie, jako ten sam
+# system user.
+auth_username_format = %n
+
 service auth {
   unix_listener /var/spool/postfix/private/auth {
     mode = 0660
