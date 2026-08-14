@@ -482,6 +482,28 @@ async function renderMailStatsSection() {
   const enabledCount = accounts.filter((a) => a.mailEnabled).length;
   const queueText = queueCount === null ? t('mail.stats_queue_unavailable') : t('mail.stats_queue_value', { count: queueCount });
 
+  // Nowy rzad: czy Caddy juz faktycznie serwuje zaufany cert Let's
+  // Encrypt dla mail.<domena Roundcube'a> (patrz GET /mail/cert-status,
+  // checkMailCertTrusted w server/services/mail.js - prawdziwe polaczenie
+  // TLS, nie zgadywanie po plikach). Czysto informacyjne - podmiana
+  // certyfikatu self-signed Postfixa/Dovecota na ten to OSOBNY, PRZYSZLY
+  // krok, nie tutaj. Pokazujemy TYLKO gdy cert faktycznie jest gotowy do
+  // wykorzystania - pusty stan (brak domeny/cert jeszcze nie wydany) nie
+  // zaśmieca karty.
+  let certRow = '';
+  try {
+    const certStatus = await api('GET', '/mail/cert-status');
+    if (certStatus.available) {
+      certRow = `
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <p style="margin:0;color:var(--accent);font-size:13px;">${t('mail.stats_cert_available', { host: certStatus.hostname })}</p>
+        </div>
+      `;
+    }
+  } catch {
+    certRow = '';
+  }
+
   return `
     <div class="system-info-card">
       <h3>${t('mail.stats_title')}</h3>
@@ -499,6 +521,7 @@ async function renderMailStatsSection() {
           <dt>IMAPS</dt><dd>993</dd>
         </dl>
       </div>
+      ${certRow}
     </div>
   `;
 }
@@ -1077,6 +1100,252 @@ function wireAdminerGateSection(admStatus) {
       disableBtn.disabled = false;
     }
   };
+}
+
+// Sekcja domeny wewnatrz karty Roundcube - w odroznieniu od bramki
+// Turnstile (ponizej), TO nie jest opcjonalne: bez skonfigurowanej domeny
+// webmail w ogole nie jest dostepny przez przegladarke (Caddy nie ma go
+// gdzie serwowac). Uzywana zarowno zaraz po instalacji aplikacji (gdy
+// config.domain jeszcze puste) jak i do PONOWNEJ zmiany domeny pozniej -
+// jeden widget, dwa konteksty.
+async function roundcubeDomainSectionHtml(status) {
+  const configured = status.caddyConfigured && status.domain;
+  let detected = null;
+  if (!configured) {
+    try {
+      detected = await api('GET', '/roundcube/detect-domain');
+    } catch {
+      detected = null;
+    }
+  }
+  const suggestedValue = configured ? status.domain : (detected?.suggested || '');
+  return `
+    <div id="roundcube-domain-section">
+      <h3>${t('roundcube.domain_title')}</h3>
+      ${configured
+        ? `<p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('roundcube.domain_configured_hint', { webmail: `webmail.${status.domain}`, mail: `mail.${status.domain}` })}</p>`
+        : `<p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('roundcube.domain_not_configured_hint')}</p>`}
+      ${!configured && detected?.detected ? `<p style="margin:0 0 12px;color:var(--muted);font-size:12px;">${t('roundcube.domain_detected_hint', { domain: detected.detected })}</p>` : ''}
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('roundcube.domain_input_label')}</label>
+      <input type="text" id="roundcube-domain-input" value="${escapeHtml(suggestedValue)}" placeholder="${t('roundcube.domain_input_placeholder')}" style="width:100%;margin-bottom:12px;">
+      <button type="button" id="roundcube-domain-apply-btn">${configured ? t('roundcube.domain_change_button') : t('roundcube.domain_apply_button')}</button>
+      <div class="action-msg" id="roundcube-domain-msg"></div>
+    </div>
+  `;
+}
+
+function wireRoundcubeDomainSection(afterApply) {
+  const btn = document.getElementById('roundcube-domain-apply-btn');
+  if (!btn) return;
+  const input = document.getElementById('roundcube-domain-input');
+  const msgEl = document.getElementById('roundcube-domain-msg');
+  btn.onclick = async () => {
+    const domain = input.value.trim().toLowerCase();
+    if (!domain) {
+      msgEl.textContent = t('roundcube.domain_required');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('roundcube.confirm_configure', { webmail: `webmail.${domain}`, mail: `mail.${domain}` }))) return;
+    btn.disabled = true;
+    input.disabled = true;
+    msgEl.textContent = t('roundcube.domain_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/roundcube/configure', { domain, gate: false });
+      msgEl.textContent = t('roundcube.domain_success');
+      msgEl.className = 'action-msg success';
+      await afterApply();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+      input.disabled = false;
+    }
+  };
+}
+
+async function roundcubeInfoCardHtml(status, includeActions, constrainWidth = true) {
+  const name = t('services.roundcube.name');
+  if (!status.installed) return '';
+  const domainSection = await roundcubeDomainSectionHtml(status);
+  return `
+    <div class="system-info-card"${constrainWidth ? ' style="max-width:640px;"' : ''}>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div style="font-weight:600;font-size:15px;">${escapeHtml(name)}</div>
+        <span class="status-badge active">${t('install.installed_badge')}</span>
+      </div>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('roundcube.version_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.version || '-')}</dd>
+        <dt>${t('roundcube.db_engine_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.dbEngine || '-')}</dd>
+        <dt>${t('roundcube.docroot_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.docroot)}</dd>
+        <dt>${t('roundcube.socket_label')}</dt><dd style="font-family:monospace;">${escapeHtml(status.socketPath)}</dd>
+      </dl>
+      ${domainSection}
+      ${includeActions ? `
+        <button type="button" class="danger" id="roundcube-uninstall-btn" style="margin-top:16px;">${t('roundcube.uninstall_button')}</button>
+        <div class="action-msg" id="roundcube-msg"></div>
+      ` : ''}
+    </div>
+  `;
+}
+
+async function renderRoundcubeGateSection(rcStatus) {
+  let gate;
+  try {
+    gate = await api('GET', '/roundcube-gate');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const canToggle = rcStatus.caddyConfigured && rcStatus.domain;
+  return `
+    <div class="system-info-card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:12px;">
+        <div>
+          <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${t('roundcube.gate_title')}</div>
+          <span class="status-badge ${gate.enabled ? 'active' : 'inactive'}">${gate.enabled ? t('roundcube.gate_enabled') : t('roundcube.gate_disabled')}</span>
+        </div>
+      </div>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('roundcube.gate_description')}</p>
+      ${!canToggle ? `<div class="empty-state" style="margin-bottom:16px;">${t('roundcube.gate_requires_domain')}</div>` : ''}
+      ${canToggle && !gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('roundcube.gate_requires_turnstile')}</div>` : ''}
+      <button type="button" id="roundcube-gate-enable-btn" ${!canToggle || gate.enabled || !gate.turnstileConfigured ? 'disabled' : ''}>${t('roundcube.gate_enable_button')}</button>
+      <button type="button" class="danger" id="roundcube-gate-disable-btn" ${!canToggle || !gate.enabled ? 'disabled' : ''}>${t('roundcube.gate_disable_button')}</button>
+      <div class="action-msg" id="roundcube-gate-msg"></div>
+    </div>
+  `;
+}
+
+function wireRoundcubeGateSection(rcStatus) {
+  const enableBtn = document.getElementById('roundcube-gate-enable-btn');
+  const disableBtn = document.getElementById('roundcube-gate-disable-btn');
+  if (!enableBtn || !disableBtn) return;
+  const msgEl = document.getElementById('roundcube-gate-msg');
+
+  async function refresh() {
+    const container = enableBtn.closest('.system-info-card');
+    if (container) {
+      container.outerHTML = await renderRoundcubeGateSection(rcStatus);
+      applyTranslations();
+      wireRoundcubeGateSection(rcStatus);
+    }
+  }
+
+  enableBtn.onclick = async () => {
+    if (!window.confirm(t('roundcube.gate_confirm_enable'))) return;
+    enableBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/roundcube-gate', { enabled: true });
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      enableBtn.disabled = false;
+    }
+  };
+
+  disableBtn.onclick = async () => {
+    if (!window.confirm(t('roundcube.gate_confirm_disable'))) return;
+    disableBtn.disabled = true;
+    msgEl.textContent = t('testdb.working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/roundcube-gate', { enabled: false });
+      await refresh();
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      disableBtn.disabled = false;
+    }
+  };
+}
+
+async function roundcubeInstallTileHtml(status) {
+  const name = t('services.roundcube.name');
+  if (status.installed) return roundcubeInfoCardHtml(status, true);
+
+  if (!status.php84Installed) {
+    return `
+      <div class="system-info-card" style="max-width:560px;">
+        <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+        <div class="empty-state">${t('roundcube.requires_php84')}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="system-info-card" style="max-width:560px;">
+      <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${t('install.roundcube.description')}</p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.roundcube.db_engine_label')}</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="radio" name="roundcube-db-engine" value="mysql" checked>${t('install.roundcube.db_engine_mysql')}
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:16px;">
+        <input type="radio" name="roundcube-db-engine" value="sqlite">${t('install.roundcube.db_engine_sqlite')}
+      </label>
+      <button type="button" id="roundcube-install-btn">${t('install.install_button')}</button>
+      <div class="action-msg" id="roundcube-msg"></div>
+    </div>
+  `;
+}
+
+async function refreshRoundcubeTile() {
+  const status = await api('GET', '/roundcube');
+  document.getElementById('content').innerHTML = await roundcubeInstallTileHtml(status);
+  applyTranslations();
+  wireRoundcubeInstallTile();
+  await refreshDynamicNav();
+}
+
+function wireRoundcubeInstallTile() {
+  const installBtn = document.getElementById('roundcube-install-btn');
+  const uninstallBtn = document.getElementById('roundcube-uninstall-btn');
+  const msgEl = document.getElementById('roundcube-msg');
+
+  wireRoundcubeDomainSection(refreshRoundcubeTile);
+
+  if (installBtn) {
+    installBtn.onclick = async () => {
+      const dbEngine = document.querySelector('input[name="roundcube-db-engine"]:checked')?.value || 'mysql';
+      if (!window.confirm(t('install.roundcube.confirm_install'))) return;
+      installBtn.disabled = true;
+      msgEl.textContent = t('install.installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/roundcube/install', { dbEngine });
+        await refreshRoundcubeTile();
+        const successEl = document.getElementById('roundcube-msg');
+        if (successEl) {
+          successEl.textContent = t('install.install_success');
+          successEl.className = 'action-msg success';
+        }
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        installBtn.disabled = false;
+      }
+    };
+  }
+
+  if (uninstallBtn) {
+    uninstallBtn.onclick = async () => {
+      if (!window.confirm(t('roundcube.confirm_uninstall'))) return;
+      uninstallBtn.disabled = true;
+      msgEl.textContent = t('testdb.working');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/roundcube/uninstall');
+        await refreshRoundcubeTile();
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        uninstallBtn.disabled = false;
+      }
+    };
+  }
 }
 
 function mariadbInstallTileHtml(svc) {
@@ -1668,6 +1937,13 @@ async function renderInstallDetailTab(key, content) {
       content.innerHTML = adminerInstallTileHtml(status);
       applyTranslations();
       wireAdminerInstallTile();
+      return;
+    }
+    if (key === 'roundcube') {
+      const status = await api('GET', '/roundcube');
+      content.innerHTML = await roundcubeInstallTileHtml(status);
+      applyTranslations();
+      wireRoundcubeInstallTile();
       return;
     }
     const svc = await api('GET', `/services/${key}`);
@@ -4216,6 +4492,23 @@ async function renderServiceDetailTab(key, content) {
       applyTranslations();
       wireAdminerInstallTile();
       wireAdminerGateSection(status);
+      return;
+    }
+    if (key === 'roundcube') {
+      const status = await api('GET', '/roundcube');
+      const [infoHtml, gateHtml] = await Promise.all([
+        roundcubeInfoCardHtml(status, true, false),
+        renderRoundcubeGateSection(status)
+      ]);
+      content.innerHTML = `
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+          <div style="flex:1 1 0;min-width:320px;">${infoHtml}</div>
+          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
+        </div>
+      `;
+      applyTranslations();
+      wireRoundcubeInstallTile();
+      wireRoundcubeGateSection(status);
       return;
     }
     const svc = await api('GET', `/services/${key}`);

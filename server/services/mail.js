@@ -3,6 +3,7 @@ import { promisify } from 'util';
 import { readFileSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import tls from 'tls';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/mail-install.sh');
@@ -86,4 +87,45 @@ async function getMailQueueCount() {
   }
 }
 
-export { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount };
+// Sprawdza, czy dla podanej nazwy hosta jest FAKTYCZNIE serwowany zaufany
+// certyfikat (Let's Encrypt) - NIE grzebiemy w wewnetrznym magazynie
+// certyfikatow Caddy (dokladna lokalizacja/uprawnienia nigdy nie zostaly
+// zweryfikowane na zywym serwerze), tylko pytamy o dokladnie to samo, co
+// zobaczylby prawdziwy klient IMAP/SMTP: prawdziwe polaczenie TLS do
+// <host>:443 z weryfikacja lancucha zaufania przez systemowe CA. Self-
+// signed = trusted:false (authorizationError ustawiony), brak DNS/
+// polaczenia = trusted:false z osobnym powodem. Bez sudo - to zwykle
+// wychodzace polaczenie sieciowe, zaden specjalny dostep nie jest
+// potrzebny.
+function checkMailCertTrusted(hostname, { timeoutMs = 5000 } = {}) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = tls.connect(
+      { host: hostname, port: 443, servername: hostname, rejectUnauthorized: true, timeout: timeoutMs },
+      () => {
+        if (settled) return;
+        settled = true;
+        const cert = socket.getPeerCertificate();
+        socket.end();
+        resolve({
+          trusted: socket.authorized === true,
+          validTo: cert && cert.valid_to ? cert.valid_to : null,
+          reason: socket.authorized ? null : (socket.authorizationError || 'unknown')
+        });
+      }
+    );
+    socket.on('error', (e) => {
+      if (settled) return;
+      settled = true;
+      resolve({ trusted: false, validTo: null, reason: e.code || e.message });
+    });
+    socket.on('timeout', () => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ trusted: false, validTo: null, reason: 'timeout' });
+    });
+  });
+}
+
+export { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted };

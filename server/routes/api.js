@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -40,8 +40,11 @@ import {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
   getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin,
-  getAdminerStatus, installAdminer, uninstallAdminer
+  getAdminerStatus, installAdminer, uninstallAdminer,
+  getRoundcubeStatus, installRoundcube, uninstallRoundcube
 } from '../services/runtimeManagerClient.js';
+import { detectBaseDomain, applyCaddyConfig, removeCaddyConfig, getCaddyConfigStatus } from '../services/roundcubeSite.js';
+import { getRoundcubeConfig, setRoundcubeConfig, clearRoundcubeConfig } from '../services/roundcubeConfig.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -259,6 +262,28 @@ async function adminerServiceEntry() {
   }];
 }
 
+// Roundcube - odpowiednik phpmyadminServiceEntry()/adminerServiceEntry()
+// powyzej. W odroznieniu od tamtych dwoch, Roundcube ma tez wlasna
+// domene/blok Caddy zarzadzany przez roundcubeSite.js - "found" tutaj
+// odzwierciedla WYLACZNIE czy sama aplikacja (Runtime Manager) jest
+// zainstalowana, nie czy Caddy jest podpiety (to osobny stan, patrz
+// GET /roundcube).
+async function roundcubeServiceEntry() {
+  let status;
+  try {
+    status = await getRoundcubeStatus();
+  } catch {
+    return [];
+  }
+  return [{
+    key: 'roundcube',
+    found: status.installed,
+    installable: true,
+    unit: status.version ? `v${status.version}` : status.docroot,
+    activeState: status.installed ? 'active' : 'inactive'
+  }];
+}
+
 router.get('/system', async (req, res) => {
   const cpus = os.cpus();
   const [usagePercent, caddyVersion, pythonVersion, mariadbVersion, postgresqlVersion, mongodbVersion, redisVersion, resticVersion, caddySiteCount] = await Promise.all([
@@ -337,7 +362,7 @@ router.post('/system/reboot', (req, res) => {
 router.get('/services', async (req, res) => {
   try {
     const services = await listServices();
-    res.json({ services: [...services, ...(await phpServiceEntries()), ...(await phpmyadminServiceEntry()), ...(await adminerServiceEntry())] });
+    res.json({ services: [...services, ...(await phpServiceEntries()), ...(await phpmyadminServiceEntry()), ...(await adminerServiceEntry()), ...(await roundcubeServiceEntry())] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -975,6 +1000,134 @@ router.post('/adminer/uninstall', async (req, res) => {
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
+});
+
+// Roundcube - w odroznieniu od phpMyAdmin/Adminer, instalacja aplikacji
+// (Runtime Manager, PHP-FPM) i wpiecie w Caddy (domena, patrz
+// roundcubeSite.js) to DWIE NIEZALEZNE, osobno wywolywane akcje -
+// /roundcube/install tylko stawia aplikacje, /roundcube/configure tylko
+// zapisuje blok Caddy. Rozdzielone celowo: jesli krok Caddy sie nie
+// powiedzie (np. zla domena), instalacja aplikacji NIE przepada i nie
+// trzeba jej powtarzac (install.sh i tak by odmowil - DOCROOT juz by
+// istnial) - admin po prostu ponawia samo /roundcube/configure.
+router.get('/roundcube', async (req, res) => {
+  try {
+    const status = await getRoundcubeStatus();
+    const config = getRoundcubeConfig();
+    let caddy = { present: false, domain: null, gate: false };
+    if (status.installed) {
+      try {
+        caddy = await getCaddyConfigStatus();
+      } catch {
+        caddy = { present: false, domain: null, gate: false };
+      }
+    }
+    res.json({ ...status, domain: config.domain, gateEnabled: config.gateEnabled, caddyConfigured: caddy.present, caddyDomain: caddy.domain });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/roundcube/detect-domain', async (req, res) => {
+  try {
+    res.json(await detectBaseDomain());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/roundcube/install', async (req, res) => {
+  const dbEngine = req.body?.dbEngine === 'mysql' ? 'mysql' : req.body?.dbEngine === 'sqlite' ? 'sqlite' : null;
+  if (!dbEngine) {
+    res.status(400).json({ error: "Nieprawidlowy silnik bazy danych (oczekiwano 'mysql' albo 'sqlite')." });
+    return;
+  }
+  try {
+    res.json(await installRoundcube(dbEngine));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/roundcube/configure', async (req, res) => {
+  const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
+  const gate = !!req.body?.gate;
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    const result = await applyCaddyConfig(domain, gate);
+    setRoundcubeConfig({ domain, gateEnabled: gate });
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/roundcube/uninstall', async (req, res) => {
+  const warnings = [];
+  try {
+    await removeCaddyConfig();
+  } catch (e) {
+    warnings.push(e.message);
+  }
+  try {
+    const result = await uninstallRoundcube();
+    clearRoundcubeConfig();
+    res.json({ ...result, warnings: warnings.length ? warnings : undefined });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message, warnings: warnings.length ? warnings : undefined });
+  }
+});
+
+router.get('/roundcube-gate', (req, res) => {
+  const config = getRoundcubeConfig();
+  const turnstile = getTurnstilePublicConfig();
+  res.json({ enabled: config.gateEnabled, domain: config.domain, turnstileConfigured: turnstile.configured && turnstile.enabled });
+});
+
+// W odroznieniu od bramki phpMyAdmin/Adminer (recznie wklejany blok
+// Caddy), Roundcube ma juz auto-zarzadzany blok - wlaczenie/wylaczenie
+// bramki PO PROSTU ponownie generuje ten sam blok z innym wariantem
+// (forward_auth albo nie) i zapisuje go od razu, bez zadnego recznego
+// kroku admina.
+router.post('/roundcube-gate', async (req, res) => {
+  const enabled = Boolean(req.body?.enabled);
+  const config = getRoundcubeConfig();
+  if (!config.domain) {
+    res.status(400).json({ error: 'Roundcube nie ma jeszcze skonfigurowanej domeny.' });
+    return;
+  }
+  if (enabled) {
+    const turnstile = getTurnstilePublicConfig();
+    if (!turnstile.configured || !turnstile.enabled) {
+      res.status(400).json({ error: 'Najpierw skonfiguruj i wlacz Turnstile (Usługi -> Caddy) - bramka Roundcube uzywa tych samych kluczy.' });
+      return;
+    }
+  }
+  try {
+    const result = await applyCaddyConfig(config.domain, enabled);
+    setRoundcubeConfig({ gateEnabled: enabled });
+    res.json({ success: true, enabled, message: result.message });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Kafelek Statystyki (Poczta, drugi rzad) - czy Caddy juz faktycznie
+// serwuje zaufany certyfikat Let's Encrypt dla mail.<domena roundcube'a>.
+// Czysto informacyjne - podmiana certyfikatu self-signed Postfixa/
+// Dovecota na ten to OSOBNY, PRZYSZLY krok (patrz project memory).
+router.get('/mail/cert-status', async (req, res) => {
+  const config = getRoundcubeConfig();
+  if (!config.domain) {
+    res.json({ available: false, hostname: null, reason: 'no_domain' });
+    return;
+  }
+  const hostname = `mail.${config.domain}`;
+  const result = await checkMailCertTrusted(hostname);
+  res.json({ available: result.trusted, hostname, validTo: result.validTo, reason: result.trusted ? null : result.reason });
 });
 
 router.get('/packages', (req, res) => {

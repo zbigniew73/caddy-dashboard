@@ -170,4 +170,4 @@ function applyPerformanceConfig({ profile, expertBlock }) {
   });
 }
 
-export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile, getSiteCount };
+export { PROFILES, profileBlock, getStatus, applyPerformanceConfig, readCaddyfile, readSitesFiles, getSiteCount };

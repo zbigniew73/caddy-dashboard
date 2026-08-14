@@ -126,9 +126,22 @@ async function uninstallAdminer() {
   return request('POST', '/adminer/uninstall');
 }
 
+async function getRoundcubeStatus() {
+  return request('GET', '/roundcube');
+}
+
+async function installRoundcube(dbEngine) {
+  return request('POST', '/roundcube/install', { dbEngine });
+}
+
+async function uninstallRoundcube() {
+  return request('POST', '/roundcube/uninstall');
+}
+
 export {
   getAvailablePhp, getInstalledPhp, installPhp, getPhpSettings, applyPhpSettings,
   getPhpOpcache, applyPhpOpcache, getPhpModules, togglePhpModule,
   getPhpmyadminStatus, installPhpmyadmin, uninstallPhpmyadmin,
-  getAdminerStatus, installAdminer, uninstallAdminer
+  getAdminerStatus, installAdminer, uninstallAdminer,
+  getRoundcubeStatus, installRoundcube, uninstallRoundcube
 };

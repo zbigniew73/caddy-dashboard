@@ -4,6 +4,7 @@ import fs from 'fs';
 import phpRoutes from './routes/php.js';
 import phpmyadminRoutes from './routes/phpmyadmin.js';
 import adminerRoutes from './routes/adminer.js';
+import roundcubeRoutes from './routes/roundcube.js';
 
 // Ten proces to Runtime Manager - osobna usluga systemd
 // (caddy-dashboard-runtime.service) obok glownego panelu
@@ -41,6 +42,7 @@ app.use(express.json({ limit: '1mb' }));
 app.use('/php', phpRoutes);
 app.use('/phpmyadmin', phpmyadminRoutes);
 app.use('/adminer', adminerRoutes);
+app.use('/roundcube', roundcubeRoutes);
 
 app.use((err, req, res, next) => {
   console.error('[BLAD]', err);
