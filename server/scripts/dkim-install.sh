@@ -70,6 +70,29 @@ if ! command -v opendkim-genkey >/dev/null 2>&1; then
 fi
 command -v opendkim-genkey >/dev/null 2>&1 || err "brak polecenia opendkim-genkey nawet po probie doinstalowania opendkim-tools - sprawdz recznie (dnf install opendkim-tools)."
 
+# SAMONAPRAWCZE: InternalHosts/ExternalIgnoreList brakowaly w mail-install.sh
+# sprzed tej poprawki - bez nich opendkim TYLKO weryfikuje poczte, nigdy nie
+# PODPISUJE wychodzacej z localhost (milter widzi kazde polaczenie jako
+# "zewnetrzne"). Instalacje sprzed tej poprawki maja klucz wygenerowany, ale
+# realnie nic nie podpisuja - dopisz brakujaca konfiguracje tutaj tez, zeby
+# ponowne klikniecie "Zainstaluj DKIM"/"Sprawdz ponownie" naprawilo juz
+# dzialajacy serwer bez pelnej reinstalacji Poczty.
+OPENDKIM_CONF="/etc/opendkim.conf"
+TRUSTED_HOSTS="/etc/opendkim/TrustedHosts"
+OPENDKIM_CHANGED=""
+if [ ! -f "$TRUSTED_HOSTS" ]; then
+  printf '127.0.0.1\n::1\nlocalhost\n' > "$TRUSTED_HOSTS"
+  OPENDKIM_CHANGED="1"
+fi
+if ! grep -q '^InternalHosts[[:space:]]' "$OPENDKIM_CONF" 2>/dev/null; then
+  echo "InternalHosts refile:${TRUSTED_HOSTS}" >> "$OPENDKIM_CONF"
+  OPENDKIM_CHANGED="1"
+fi
+if ! grep -q '^ExternalIgnoreList[[:space:]]' "$OPENDKIM_CONF" 2>/dev/null; then
+  echo "ExternalIgnoreList refile:${TRUSTED_HOSTS}" >> "$OPENDKIM_CONF"
+  OPENDKIM_CHANGED="1"
+fi
+
 mkdir -p "$KEY_DIR"
 
 GENERATED=""
@@ -102,6 +125,8 @@ rm -f /tmp/dkim-install.err
 
 if [ -n "$GENERATED" ]; then
   echo "OK: nowy klucz DKIM (selektor ${SELECTOR}) dla ${DOMAIN} wygenerowany, opendkim przeladowany."
+elif [ -n "$OPENDKIM_CHANGED" ]; then
+  echo "OK: klucz DKIM (selektor ${SELECTOR}) dla ${DOMAIN} juz istnial - dopisano brakujaca konfiguracje InternalHosts/ExternalIgnoreList (poprzednio opendkim tylko weryfikowal, nie podpisywal), opendkim przeladowany."
 else
   echo "OK: klucz DKIM (selektor ${SELECTOR}) dla ${DOMAIN} juz istnial - dopisano ewentualnie brakujace wpisy, opendkim przeladowany."
 fi

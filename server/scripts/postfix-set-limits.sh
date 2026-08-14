@@ -10,6 +10,14 @@
 #
 # Uzycie: postfix-set-limits.sh <mailbox_size_limit> <message_size_limit>
 #   (oba w bajtach, liczby calkowite >= 0)
+#
+# SAMONAPRAWCZE (przy okazji, przy KAZDYM uruchomieniu): ustawia tez
+# home_mailbox=Maildir/, jesli jeszcze go nie ma - na instalacjach Poczty
+# sprzed tej poprawki Postfix dorecza lokalna poczte do starego formatu
+# mbox (/var/mail/<user>), a Dovecot/Roundcube czytaja z ~/Maildir - dwa
+# rozne miejsca, wiadomosc "dostarczona" wedlug Postfixa, ale niewidoczna
+# dla odbiorcy. Kliknij "Zapisz" na tym kafelku (nawet bez zmiany
+# wartosci), zeby naprawic juz dzialajaca instalacje.
 
 set -uo pipefail
 
@@ -23,15 +31,20 @@ MESSAGE_LIMIT="${2:-}"
 
 OLD_MAILBOX="$(postconf -h mailbox_size_limit 2>/dev/null || true)"
 OLD_MESSAGE="$(postconf -h message_size_limit 2>/dev/null || true)"
+OLD_HOME_MAILBOX="$(postconf -h home_mailbox 2>/dev/null || true)"
 
 rollback() {
   [ -n "$OLD_MAILBOX" ] && postconf -e "mailbox_size_limit=${OLD_MAILBOX}" >/dev/null 2>&1
   [ -n "$OLD_MESSAGE" ] && postconf -e "message_size_limit=${OLD_MESSAGE}" >/dev/null 2>&1
+  [ -n "$OLD_HOME_MAILBOX" ] && postconf -e "home_mailbox=${OLD_HOME_MAILBOX}" >/dev/null 2>&1
   systemctl reload postfix >/dev/null 2>&1 || true
 }
 
 postconf -e "mailbox_size_limit=${MAILBOX_LIMIT}"
 postconf -e "message_size_limit=${MESSAGE_LIMIT}"
+if [ "$OLD_HOME_MAILBOX" != "Maildir/" ]; then
+  postconf -e "home_mailbox=Maildir/"
+fi
 
 if ! postfix check 2>/tmp/postfix-set-limits.err; then
   MSG="$(cat /tmp/postfix-set-limits.err 2>/dev/null)"

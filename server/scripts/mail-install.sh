@@ -100,6 +100,13 @@ EOF
 dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (90-caddy-dashboard.conf) nie przeszla walidacji (dovecot -n)."
 
 # --- Postfix: postconf -e (oficjalny, idempotentny mechanizm - main.cf) ---
+# home_mailbox=Maildir/ - BEZ TEGO Postfix dorecza lokalna poczte do
+# starego formatu mbox (/var/mail/<user>), a Dovecot/Roundcube czytaja z
+# ~/Maildir (patrz mail_location wyzej) - dwa rozne miejsca, wiadomosc
+# "dostarczona" wedlug Postfixa, ale niewidoczna dla odbiorcy. Potwierdzone
+# na zywym serwerze 2026-08-14 (test cdadmin<->konto hostingowe, poczta
+# znikala).
+postconf -e "home_mailbox=Maildir/"
 postconf -e "smtpd_tls_cert_file=${CERT_FILE}"
 postconf -e "smtpd_tls_key_file=${KEY_FILE}"
 postconf -e 'smtpd_tls_security_level = may'
@@ -148,6 +155,19 @@ postfix check || err "Konfiguracja Postfixa nie przeszla walidacji (postfix chec
 OPENDKIM_CONF="/etc/opendkim.conf"
 mkdir -p /etc/opendkim
 touch /etc/opendkim/KeyTable /etc/opendkim/SigningTable
+
+# TrustedHosts/InternalHosts - BEZ TEGO opendkim TYLKO weryfikuje przychodzaca
+# poczte, nigdy nie PODPISUJE wychodzacej z localhost (Postfix->milter to
+# polaczenie 127.0.0.1). Domyslnie pakiet nie ma zadnego hosta w
+# "internal" - milter traktuje kazde polaczenie jako "zewnetrzne" i tylko
+# weryfikuje. Potwierdzone brakiem podpisu DKIM w realnie wyslanej
+# wiadomosci na zywym serwerze 2026-08-14.
+cat > /etc/opendkim/TrustedHosts <<'EOF'
+127.0.0.1
+::1
+localhost
+EOF
+
 ensure_directive() {
   local key="$1" value="$2"
   if grep -q "^${key}[[:space:]]" "$OPENDKIM_CONF" 2>/dev/null; then
@@ -161,6 +181,8 @@ ensure_directive "Socket" "inet:8891@localhost"
 ensure_directive "KeyTable" "/etc/opendkim/KeyTable"
 ensure_directive "SigningTable" "/etc/opendkim/SigningTable"
 ensure_directive "PidFile" "/run/opendkim/opendkim.pid"
+ensure_directive "InternalHosts" "refile:/etc/opendkim/TrustedHosts"
+ensure_directive "ExternalIgnoreList" "refile:/etc/opendkim/TrustedHosts"
 
 systemctl enable --now postfix dovecot opendkim \
   || err "Pakiety zainstalowane, ale nie udalo sie uruchomic/wlaczyc jednej z uslug (postfix/dovecot/opendkim)."
