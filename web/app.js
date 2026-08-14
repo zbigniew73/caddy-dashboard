@@ -516,7 +516,7 @@ async function renderMailStatsSection() {
         </dl>
         <dl style="flex:1 1 0;min-width:120px;">
           <dt>SMTP</dt><dd>25</dd>
-          <dt>SMTPS</dt><dd>465</dd>
+          <dt>SMTPS</dt><dd>465 | 587</dd>
           <dt>IMAP</dt><dd>143</dd>
           <dt>IMAPS</dt><dd>993</dd>
         </dl>
