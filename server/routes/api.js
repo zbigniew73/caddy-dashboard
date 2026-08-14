@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -566,6 +566,48 @@ router.post('/mail/install', async (req, res) => {
   try {
     const result = await installMail();
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Kafelek "Uzytkownicy z dostepem do poczty" (zakladka Poczta, drugi
+// rzad) - konta hostingowe to jedyne konta z dostepem do skrzynek (patrz
+// mail-install.sh: logowanie Dovecota = to samo haslo co SSH, przez PAM),
+// wiec lista tutaj to po prostu listAccounts() z dopisanym stanem
+// wlaczony/wylaczony z pliku blokad. Patrz services/mail.js.
+router.get('/mail/access', (req, res) => {
+  try {
+    const disabled = readDisabledUsernames();
+    const accounts = listAccounts().map((a) => ({
+      username: a.username,
+      fullName: a.fullName,
+      email: a.email,
+      mailEnabled: !disabled.has(a.username)
+    }));
+    res.json({ accounts });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/access/:username', async (req, res) => {
+  try {
+    const result = await setMailAccess(req.params.username, !!req.body?.enabled);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Prawy kafelek statystyczny (Poczta, drugi rzad) - liczba
+// wlaczonych/wylaczonych kont liczona po stronie frontu z /mail/access
+// (juz i tak pobierane dla lewego kafelka), tu tylko to, czego nie da sie
+// wyliczyc z tamtej listy: dlugosc kolejki Postfixa.
+router.get('/mail/stats', async (req, res) => {
+  try {
+    const queueCount = await getMailQueueCount();
+    res.json({ queueCount });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

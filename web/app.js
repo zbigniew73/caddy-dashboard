@@ -386,21 +386,136 @@ function wireMailServiceCards(content) {
   });
 }
 
+// Drugi rzad Poczty: lewy kafelek to lista kont hostingowych z
+// przelacznikiem dostepu do skrzynki (mechanizm - patrz
+// server/scripts/mail-toggle-access.sh: pam_listfile w DEDYKOWANYM pliku
+// PAM Dovecota, wiec SSH danego konta nigdy sie nie zmienia). Konta
+// hostingowe to JEDYNE konta z dostepem do poczty (logowanie Dovecota =
+// to samo haslo co SSH przez PAM - patrz mail-install.sh), wiec zrodlem
+// listy jest zwykle /accounts, tu przez dedykowany /mail/access, ktory
+// dokleja stan wlaczony/wylaczony.
+async function renderMailAccessSection() {
+  let accounts;
+  try {
+    accounts = (await api('GET', '/mail/access')).accounts;
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const rows = accounts.map((a) => `
+    <tr>
+      <td>${escapeHtml(a.username)}</td>
+      <td>${escapeHtml(a.fullName || a.email || '-')}</td>
+      <td><span class="status-badge ${a.mailEnabled ? 'active' : 'inactive'}">${a.mailEnabled ? t('mail.access_enabled') : t('mail.access_disabled')}</span></td>
+      <td>${a.mailEnabled
+        ? `<button type="button" class="danger" data-mail-access-user="${escapeHtml(a.username)}" data-mail-access-action="disable">${t('mail.disable_button')}</button>`
+        : `<button type="button" data-mail-access-user="${escapeHtml(a.username)}" data-mail-access-action="enable">${t('mail.enable_button')}</button>`}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.access_title')}</h3>
+      ${accounts.length ? `
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th>${t('mail.column_account')}</th>
+              <th>${t('mail.column_contact')}</th>
+              <th>${t('mail.column_access')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty-state">${t('mail.access_empty')}</div>`}
+      <div class="action-msg" id="mail-access-msg"></div>
+    </div>
+  `;
+}
+
+function wireMailAccessSection(content) {
+  content.querySelectorAll('[data-mail-access-user]').forEach((btn) => {
+    btn.onclick = async () => {
+      const username = btn.dataset.mailAccessUser;
+      const enable = btn.dataset.mailAccessAction === 'enable';
+      const confirmMsg = enable
+        ? t('mail.confirm_enable', { account: username })
+        : t('mail.confirm_disable', { account: username });
+      if (!window.confirm(confirmMsg)) return;
+
+      const msgEl = document.getElementById('mail-access-msg');
+      content.querySelectorAll('[data-mail-access-user]').forEach((b) => { b.disabled = true; });
+      msgEl.textContent = t('mail.access_working');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', `/mail/access/${username}`, { enabled: enable });
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        content.querySelectorAll('[data-mail-access-user]').forEach((b) => { b.disabled = false; });
+      }
+    };
+  });
+}
+
+// Prawy kafelek statystyczny (Poczta, drugi rzad) - czysto informacyjny,
+// bez akcji. DKIM/TLS to STALE wartosci (nie odczyt pliku) - odzwierciedlaja
+// swiadomy zakres "Fazy 1" instalatora (patrz komentarz na gorze
+// mail-install.sh: DKIM bez kluczy per-domena, certyfikat TLS tymczasowy
+// self-signed) - zmienic razem z instalatorem, gdy te ograniczenia znikna.
+async function renderMailStatsSection() {
+  let accounts = [];
+  try {
+    accounts = (await api('GET', '/mail/access')).accounts;
+  } catch {
+    accounts = [];
+  }
+  let queueCount = null;
+  try {
+    queueCount = (await api('GET', '/mail/stats')).queueCount;
+  } catch {
+    queueCount = null;
+  }
+  const enabledCount = accounts.filter((a) => a.mailEnabled).length;
+  const queueText = queueCount === null ? t('mail.stats_queue_unavailable') : t('mail.stats_queue_value', { count: queueCount });
+
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.stats_title')}</h3>
+      <dl>
+        <dt>${t('mail.stats_accounts_label')}</dt><dd>${enabledCount} / ${accounts.length}</dd>
+        <dt>${t('mail.stats_queue_label')}</dt><dd>${escapeHtml(queueText)}</dd>
+        <dt>${t('mail.stats_dkim_label')}</dt><dd>${t('mail.stats_dkim_value')}</dd>
+        <dt>${t('mail.stats_tls_label')}</dt><dd>${t('mail.stats_tls_value')}</dd>
+      </dl>
+    </div>
+  `;
+}
+
 async function renderMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [postfix, dovecot] = await Promise.all([
+    const [postfix, dovecot, accessHtml, statsHtml] = await Promise.all([
       api('GET', '/services/postfix'),
-      api('GET', '/services/dovecot')
+      api('GET', '/services/dovecot'),
+      renderMailAccessSection(),
+      renderMailStatsSection()
     ]);
     content.innerHTML = `
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}</div>
       </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
+        <div style="flex:1 1 0;min-width:320px;">${accessHtml}</div>
+        <div style="flex:1 1 0;min-width:320px;">${statsHtml}</div>
+      </div>
     `;
     applyTranslations();
     wireMailServiceCards(content);
+    wireMailAccessSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

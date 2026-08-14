@@ -67,8 +67,19 @@ service auth {
 }
 EOF
 
-cat > /etc/pam.d/dovecot <<'EOF'
+MAIL_DISABLED_LIST="/etc/dovecot/mail-disabled.list"
+touch "$MAIL_DISABLED_LIST"
+chmod 644 "$MAIL_DISABLED_LIST"
+
+# Wlasny plik PAM Dovecota (NIE ten sam co SSH) - pam_listfile odrzuca
+# logowanie kazdego uzytkownika wypisanego w mail-disabled.list (jeden
+# login na linie, pusta lista = wszyscy maja dostep). Wlaczanie/wylaczanie
+# per-konto: server/scripts/mail-toggle-access.sh (patrz tam po pelny
+# opis mechanizmu i UWAGA o samonaprawie tej reguly na starszych
+# instalacjach sprzed tej funkcji).
+cat > /etc/pam.d/dovecot <<EOF
 auth       include      system-auth
+account    required     pam_listfile.so item=user sense=deny file=${MAIL_DISABLED_LIST} onerr=succeed
 account    include      system-auth
 session    include      system-auth
 EOF
