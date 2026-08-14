@@ -416,6 +416,7 @@ async function renderMailAccessSection() {
   return `
     <div class="system-info-card">
       <h3>${t('mail.access_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--accent);font-size:13px;">${t('mail.access_limit_note')}</p>
       ${accounts.length ? `
         <table class="firewall-table">
           <thead>

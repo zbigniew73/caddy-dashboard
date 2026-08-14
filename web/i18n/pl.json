@@ -500,6 +500,7 @@
   "mail.dovecot_title": "Dovecot",
   "mail.not_installed_hint": "Nie zainstalowano. Zainstaluj z Instalatora (MAIL SERVER).",
   "mail.access_title": "Użytkownicy z dostępem do poczty",
+  "mail.access_limit_note": "Limit na jedną stronę www 2 konta e-mail i 10 aliasów/przekierowań",
   "mail.access_empty": "Brak kont hostingowych.",
   "mail.column_account": "Konto",
   "mail.column_contact": "Kontakt",
