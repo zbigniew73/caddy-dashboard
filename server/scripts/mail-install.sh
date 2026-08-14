@@ -64,10 +64,15 @@ dnf install -y postfix dovecot opendkim opendkim-tools sqlite || err "Instalacja
 # ISTNIEJE ("Unable to find a match"), bo libdriver_sqlite.so juz siedzi
 # w samym "dovecot". Probujemy doinstalowac OSOBNY pakiet, ale NIE
 # failujemy jesli go nie ma - prawdziwym testem jest obecnosc samej
-# biblioteki sterownika, sprawdzana ponizej.
+# biblioteki sterownika, sprawdzana ponizej. Sciezka potwierdzona `rpm -ql
+# dovecot` na zywym serwerze 2026-08-14 (AlmaLinux 10.2) - POJEDYNCZA,
+# konkretna sciezka (NIE `find` po kilku katalogach - `find` z
+# nieistniejacym drugim argumentem potrafi nie zwrocic nic uzytecznego,
+# tak jak sie tu okazalo).
 dnf install -y dovecot-sqlite >/dev/null 2>&1 || true
-find /usr/lib64/dovecot /usr/lib/dovecot -name 'libdriver_sqlite.so' 2>/dev/null | grep -q . \
-  || err "Brak sterownika sqlite dla Dovecota (libdriver_sqlite.so) - sprawdz recznie: dnf provides '*/libdriver_sqlite.so'."
+DOVECOT_SQLITE_DRIVER="/usr/lib64/dovecot/libdriver_sqlite.so"
+[ -e "$DOVECOT_SQLITE_DRIVER" ] \
+  || err "Brak sterownika sqlite dla Dovecota (${DOVECOT_SQLITE_DRIVER}) - sprawdz recznie: rpm -ql dovecot | grep sqlite."
 
 # --- TLS: self-signed cert (tymczasowy, patrz komentarz na gorze) ---
 CERT_FILE="/etc/pki/tls/certs/mail-selfsigned.crt"
