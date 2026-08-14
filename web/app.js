@@ -500,6 +500,17 @@ async function renderMailStatsSection() {
   const tlsValueText = tlsActive === 'letsencrypt'
     ? (tlsDaysRemaining === null ? t('mail.stats_tls_value_le') : t('mail.stats_tls_value_le_days', { days: tlsDaysRemaining }))
     : t('mail.stats_tls_value');
+  // Kolor odliczania do odnowienia - TYLKO dla Let's Encrypt z dniami:
+  // >30 zielony (spokojnie), 10-30 zolty (czas kliknac Wlacz ponownie po
+  // odnowieniu przez Caddy), <10 czerwony (pilne). Self-signed/brak
+  // danych zostaje bez koloru (nie jest to odliczanie do niczego).
+  let tlsValueColor = '';
+  if (tlsActive === 'letsencrypt' && tlsDaysRemaining !== null) {
+    if (tlsDaysRemaining > 30) tlsValueColor = 'var(--accent)';
+    else if (tlsDaysRemaining >= 10) tlsValueColor = 'var(--warning)';
+    else tlsValueColor = 'var(--danger)';
+  }
+  const tlsValueHtml = tlsValueColor ? `<span style="color:${tlsValueColor};">${tlsValueText}</span>` : tlsValueText;
 
   let certRow = '';
   try {
@@ -530,7 +541,7 @@ async function renderMailStatsSection() {
         <dl style="flex:1 1 0;min-width:160px;">
           <dt>${t('mail.stats_accounts_label')}</dt><dd>${enabledCount} / ${accounts.length}</dd>
           <dt>${t('mail.stats_queue_label')}</dt><dd>${escapeHtml(queueText)}</dd>
-          <dt>${t('mail.stats_tls_label')}</dt><dd>${tlsValueText}</dd>
+          <dt>${t('mail.stats_tls_label')}</dt><dd>${tlsValueHtml}</dd>
         </dl>
         <dl style="flex:1 1 0;min-width:120px;">
           <dt>SMTP</dt><dd>25</dd>
