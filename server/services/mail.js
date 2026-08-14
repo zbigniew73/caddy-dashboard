@@ -88,15 +88,17 @@ async function getMailQueueCount() {
 }
 
 // Sprawdza, czy dla podanej nazwy hosta jest FAKTYCZNIE serwowany zaufany
-// certyfikat (Let's Encrypt) - NIE grzebiemy w wewnetrznym magazynie
-// certyfikatow Caddy (dokladna lokalizacja/uprawnienia nigdy nie zostaly
-// zweryfikowane na zywym serwerze), tylko pytamy o dokladnie to samo, co
-// zobaczylby prawdziwy klient IMAP/SMTP: prawdziwe polaczenie TLS do
-// <host>:443 z weryfikacja lancucha zaufania przez systemowe CA. Self-
-// signed = trusted:false (authorizationError ustawiony), brak DNS/
-// polaczenia = trusted:false z osobnym powodem. Bez sudo - to zwykle
-// wychodzace polaczenie sieciowe, zaden specjalny dostep nie jest
-// potrzebny.
+// certyfikat (Let's Encrypt) - dla WYKRYWANIA (ten kafelek) celowo NIE
+// grzebiemy w plikach, tylko pytamy o dokladnie to samo, co zobaczylby
+// prawdziwy klient IMAP/SMTP: prawdziwe polaczenie TLS do <host>:443 z
+// weryfikacja lancucha zaufania przez systemowe CA. Self-signed =
+// trusted:false (authorizationError ustawiony), brak DNS/polaczenia =
+// trusted:false z osobnym powodem. Bez sudo - to zwykle wychodzace
+// polaczenie sieciowe, zaden specjalny dostep nie jest potrzebny.
+// (Dla samej PODMIANY certyfikatu w Postfiksie/Dovecocie - patrz
+// mail-tls-swap.sh - lokalizacja magazynu certow Caddy JEST juz
+// zweryfikowana na zywym serwerze 2026-08-14, `sudo find /var/lib/caddy
+// -iname "mail.<domena>*"`.)
 function checkMailCertTrusted(hostname, { timeoutMs = 5000 } = {}) {
   return new Promise((resolve) => {
     let settled = false;
@@ -128,4 +130,48 @@ function checkMailCertTrusted(hostname, { timeoutMs = 5000 } = {}) {
   });
 }
 
-export { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted };
+const TLS_SWAP_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/mail-tls-swap.sh');
+const LE_CERT_PATH = '/etc/pki/tls/certs/mail-letsencrypt.crt';
+
+// Odczyt bezposredni (bez sudo) - `postconf -h` czyta /etc/postfix/main.cf,
+// ktory jest domyslnie world-readable, i sam binarny `postconf` nie
+// wymaga roota do samego ODCZYTU wartosci (w odroznieniu od `postconf -e`,
+// ktore zapisuje plik). Porownanie sciezki z LE_CERT_PATH (a nie np.
+// istnienia pliku) - to jedyny wiarygodny sposob, zeby wiedziec, KTORY
+// certyfikat jest aktywny TERAZ, niezaleznie od tego czy plik
+// self-signed/letsencrypt akurat istnieje na dysku.
+async function getMailTlsStatus() {
+  try {
+    const { stdout } = await execFileAsync('postconf', ['-h', 'smtpd_tls_cert_file']);
+    return { active: stdout.trim() === LE_CERT_PATH ? 'letsencrypt' : 'selfsigned' };
+  } catch {
+    return { active: null };
+  }
+}
+
+async function setMailTlsSwap(domain, enabled) {
+  if (!/^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(domain)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', TLS_SWAP_SCRIPT_PATH, enabled ? 'enable' : 'disable', domain],
+      { timeout: 30000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla podmiany certyfikatu TLS poczty - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+export {
+  installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
+  getMailTlsStatus, setMailTlsSwap
+};

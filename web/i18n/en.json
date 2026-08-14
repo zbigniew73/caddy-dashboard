@@ -554,9 +554,13 @@
   "mail.stats_queue_label": "Mail queue",
   "mail.stats_queue_value": "{count} messages",
   "mail.stats_queue_unavailable": "unavailable",
-  "mail.stats_dkim_label": "DKIM signing",
-  "mail.stats_dkim_value": "no keys configured yet (next step)",
   "mail.stats_tls_label": "TLS certificate",
   "mail.stats_tls_value": "temporary (self-signed)",
-  "mail.stats_cert_available": "Detected a trusted Let's Encrypt certificate for {host} - it can be used for Postfix/Dovecot (separate step)."
+  "mail.stats_tls_value_le": "Let's Encrypt",
+  "mail.tls_enable_button": "Enable",
+  "mail.tls_disable_button": "Disable",
+  "mail.tls_working": "Saving...",
+  "mail.tls_confirm_enable": "Switch Postfix/Dovecot to the Let's Encrypt certificate? This copies the file from Caddy's certificate store, updates both services' config, and reloads them.",
+  "mail.tls_confirm_disable": "Restore the temporary self-signed certificate on Postfix/Dovecot?",
+  "mail.stats_cert_available": "Detected a trusted Let's Encrypt certificate for {host} - it can be used for Postfix/Dovecot."
 }

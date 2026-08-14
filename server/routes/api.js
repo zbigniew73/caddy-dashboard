@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1117,8 +1117,6 @@ router.post('/roundcube-gate', async (req, res) => {
 
 // Kafelek Statystyki (Poczta, drugi rzad) - czy Caddy juz faktycznie
 // serwuje zaufany certyfikat Let's Encrypt dla mail.<domena roundcube'a>.
-// Czysto informacyjne - podmiana certyfikatu self-signed Postfixa/
-// Dovecota na ten to OSOBNY, PRZYSZLY krok (patrz project memory).
 router.get('/mail/cert-status', async (req, res) => {
   const config = getRoundcubeConfig();
   if (!config.domain) {
@@ -1128,6 +1126,31 @@ router.get('/mail/cert-status', async (req, res) => {
   const hostname = `mail.${config.domain}`;
   const result = await checkMailCertTrusted(hostname);
   res.json({ available: result.trusted, hostname, validTo: result.validTo, reason: result.trusted ? null : result.reason });
+});
+
+// Ktory certyfikat TLS Postfix/Dovecot uzywaja TERAZ - self-signed
+// (domyslny od mail-install.sh) albo Let's Encrypt (po kliknieciu Wlacz
+// ponizej). Patrz server/scripts/mail-tls-swap.sh.
+router.get('/mail/tls-status', async (req, res) => {
+  try {
+    res.json(await getMailTlsStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/tls-swap', async (req, res) => {
+  const config = getRoundcubeConfig();
+  if (!config.domain) {
+    res.status(400).json({ error: 'Brak skonfigurowanej domeny (Roundcube -> Domena) - nie ma dla jakiej domeny szukac certyfikatu.' });
+    return;
+  }
+  try {
+    const result = await setMailTlsSwap(`mail.${config.domain}`, !!req.body?.enabled);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
 });
 
 router.get('/packages', (req, res) => {

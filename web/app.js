@@ -461,11 +461,15 @@ function wireMailAccessSection(content) {
   });
 }
 
-// Prawy kafelek statystyczny (Poczta, drugi rzad) - czysto informacyjny,
-// bez akcji. DKIM/TLS to STALE wartosci (nie odczyt pliku) - odzwierciedlaja
-// swiadomy zakres "Fazy 1" instalatora (patrz komentarz na gorze
-// mail-install.sh: DKIM bez kluczy per-domena, certyfikat TLS tymczasowy
-// self-signed) - zmienic razem z instalatorem, gdy te ograniczenia znikna.
+// Prawy kafelek statystyczny (Poczta, drugi rzad). "Certyfikat TLS" jest
+// TERAZ dynamiczny (GET /mail/tls-status - czyta `postconf -h
+// smtpd_tls_cert_file`, bez sudo), nie stala wartosc jak wczesniej -
+// odzwierciedla realny stan Postfixa/Dovecota po ewentualnej podmianie
+// (patrz mail-tls-swap.sh). Wiersz z przyciskami Wlacz/Wylacz pokazuje
+// sie TYLKO gdy Caddy faktycznie juz wydal zaufany certyfikat Let's
+// Encrypt dla mail.<domena Roundcube'a> (GET /mail/cert-status,
+// checkMailCertTrusted - prawdziwe polaczenie TLS, nie zgadywanie po
+// plikach) - bez tego przelacznik i tak nie mialby czego wlaczyc.
 async function renderMailStatsSection() {
   let accounts = [];
   try {
@@ -482,21 +486,29 @@ async function renderMailStatsSection() {
   const enabledCount = accounts.filter((a) => a.mailEnabled).length;
   const queueText = queueCount === null ? t('mail.stats_queue_unavailable') : t('mail.stats_queue_value', { count: queueCount });
 
-  // Nowy rzad: czy Caddy juz faktycznie serwuje zaufany cert Let's
-  // Encrypt dla mail.<domena Roundcube'a> (patrz GET /mail/cert-status,
-  // checkMailCertTrusted w server/services/mail.js - prawdziwe polaczenie
-  // TLS, nie zgadywanie po plikach). Czysto informacyjne - podmiana
-  // certyfikatu self-signed Postfixa/Dovecota na ten to OSOBNY, PRZYSZLY
-  // krok, nie tutaj. Pokazujemy TYLKO gdy cert faktycznie jest gotowy do
-  // wykorzystania - pusty stan (brak domeny/cert jeszcze nie wydany) nie
-  // zaśmieca karty.
+  let tlsActive = null;
+  try {
+    tlsActive = (await api('GET', '/mail/tls-status')).active;
+  } catch {
+    tlsActive = null;
+  }
+  const tlsValueText = tlsActive === 'letsencrypt' ? t('mail.stats_tls_value_le') : t('mail.stats_tls_value');
+
   let certRow = '';
   try {
     const certStatus = await api('GET', '/mail/cert-status');
     if (certStatus.available) {
+      const isActive = tlsActive === 'letsencrypt';
       certRow = `
         <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
-          <p style="margin:0;color:var(--accent);font-size:13px;">${t('mail.stats_cert_available', { host: certStatus.hostname })}</p>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+            <p style="margin:0;color:var(--accent);font-size:13px;">${t('mail.stats_cert_available', { host: certStatus.hostname })}</p>
+            <div style="display:flex;gap:10px;flex-shrink:0;">
+              <button type="button" id="mail-tls-enable-btn" ${isActive ? 'disabled' : ''}>${t('mail.tls_enable_button')}</button>
+              <button type="button" class="danger" id="mail-tls-disable-btn" ${isActive ? '' : 'disabled'}>${t('mail.tls_disable_button')}</button>
+            </div>
+          </div>
+          <div class="action-msg" id="mail-tls-msg"></div>
         </div>
       `;
     }
@@ -511,8 +523,7 @@ async function renderMailStatsSection() {
         <dl style="flex:1 1 0;min-width:160px;">
           <dt>${t('mail.stats_accounts_label')}</dt><dd>${enabledCount} / ${accounts.length}</dd>
           <dt>${t('mail.stats_queue_label')}</dt><dd>${escapeHtml(queueText)}</dd>
-          <dt>${t('mail.stats_dkim_label')}</dt><dd>${t('mail.stats_dkim_value')}</dd>
-          <dt>${t('mail.stats_tls_label')}</dt><dd>${t('mail.stats_tls_value')}</dd>
+          <dt>${t('mail.stats_tls_label')}</dt><dd>${tlsValueText}</dd>
         </dl>
         <dl style="flex:1 1 0;min-width:120px;">
           <dt>SMTP</dt><dd>25</dd>
@@ -524,6 +535,33 @@ async function renderMailStatsSection() {
       ${certRow}
     </div>
   `;
+}
+
+function wireMailTlsSwapSection(content) {
+  const enableBtn = document.getElementById('mail-tls-enable-btn');
+  const disableBtn = document.getElementById('mail-tls-disable-btn');
+  if (!enableBtn && !disableBtn) return;
+  const msgEl = document.getElementById('mail-tls-msg');
+
+  const run = async (enabled, confirmMsg) => {
+    if (!window.confirm(confirmMsg)) return;
+    if (enableBtn) enableBtn.disabled = true;
+    if (disableBtn) disableBtn.disabled = true;
+    msgEl.textContent = t('mail.tls_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/tls-swap', { enabled });
+      await renderMailTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      if (enableBtn) enableBtn.disabled = false;
+      if (disableBtn) disableBtn.disabled = false;
+    }
+  };
+
+  if (enableBtn) enableBtn.onclick = () => run(true, t('mail.tls_confirm_enable'));
+  if (disableBtn) disableBtn.onclick = () => run(false, t('mail.tls_confirm_disable'));
 }
 
 async function renderMailTab(content) {
@@ -548,6 +586,7 @@ async function renderMailTab(content) {
     applyTranslations();
     wireMailServiceCards(content);
     wireMailAccessSection(content);
+    wireMailTlsSwapSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }
@@ -1264,11 +1303,11 @@ function wireRoundcubeGateSection(rcStatus) {
 
 async function roundcubeInstallTileHtml(status) {
   const name = t('services.roundcube.name');
-  if (status.installed) return roundcubeInfoCardHtml(status, true);
+  if (status.installed) return roundcubeInfoCardHtml(status, true, false);
 
   if (!status.php84Installed) {
     return `
-      <div class="system-info-card" style="max-width:560px;">
+      <div class="system-info-card">
         <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
         <div class="empty-state">${t('roundcube.requires_php84')}</div>
       </div>
@@ -1276,7 +1315,7 @@ async function roundcubeInstallTileHtml(status) {
   }
 
   return `
-    <div class="system-info-card" style="max-width:560px;">
+    <div class="system-info-card">
       <div style="font-weight:600;font-size:15px;margin-bottom:8px;">${escapeHtml(name)}</div>
       <p style="color:var(--muted);font-size:13px;line-height:1.5;margin:0 0 16px;">${t('install.roundcube.description')}</p>
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('install.roundcube.db_engine_label')}</label>
@@ -1292,11 +1331,31 @@ async function roundcubeInstallTileHtml(status) {
   `;
 }
 
+// Zakladka Instalator -> Roundcube: dwa kafelki 50/50 pelnej szerokosci
+// (lewy - instalacja/info, prawy - bramka Turnstile), ten sam wzorzec co
+// dwukolumnowy widok w zakladce GLOWNE -> ROUNDCUBE po instalacji (patrz
+// renderServiceDetailTab). Bramka ma sens pokazywac juz na etapie
+// Instalatora (nie tylko po instalacji) - user chce ja widziec od razu
+// obok, tak jak phpMyAdmin ma swoja.
+async function renderRoundcubeInstallPageHtml(status) {
+  const [leftHtml, rightHtml] = await Promise.all([
+    roundcubeInstallTileHtml(status),
+    renderRoundcubeGateSection(status)
+  ]);
+  return `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+      <div style="flex:1 1 0;min-width:320px;">${leftHtml}</div>
+      <div style="flex:1 1 0;min-width:320px;">${rightHtml}</div>
+    </div>
+  `;
+}
+
 async function refreshRoundcubeTile() {
   const status = await api('GET', '/roundcube');
-  document.getElementById('content').innerHTML = await roundcubeInstallTileHtml(status);
+  document.getElementById('content').innerHTML = await renderRoundcubeInstallPageHtml(status);
   applyTranslations();
   wireRoundcubeInstallTile();
+  wireRoundcubeGateSection(status);
   await refreshDynamicNav();
 }
 
@@ -1941,9 +2000,10 @@ async function renderInstallDetailTab(key, content) {
     }
     if (key === 'roundcube') {
       const status = await api('GET', '/roundcube');
-      content.innerHTML = await roundcubeInstallTileHtml(status);
+      content.innerHTML = await renderRoundcubeInstallPageHtml(status);
       applyTranslations();
       wireRoundcubeInstallTile();
+      wireRoundcubeGateSection(status);
       return;
     }
     const svc = await api('GET', `/services/${key}`);
@@ -4496,16 +4556,7 @@ async function renderServiceDetailTab(key, content) {
     }
     if (key === 'roundcube') {
       const status = await api('GET', '/roundcube');
-      const [infoHtml, gateHtml] = await Promise.all([
-        roundcubeInfoCardHtml(status, true, false),
-        renderRoundcubeGateSection(status)
-      ]);
-      content.innerHTML = `
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="flex:1 1 0;min-width:320px;">${infoHtml}</div>
-          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
-        </div>
-      `;
+      content.innerHTML = await renderRoundcubeInstallPageHtml(status);
       applyTranslations();
       wireRoundcubeInstallTile();
       wireRoundcubeGateSection(status);
