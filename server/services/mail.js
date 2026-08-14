@@ -504,11 +504,80 @@ async function setAntispamStatus(enabled) {
   }
 }
 
+const SPAMASSASSIN_INSTALL_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/spamassassin-install.sh');
+const SPAMASSASSIN_THRESHOLD_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/spamassassin-set-threshold.sh');
+const SPAMASS_MILTER_SYSCONFIG_PATH = '/etc/sysconfig/spamass-milter';
+
+// "installed" = OBIE uslugi faktycznie dzialaja (spamd + spamass-milter),
+// nie tylko obecnosc pakietu. Prog odrzucenia czytany bezposrednio z
+// /etc/sysconfig/spamass-milter (bez sudo, plik bez sekretow - ten sam
+// wzorzec co postfwd.cf).
+async function getSpamassassinStatus() {
+  let installed = false;
+  try {
+    const [spamd, milter] = await Promise.all([
+      execFileAsync('systemctl', ['is-active', 'spamassassin']),
+      execFileAsync('systemctl', ['is-active', 'spamass-milter'])
+    ]);
+    installed = spamd.stdout.trim() === 'active' && milter.stdout.trim() === 'active';
+  } catch {
+    installed = false;
+  }
+  let threshold = null;
+  try {
+    const content = readFileSync(SPAMASS_MILTER_SYSCONFIG_PATH, 'utf-8');
+    const match = content.match(/-r\s+(\d+)/);
+    if (match) threshold = parseInt(match[1], 10);
+  } catch {
+    threshold = null;
+  }
+  return { installed, threshold };
+}
+
+async function installSpamassassin() {
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', SPAMASSASSIN_INSTALL_SCRIPT_PATH], { timeout: 120000 });
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla instalacji SpamAssassin - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+async function setSpamassassinThreshold(threshold) {
+  if (!Number.isInteger(threshold) || threshold < 1) {
+    throw Object.assign(new Error('Nieprawidlowy prog odrzucenia (liczba calkowita >= 1).'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', SPAMASSASSIN_THRESHOLD_SCRIPT_PATH, String(threshold)],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla zmiany progu SpamAssassin - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
   getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
   getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
   getDkimStatus, installDkim, getSpfDmarcInfo,
   getPostfwdStatus, installPostfwd, setPostfwdLimits,
-  getAntispamStatus, setAntispamStatus
+  getAntispamStatus, setAntispamStatus,
+  getSpamassassinStatus, installSpamassassin, setSpamassassinThreshold
 };

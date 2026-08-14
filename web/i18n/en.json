@@ -657,5 +657,12 @@
   "mail.antispam_enable_button": "Enable",
   "mail.antispam_disable_button": "Disable",
   "mail.antispam_confirm_enable": "Enable Postfix anti-spam protection (PTR/HELO/Spamhaus)?",
-  "mail.antispam_confirm_disable": "Disable Postfix anti-spam protection? The server will go back to accepting mail without these checks."
+  "mail.antispam_confirm_disable": "Disable Postfix anti-spam protection? The server will go back to accepting mail without these checks.",
+  "mail.spamassassin_title": "SpamAssassin (content filtering)",
+  "mail.spamassassin_description": "Analyzes the content of every message (spamd + spamass-milter). Messages scoring above the threshold below are rejected at SMTP time, lower-scoring ones just get X-Spam-* headers (SpamAssassin's own tagging threshold stays at its default 5.0).",
+  "mail.spamassassin_install_button": "Install SpamAssassin",
+  "mail.spamassassin_confirm_install": "Install SpamAssassin (spamd + spamass-milter) and wire it into Postfix? Default reject threshold: 12.",
+  "mail.spamassassin_threshold_label": "Reject threshold (SMTP reject)",
+  "mail.spamassassin_invalid": "Invalid value - enter a whole number of 1 or more.",
+  "mail.spamassassin_confirm_save": "Save the new reject threshold? The spamass-milter service will be restarted."
 }

@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo, getPostfwdStatus, installPostfwd, setPostfwdLimits, getAntispamStatus, setAntispamStatus } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo, getPostfwdStatus, installPostfwd, setPostfwdLimits, getAntispamStatus, setAntispamStatus, getSpamassassinStatus, installSpamassassin, setSpamassassinThreshold } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1346,6 +1346,33 @@ router.get('/mail/antispam-status', async (req, res) => {
 router.post('/mail/antispam', async (req, res) => {
   try {
     res.json(await setAntispamStatus(!!req.body?.enabled));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// SpamAssassin + spamass-milter - filtrowanie tresci (punkt 9 z serii
+// LinuxBabe) - patrz server/scripts/spamassassin-install.sh.
+router.get('/mail/spamassassin-status', async (req, res) => {
+  try {
+    res.json(await getSpamassassinStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/spamassassin-install', async (req, res) => {
+  try {
+    res.json(await installSpamassassin());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/spamassassin-threshold', async (req, res) => {
+  try {
+    const threshold = parseInt(req.body?.threshold, 10);
+    res.json(await setSpamassassinThreshold(threshold));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

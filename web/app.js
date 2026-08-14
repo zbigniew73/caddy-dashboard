@@ -882,6 +882,89 @@ function wireAntispamSection(content) {
   disableBtn.onclick = () => run(false, t('mail.antispam_confirm_disable'));
 }
 
+// Kafelek "SpamAssassin" - filtrowanie tresci (spamd + spamass-milter,
+// punkt 9 z serii LinuxBabe). Ten sam wzorzec co postfwd: bez instalacji
+// - przycisk instalacyjny, po instalacji - jedna edytowalna liczba (prog
+// twardego odrzucenia).
+async function renderSpamassassinSection() {
+  let status;
+  try {
+    status = await api('GET', '/mail/spamassassin-status');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  if (!status.installed || status.threshold === null) {
+    return `
+      <div class="system-info-card">
+        <h3>${t('mail.spamassassin_title')}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.spamassassin_description')}</p>
+        <button type="button" id="spamassassin-install-btn">${t('mail.spamassassin_install_button')}</button>
+        <div class="action-msg" id="spamassassin-msg"></div>
+      </div>
+    `;
+  }
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.spamassassin_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.spamassassin_description')}</p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.spamassassin_threshold_label')}</label>
+      <input type="number" id="spamassassin-threshold-input" min="1" value="${status.threshold}" style="width:120px;margin-bottom:16px;">
+      <div>
+        <button type="button" id="spamassassin-threshold-save-btn">${t('mail.postfix_limits_save_button')}</button>
+      </div>
+      <div class="action-msg" id="spamassassin-msg"></div>
+    </div>
+  `;
+}
+
+function wireSpamassassinSection(content) {
+  const installBtn = document.getElementById('spamassassin-install-btn');
+  if (installBtn) {
+    const msgEl = document.getElementById('spamassassin-msg');
+    installBtn.onclick = async () => {
+      if (!window.confirm(t('mail.spamassassin_confirm_install'))) return;
+      installBtn.disabled = true;
+      msgEl.textContent = t('install.installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/mail/spamassassin-install');
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        installBtn.disabled = false;
+      }
+    };
+    return;
+  }
+
+  const saveBtn = document.getElementById('spamassassin-threshold-save-btn');
+  if (!saveBtn) return;
+  const msgEl = document.getElementById('spamassassin-msg');
+  saveBtn.onclick = async () => {
+    const threshold = parseInt(document.getElementById('spamassassin-threshold-input').value, 10);
+    if (!Number.isInteger(threshold) || threshold < 1) {
+      msgEl.textContent = t('mail.spamassassin_invalid');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mail.spamassassin_confirm_save'))) return;
+    saveBtn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/spamassassin-threshold', { threshold });
+      msgEl.textContent = t('mail.postfix_limits_success');
+      msgEl.className = 'action-msg success';
+      saveBtn.disabled = false;
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      saveBtn.disabled = false;
+    }
+  };
+}
+
 // Dwa kafelki pod "Dovecot - ustawienia" - dziela JEDEN wspolny odczyt
 // statusu (GET /mail/mydestination), zeby zawsze pokazywaly spojny
 // snapshot, nie dwa niezalezne zapytania, ktore moglyby sie rozjechac w
@@ -1395,6 +1478,7 @@ async function renderMailTab(content) {
     const virtualHtml = await renderMailVirtualSection();
     const postfwdHtml = await renderPostfwdSection();
     const antispamHtml = await renderAntispamSection();
+    const spamassassinHtml = await renderSpamassassinSection();
     content.innerHTML = `
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
@@ -1415,6 +1499,7 @@ async function renderMailTab(content) {
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${antispamHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${postfwdHtml}</div>
+        <div style="flex:1 1 0;min-width:320px;">${spamassassinHtml}</div>
       </div>
       <div style="margin-top:16px;">${virtualHtml}</div>
     `;
@@ -1428,6 +1513,7 @@ async function renderMailTab(content) {
     wireMailTlsSwapSection(content);
     wireAntispamSection(content);
     wirePostfwdSection(content);
+    wireSpamassassinSection(content);
     wireMailVirtualSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

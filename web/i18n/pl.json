@@ -657,5 +657,12 @@
   "mail.antispam_enable_button": "Włącz",
   "mail.antispam_disable_button": "Wyłącz",
   "mail.antispam_confirm_enable": "Włączyć ochronę antyspamową Postfixa (PTR/HELO/Spamhaus)?",
-  "mail.antispam_confirm_disable": "Wyłączyć ochronę antyspamową Postfixa? Serwer wróci do przyjmowania poczty bez tych sprawdzeń."
+  "mail.antispam_confirm_disable": "Wyłączyć ochronę antyspamową Postfixa? Serwer wróci do przyjmowania poczty bez tych sprawdzeń.",
+  "mail.spamassassin_title": "SpamAssassin (filtrowanie treści)",
+  "mail.spamassassin_description": "Analizuje treść każdej wiadomości (spamd + spamass-milter). Wiadomości powyżej progu poniżej są odrzucane na poziomie SMTP, niżej punktowane dostają tylko nagłówki X-Spam-* (standardowy próg tagowania SpamAssassin to 5.0, bez zmian).",
+  "mail.spamassassin_install_button": "Zainstaluj SpamAssassin",
+  "mail.spamassassin_confirm_install": "Zainstalować SpamAssassin (spamd + spamass-milter) i podpiąć go do Postfixa? Domyślny próg odrzucenia: 12.",
+  "mail.spamassassin_threshold_label": "Próg odrzucenia (SMTP reject)",
+  "mail.spamassassin_invalid": "Nieprawidłowa wartość - podaj liczbę całkowitą 1 lub większą.",
+  "mail.spamassassin_confirm_save": "Zapisać nowy próg odrzucenia? Usługa spamass-milter zostanie zrestartowana."
 }
