@@ -116,8 +116,16 @@ postconf -e 'smtpd_sasl_auth_enable = yes'
 postconf -e 'smtpd_relay_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination'
 postconf -e 'milter_default_action = accept'
 postconf -e 'milter_protocol = 6'
-postconf -e 'smtpd_milters = inet:localhost:8891'
-postconf -e 'non_smtpd_milters = inet:localhost:8891'
+# 127.0.0.1 (LITERAL IP), NIE "localhost" - stanze submission/smtps ponizej
+# maja chroot=y (piate pole "y"), a proces w chroocie (/var/spool/postfix)
+# nie ma /etc/hosts/resolvera, wiec NIE POTRAFI rozwiazac nazwy "localhost".
+# Efekt: "warning: connect to Milter service inet:localhost:8891: Cannot
+# assign requested address" - milter sie nie laczy, a milter_default_action
+# = accept po cichu przepuszcza wiadomosc BEZ PODPISU, bez glosnego bledu
+# w logach. Literal IP nie wymaga zadnego resolvowania nazw, wiec dziala
+# tez w chroocie. Potwierdzone na zywym serwerze 2026-08-14.
+postconf -e 'smtpd_milters = inet:127.0.0.1:8891'
+postconf -e 'non_smtpd_milters = inet:127.0.0.1:8891'
 
 # master.cf: dopisujemy WLASNE, kompletne stanze submission(587)/smtps(465)
 # zamiast probowac odkomentowac szablon dostarczony z pakietem (rozny
@@ -188,7 +196,10 @@ ensure_directive() {
   fi
 }
 ensure_directive "Mode" "sv"
-ensure_directive "Socket" "inet:8891@localhost"
+# 127.0.0.1 literal, zeby dokladnie odpowiadac adresowi ktory Postfix
+# faktycznie uzywa (smtpd_milters=inet:127.0.0.1:8891 powyzej) - unika
+# jakiejkolwiek niejednoznacznosci IPv4/IPv6 przy rozwiazywaniu "localhost".
+ensure_directive "Socket" "inet:8891@127.0.0.1"
 ensure_directive "KeyTable" "/etc/opendkim/KeyTable"
 ensure_directive "SigningTable" "/etc/opendkim/SigningTable"
 ensure_directive "PidFile" "/run/opendkim/opendkim.pid"

@@ -93,6 +93,21 @@ if ! grep -q '^ExternalIgnoreList[[:space:]]' "$OPENDKIM_CONF" 2>/dev/null; then
   OPENDKIM_CHANGED="1"
 fi
 
+# SAMONAPRAWCZE: Socket "inet:8891@localhost" (stara wersja mail-install.sh)
+# -> "inet:8891@127.0.0.1" (literal IP). Postfixowe stanze submission/smtps
+# maja chroot=y i NIE POTRAFIA rozwiazac nazwy "localhost" (brak
+# /etc/hosts/resolvera w chroocie /var/spool/postfix) - milter sie nie
+# laczy ("Cannot assign requested address"), a milter_default_action =
+# accept po cichu przepuszcza wiadomosc BEZ PODPISU. Postfixowa strona
+# (smtpd_milters/non_smtpd_milters) jest naprawiana analogicznie w
+# postfix-set-limits.sh - oba trzeba naprawic razem (klikniecie "Zapisz"
+# na Postfix - ustawienia ORAZ ponowne "Zainstaluj DKIM"/"Sprawdz
+# ponownie" tutaj).
+if grep -q '^Socket[[:space:]].*localhost' "$OPENDKIM_CONF" 2>/dev/null; then
+  sed -i 's|^Socket[[:space:]].*|Socket inet:8891@127.0.0.1|' "$OPENDKIM_CONF"
+  OPENDKIM_CHANGED="1"
+fi
+
 # SAMONAPRAWCZE (uprawnienia, NIEZALEZNIE od OPENDKIM_CHANGED powyzej):
 # demon dziala jako opendkim:opendkim, nie root, i nie nalezy do grupy
 # "root" - na tym serwerze umask roota dawal 640/750 (nieczytelne dla

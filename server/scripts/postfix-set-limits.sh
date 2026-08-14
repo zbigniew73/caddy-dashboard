@@ -18,6 +18,15 @@
 # rozne miejsca, wiadomosc "dostarczona" wedlug Postfixa, ale niewidoczna
 # dla odbiorcy. Kliknij "Zapisz" na tym kafelku (nawet bez zmiany
 # wartosci), zeby naprawic juz dzialajaca instalacje.
+#
+# Naprawia TEZ smtpd_milters/non_smtpd_milters z "inet:localhost:8891" na
+# "inet:127.0.0.1:8891" (literal IP) - stanze submission/smtps maja
+# chroot=y i NIE POTRAFIA rozwiazac nazwy "localhost" (brak
+# /etc/hosts/resolvera w chroocie /var/spool/postfix), wiec milter sie
+# nie laczy ("Cannot assign requested address") i milter_default_action
+# = accept po cichu przepuszcza poczte BEZ PODPISU DKIM. Druga polowka
+# tej naprawy (Socket w opendkim.conf) jest w dkim-install.sh - oba
+# trzeba kliknac razem.
 
 set -uo pipefail
 
@@ -32,11 +41,15 @@ MESSAGE_LIMIT="${2:-}"
 OLD_MAILBOX="$(postconf -h mailbox_size_limit 2>/dev/null || true)"
 OLD_MESSAGE="$(postconf -h message_size_limit 2>/dev/null || true)"
 OLD_HOME_MAILBOX="$(postconf -h home_mailbox 2>/dev/null || true)"
+OLD_SMTPD_MILTERS="$(postconf -h smtpd_milters 2>/dev/null || true)"
+OLD_NON_SMTPD_MILTERS="$(postconf -h non_smtpd_milters 2>/dev/null || true)"
 
 rollback() {
   [ -n "$OLD_MAILBOX" ] && postconf -e "mailbox_size_limit=${OLD_MAILBOX}" >/dev/null 2>&1
   [ -n "$OLD_MESSAGE" ] && postconf -e "message_size_limit=${OLD_MESSAGE}" >/dev/null 2>&1
   [ -n "$OLD_HOME_MAILBOX" ] && postconf -e "home_mailbox=${OLD_HOME_MAILBOX}" >/dev/null 2>&1
+  [ -n "$OLD_SMTPD_MILTERS" ] && postconf -e "smtpd_milters=${OLD_SMTPD_MILTERS}" >/dev/null 2>&1
+  [ -n "$OLD_NON_SMTPD_MILTERS" ] && postconf -e "non_smtpd_milters=${OLD_NON_SMTPD_MILTERS}" >/dev/null 2>&1
   systemctl reload postfix >/dev/null 2>&1 || true
 }
 
@@ -44,6 +57,12 @@ postconf -e "mailbox_size_limit=${MAILBOX_LIMIT}"
 postconf -e "message_size_limit=${MESSAGE_LIMIT}"
 if [ "$OLD_HOME_MAILBOX" != "Maildir/" ]; then
   postconf -e "home_mailbox=Maildir/"
+fi
+if [[ "$OLD_SMTPD_MILTERS" == *localhost* ]]; then
+  postconf -e "smtpd_milters=inet:127.0.0.1:8891"
+fi
+if [[ "$OLD_NON_SMTPD_MILTERS" == *localhost* ]]; then
+  postconf -e "non_smtpd_milters=inet:127.0.0.1:8891"
 fi
 
 if ! postfix check 2>/tmp/postfix-set-limits.err; then
