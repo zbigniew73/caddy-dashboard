@@ -245,7 +245,47 @@ async function setPostfixLimits(mailboxSizeBytes, messageSizeBytes) {
   }
 }
 
+const DOVECOT_LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/dovecot-set-limits.sh');
+
+// Odczyt bezposredni (bez sudo) - `doveconf` (odpowiednik `postconf` dla
+// Dovecota) czyta pliki configu, ktore sa domyslnie world-readable, sam
+// binarny `doveconf` nie wymaga roota do odczytu. Jesli admin nigdy tego
+// nie zmienil, zwracana jest WBUDOWANA domyslna wartosc Dovecota (10),
+// nie zmyslona liczba - `mail-install.sh` tego parametru nie ustawia.
+async function getDovecotLimits() {
+  try {
+    const { stdout } = await execFileAsync('doveconf', ['-h', 'mail_max_userip_connections']);
+    const value = parseInt(stdout.trim(), 10);
+    return { maxUseripConnections: Number.isFinite(value) ? value : null };
+  } catch {
+    return { maxUseripConnections: null };
+  }
+}
+
+async function setDovecotLimits(maxUseripConnections) {
+  if (!Number.isInteger(maxUseripConnections) || maxUseripConnections < 1) {
+    throw Object.assign(new Error('Nieprawidlowa wartosc limitu polaczen.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', DOVECOT_LIMITS_SCRIPT_PATH, String(maxUseripConnections)],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla zmiany limitow Dovecota - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
-  getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits
+  getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
+  getDovecotLimits, setDovecotLimits
 };

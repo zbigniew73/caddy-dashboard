@@ -678,13 +678,67 @@ function wirePostfixLimitsSection(content) {
   };
 }
 
+// Kafelek "Dovecot - ustawienia" (obok Postfixa, ten sam rzad 50/50) -
+// realna wartosc z configu Dovecota (GET /mail/dovecot-limits, `doveconf
+// -h mail_max_userip_connections`, bez sudo).
+async function renderDovecotLimitsSection() {
+  let limits;
+  try {
+    limits = await api('GET', '/mail/dovecot-limits');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const value = limits.maxUseripConnections === null ? '' : limits.maxUseripConnections;
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.dovecot_limits_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dovecot_limits_description')}</p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.dovecot_limits_connections_label')}</label>
+      <input type="number" id="dovecot-limit-connections-input" min="1" value="${value}" style="width:160px;margin-bottom:16px;">
+      <div>
+        <button type="button" id="dovecot-limits-save-btn">${t('mail.postfix_limits_save_button')}</button>
+      </div>
+      <div class="action-msg" id="dovecot-limits-msg"></div>
+    </div>
+  `;
+}
+
+function wireDovecotLimitsSection(content) {
+  const btn = document.getElementById('dovecot-limits-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('dovecot-limits-msg');
+  btn.onclick = async () => {
+    const value = parseInt(document.getElementById('dovecot-limit-connections-input').value, 10);
+    if (!Number.isInteger(value) || value < 1) {
+      msgEl.textContent = t('mail.dovecot_limits_invalid');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mail.dovecot_limits_confirm'))) return;
+    btn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/dovecot-limits', { maxUseripConnections: value });
+      msgEl.textContent = t('mail.postfix_limits_success');
+      msgEl.className = 'action-msg success';
+      btn.disabled = false;
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 async function renderMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [postfix, dovecot, limitsHtml, accessHtml, statsHtml] = await Promise.all([
+    const [postfix, dovecot, postfixLimitsHtml, dovecotLimitsHtml, accessHtml, statsHtml] = await Promise.all([
       api('GET', '/services/postfix'),
       api('GET', '/services/dovecot'),
       renderPostfixLimitsSection(),
+      renderDovecotLimitsSection(),
       renderMailAccessSection(),
       renderMailStatsSection()
     ]);
@@ -693,7 +747,10 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}</div>
       </div>
-      <div style="margin-top:16px;">${limitsHtml}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
+        <div style="flex:1 1 0;min-width:320px;">${postfixLimitsHtml}</div>
+        <div style="flex:1 1 0;min-width:320px;">${dovecotLimitsHtml}</div>
+      </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${accessHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${statsHtml}</div>
@@ -702,6 +759,7 @@ async function renderMailTab(content) {
     applyTranslations();
     wireMailServiceCards(content);
     wirePostfixLimitsSection(content);
+    wireDovecotLimitsSection(content);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
   } catch (e) {

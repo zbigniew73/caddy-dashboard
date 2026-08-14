@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1183,6 +1183,27 @@ router.post('/mail/postfix-limits', async (req, res) => {
     const mailboxSizeBytes = parseInt(req.body?.mailboxSizeBytes, 10);
     const messageSizeBytes = parseInt(req.body?.messageSizeBytes, 10);
     const result = await setPostfixLimits(mailboxSizeBytes, messageSizeBytes);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Kafelek "Dovecot - ustawienia" (Poczta, obok kafelka Postfixa) -
+// realna wartosc z configu Dovecota, patrz getDovecotLimits/
+// setDovecotLimits w services/mail.js.
+router.get('/mail/dovecot-limits', async (req, res) => {
+  try {
+    res.json(await getDovecotLimits());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/dovecot-limits', async (req, res) => {
+  try {
+    const maxUseripConnections = parseInt(req.body?.maxUseripConnections, 10);
+    const result = await setDovecotLimits(maxUseripConnections);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
