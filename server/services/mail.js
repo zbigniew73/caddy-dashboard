@@ -158,7 +158,11 @@ async function getMailTlsStatus() {
     let daysRemaining = null;
     try {
       const cert = new X509Certificate(readFileSync(certPath));
-      daysRemaining = Math.ceil((new Date(cert.validTo).getTime() - Date.now()) / 86400000);
+      // Math.floor (nie ceil) - obcina niepelna dobe, ta sama konwencja co
+      // ssl.org i inne narzedzia do sprawdzania certow. Zaokraglanie w
+      // gore dawaloby zludne poczucie, ze zostalo wiecej czasu niz
+      // faktycznie (np. 89.02 dnia pokazywaloby sie jako "90 dni").
+      daysRemaining = Math.floor((new Date(cert.validTo).getTime() - Date.now()) / 86400000);
     } catch {
       daysRemaining = null;
     }
