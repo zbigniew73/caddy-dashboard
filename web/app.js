@@ -776,17 +776,94 @@ function wireMailDomainSection(content, status) {
   };
 }
 
-function mailAdminAddressSectionHtml(status) {
+// Ten sam kafelek co wczesniej (adres admina), teraz TEZ instalator DKIM
+// dla tej samej wykrytej (surowej) domeny panelu - dopiero sensowny gdy
+// domena jest juz w mydestination (inaczej i tak nie ma czego podpisywac
+// lokalnie). GET /mail/dkim-status (bez generowania) na kazdym renderze,
+// zeby po odswiezeniu strony od razu widac gotowy rekord, jesli juz
+// istnieje - nie trzeba klikac ponownie.
+async function mailAdminAddressSectionHtml(status) {
   const ready = status.included && status.detectedDomain;
+  let dkim = { installed: false, recordName: null, recordValue: null };
+  let spfDmarc = null;
+  if (ready) {
+    try {
+      dkim = await api('GET', `/mail/dkim-status?domain=${encodeURIComponent(status.detectedDomain)}`);
+    } catch {
+      dkim = { installed: false, recordName: null, recordValue: null };
+    }
+    try {
+      spfDmarc = await api('GET', `/mail/spf-dmarc?domain=${encodeURIComponent(status.detectedDomain)}`);
+    } catch {
+      spfDmarc = null;
+    }
+  }
+  const spfDmarcHtml = spfDmarc ? `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h3 style="margin-bottom:8px;">${t('mail.spf_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.spf_dns_hint')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+      </dl>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dmarc_dns_hint')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+      </dl>
+    </div>
+  ` : '';
   return `
     <div class="system-info-card">
       <h3>${t('mail.admin_address_title')}</h3>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.admin_address_description')}</p>
       ${ready
-        ? `<p style="margin:0;color:var(--accent);font-size:16px;font-family:var(--mono);">${escapeHtml(status.serviceUsername)}@${escapeHtml(status.detectedDomain)}</p>`
+        ? `<p style="margin:0 0 16px;color:var(--accent);font-size:16px;font-family:var(--mono);">${escapeHtml(status.serviceUsername)}@${escapeHtml(status.detectedDomain)}</p>`
         : `<div class="empty-state">${t('mail.admin_address_not_ready')}</div>`}
+      ${ready ? `
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+          <h3 style="margin-bottom:8px;">${t('mail.dkim_title')}</h3>
+          ${dkim.installed ? `
+            <p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('mail.dkim_installed_hint')}</p>
+            <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_dns_hint')}</p>
+            <dl style="margin:0 0 16px;">
+              <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+              <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
+              <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+            </dl>
+          ` : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
+          <button type="button" id="mail-dkim-install-btn">${dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
+          <div class="action-msg" id="mail-dkim-msg"></div>
+        </div>
+        ${spfDmarcHtml}
+      ` : ''}
     </div>
   `;
+}
+
+function wireMailAdminAddressSection(content, status) {
+  const btn = document.getElementById('mail-dkim-install-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mail-dkim-msg');
+  btn.onclick = async () => {
+    if (!window.confirm(t('mail.dkim_confirm_install', { domain: status.detectedDomain }))) return;
+    btn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/dkim-install', { domain: status.detectedDomain });
+      await renderMailTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
 }
 
 async function renderMailTab(content) {
@@ -801,6 +878,7 @@ async function renderMailTab(content) {
       renderMailAccessSection(),
       renderMailStatsSection()
     ]);
+    const adminAddressHtml = await mailAdminAddressSectionHtml(domainStatus);
     content.innerHTML = `
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
@@ -812,7 +890,7 @@ async function renderMailTab(content) {
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${mailDomainSectionHtml(domainStatus)}</div>
-        <div style="flex:1 1 0;min-width:320px;">${mailAdminAddressSectionHtml(domainStatus)}</div>
+        <div style="flex:1 1 0;min-width:320px;">${adminAddressHtml}</div>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${accessHtml}</div>
@@ -824,6 +902,7 @@ async function renderMailTab(content) {
     wirePostfixLimitsSection(content);
     wireDovecotLimitsSection(content);
     wireMailDomainSection(content, domainStatus);
+    wireMailAdminAddressSection(content, domainStatus);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
   } catch (e) {

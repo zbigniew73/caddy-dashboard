@@ -146,4 +146,4 @@ async function deleteSshKey(username, keyData) {
   return filtered;
 }
 
-export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey };
+export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp };

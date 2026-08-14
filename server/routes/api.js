@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1241,6 +1241,51 @@ router.post('/mail/mydestination', async (req, res) => {
   }
   try {
     res.json(await addMydestinationDomain(domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Kafelek "Adres e-mail administratora" - instalacja DKIM dla WYKRYTEJ
+// (surowej) domeny panelu, patrz getDkimStatus/installDkim w
+// services/mail.js. Po instalacji zwraca gotowy rekord DNS TXT do
+// wklejenia u dostawcy (np. Cloudflare).
+router.get('/mail/dkim-status', async (req, res) => {
+  const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json(await getDkimStatus(domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/dkim-install', async (req, res) => {
+  const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json(await installDkim(domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// SPF/DMARC - czysto wyliczenie gotowych rekordow DNS, nic nie zapisuje
+// na serwerze (patrz getSpfDmarcInfo w services/mail.js).
+router.get('/mail/spf-dmarc', async (req, res) => {
+  const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json(await getSpfDmarcInfo(domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

@@ -5,6 +5,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import tls from 'tls';
 import { X509Certificate } from 'crypto';
+import os from 'os';
+import { getPublicIp } from './hostingUserSsh.js';
 
 const execFileAsync = promisify(execFile);
 const SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/mail-install.sh');
@@ -324,8 +326,83 @@ async function addMydestinationDomain(domain) {
   }
 }
 
+const DKIM_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/dkim-install.sh');
+
+// Parsuje stdout dkim-install.sh (pierwsza linia "OK: ..."/"MISSING",
+// ewentualnie RECORD_NAME=.../RECORD_VALUE=... ponizej) - jeden format,
+// dwie akcje (install/status), wiec jeden parser.
+function parseDkimOutput(stdout) {
+  const lines = stdout.split('\n');
+  if (lines[0]?.trim() === 'MISSING') {
+    return { installed: false, recordName: null, recordValue: null, message: null };
+  }
+  const recordName = lines.find((l) => l.startsWith('RECORD_NAME='))?.slice('RECORD_NAME='.length) || null;
+  const recordValue = lines.find((l) => l.startsWith('RECORD_VALUE='))?.slice('RECORD_VALUE='.length) || null;
+  return { installed: Boolean(recordName && recordValue), recordName, recordValue, message: lines[0] };
+}
+
+async function runDkimScript(action, domain) {
+  if (!DOMAIN_RE.test(domain)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', DKIM_SCRIPT_PATH, action, domain],
+      { timeout: 30000 }
+    );
+    return parseDkimOutput(stdout);
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla DKIM - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+// Czysto odczyt (bez generowania) - /etc/opendkim/keys nie jest world-
+// readable, wiec i tak idzie przez sudo/skrypt (patrz komentarz w
+// dkim-install.sh), ale NIC nie zmienia.
+async function getDkimStatus(domain) {
+  return runDkimScript('status', domain);
+}
+
+async function installDkim(domain) {
+  return runDkimScript('install', domain);
+}
+
+// SPF/DMARC - w odroznieniu od DKIM, NIC nie trzeba instalowac po
+// stronie serwera (obie sa czysto polityka DNS ocenania przez serwery
+// ODBIERAJACE poczte, Postfix nie musi nic o nich wiedziec, zeby je
+// spelniac) - to tylko wyliczenie gotowych wartosci do wklejenia u
+// dostawcy DNS. SPF idzie na SAM KORZEN domeny (nie mail./webmail.),
+// autoryzuje prawdziwy publiczny adres IP tego serwera (ten sam
+// mechanizm wykrywania co zakladka SSH w panelu /user/ -
+// hostingUserSsh.js getPublicIp - realne zapytanie do api.ipify.org,
+// bez fabrykowania). DMARC zaczyna od "p=none" (tylko monitorowanie,
+// NIE odrzucanie/kwarantanna) - to standardowo zalecany bezpieczny
+// pierwszy krok przy wdrazaniu DMARC, nie zgadywanie.
+async function getSpfDmarcInfo(domain) {
+  if (!DOMAIN_RE.test(domain)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  const publicIp = await getPublicIp();
+  const adminEmail = `${os.userInfo().username}@${domain}`;
+  return {
+    publicIp,
+    spfRecordName: domain,
+    spfRecordValue: `v=spf1 ip4:${publicIp} ~all`,
+    dmarcRecordName: `_dmarc.${domain}`,
+    dmarcRecordValue: `v=DMARC1; p=none; rua=mailto:${adminEmail}`
+  };
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
   getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
-  getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain
+  getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
+  getDkimStatus, installDkim, getSpfDmarcInfo
 };
