@@ -484,12 +484,20 @@ async function renderMailStatsSection() {
   return `
     <div class="system-info-card">
       <h3>${t('mail.stats_title')}</h3>
-      <dl>
-        <dt>${t('mail.stats_accounts_label')}</dt><dd>${enabledCount} / ${accounts.length}</dd>
-        <dt>${t('mail.stats_queue_label')}</dt><dd>${escapeHtml(queueText)}</dd>
-        <dt>${t('mail.stats_dkim_label')}</dt><dd>${t('mail.stats_dkim_value')}</dd>
-        <dt>${t('mail.stats_tls_label')}</dt><dd>${t('mail.stats_tls_value')}</dd>
-      </dl>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;">
+        <dl style="flex:1 1 0;min-width:160px;">
+          <dt>${t('mail.stats_accounts_label')}</dt><dd>${enabledCount} / ${accounts.length}</dd>
+          <dt>${t('mail.stats_queue_label')}</dt><dd>${escapeHtml(queueText)}</dd>
+          <dt>${t('mail.stats_dkim_label')}</dt><dd>${t('mail.stats_dkim_value')}</dd>
+          <dt>${t('mail.stats_tls_label')}</dt><dd>${t('mail.stats_tls_value')}</dd>
+        </dl>
+        <dl style="flex:1 1 0;min-width:120px;">
+          <dt>SMTP</dt><dd>25</dd>
+          <dt>SMTPS</dt><dd>465</dd>
+          <dt>IMAP</dt><dd>143</dd>
+          <dt>IMAPS</dt><dd>993</dd>
+        </dl>
+      </div>
     </div>
   `;
 }
