@@ -345,46 +345,33 @@ function wireSystemRebootButton() {
   };
 }
 
-// Lewy kafelek Postfix, prawy Dovecot - stan/kontrolki czytane i
-// sterowane przez JUZ ISTNIEJACY, generyczny mechanizm uslug
-// (GET/POST /services/:key(/:action)) - te same trasy co ogolna
-// zakladka Uslugi, tylko wlasny, kompaktowy markup zamiast pelnej
-// serviceDetailHtml. Jesli pakiety nie sa jeszcze zainstalowane
-// (found=false), pusty stan z podpowiedzia "zainstaluj z Instalatora".
-function mailServiceCardHtml(key, title, svc) {
+// Lewy kafelek Postfix, prawy Dovecot - markup dzielony z serviceDetailHtml
+// (ta sama karta co w zakladce Uslugi, z dopisanym naglowkiem), stan i
+// kontrolki nadal czytane/sterowane przez generyczny mechanizm uslug
+// (GET/POST /services/:key(/:action)). Brak potwierdzenia przed akcja
+// (celowo, w odroznieniu od wireServiceActions) - tak bylo od zawsze na
+// tej zakladce, zostawiamy bez zmian. Jesli pakiety nie sa jeszcze
+// zainstalowane (found=false), pusty stan z podpowiedzia "zainstaluj z
+// Instalatora", w tym samym pudelku co reszta kart (system-info-card).
+function mailServiceCardHtml(title, svc) {
   if (!svc.found) {
     return `
-      <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
-      <div class="empty-state">${t('mail.not_installed_hint')}</div>
+      <div class="system-info-card">
+        <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
+        <div class="empty-state">${t('mail.not_installed_hint')}</div>
+      </div>
     `;
   }
-  const isActive = svc.activeState === 'active';
-  const isEnabled = svc.enabled === 'enabled';
-  return `
-    <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
-    <dl>
-      <dt data-i18n="services.unit"></dt><dd>${escapeHtml(svc.unit)}</dd>
-      <dt data-i18n="services.status"></dt><dd><span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span> (${escapeHtml(svc.subState)})</dd>
-      <dt data-i18n="services.enabled_label"></dt><dd>${isEnabled ? t('services.enabled') : t('services.disabled')}</dd>
-      <dt data-i18n="services.pid"></dt><dd>${svc.mainPid || '-'}</dd>
-      <dt data-i18n="services.since"></dt><dd>${escapeHtml(svc.since || '-')}</dd>
-    </dl>
-    <div class="service-actions">
-      <button type="button" data-mail-key="${key}" data-action="start">${t('services.action_start')}</button>
-      <button type="button" data-mail-key="${key}" data-action="restart">${t('services.action_restart')}</button>
-      <button type="button" class="danger" data-mail-key="${key}" data-action="stop">${t('services.action_stop')}</button>
-    </div>
-    <div class="action-msg" id="mail-${key}-msg"></div>
-  `;
+  return serviceDetailHtml(svc, title);
 }
 
 function wireMailServiceCards(content) {
-  content.querySelectorAll('[data-mail-key]').forEach((btn) => {
+  content.querySelectorAll('[data-key][data-action]').forEach((btn) => {
     btn.onclick = async () => {
-      const key = btn.dataset.mailKey;
+      const key = btn.dataset.key;
       const action = btn.dataset.action;
-      const msgEl = document.getElementById(`mail-${key}-msg`);
-      content.querySelectorAll(`[data-mail-key="${key}"]`).forEach((b) => { b.disabled = true; });
+      const msgEl = document.getElementById(`${key}-action-msg`);
+      content.querySelectorAll(`[data-key="${key}"]`).forEach((b) => { b.disabled = true; });
       msgEl.textContent = '';
       msgEl.className = 'action-msg';
       try {
@@ -393,7 +380,7 @@ function wireMailServiceCards(content) {
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
-        content.querySelectorAll(`[data-mail-key="${key}"]`).forEach((b) => { b.disabled = false; });
+        content.querySelectorAll(`[data-key="${key}"]`).forEach((b) => { b.disabled = false; });
       }
     };
   });
@@ -407,13 +394,9 @@ async function renderMailTab(content) {
       api('GET', '/services/dovecot')
     ]);
     content.innerHTML = `
-      <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-          ${mailServiceCardHtml('postfix', t('mail.postfix_title'), postfix)}
-        </div>
-        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-          ${mailServiceCardHtml('dovecot', t('mail.dovecot_title'), dovecot)}
-        </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
+        <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}</div>
       </div>
     `;
     applyTranslations();
@@ -2219,7 +2202,10 @@ async function renderServicesTab(content) {
   }
 }
 
-function serviceDetailHtml(svc) {
+// 'title' to opcjonalny naglowek karty (wzor jak w redisadmin) - uzywany
+// tam, gdzie kilka kart uslug wystepuje razem na jednej zakladce (np.
+// Poczta: Postfix + Dovecot) i trzeba je podpisac.
+function serviceDetailHtml(svc, title) {
   if (!svc.found) {
     return `<div class="empty-state">${t('services.not_installed_detail')}</div>`;
   }
@@ -2227,6 +2213,7 @@ function serviceDetailHtml(svc) {
   const isEnabled = svc.enabled === 'enabled';
   return `
     <div class="system-info-card">
+      ${title ? `<h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>` : ''}
       <dl>
         <dt data-i18n="services.unit"></dt><dd>${escapeHtml(svc.unit)}</dd>
         <dt data-i18n="services.status"></dt><dd><span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span> (${escapeHtml(svc.subState)})</dd>
@@ -2235,9 +2222,9 @@ function serviceDetailHtml(svc) {
         <dt data-i18n="services.since"></dt><dd>${escapeHtml(svc.since || '-')}</dd>
       </dl>
       <div class="service-actions">
-        <button type="button" data-action="start">${t('services.action_start')}</button>
-        <button type="button" data-action="restart">${t('services.action_restart')}</button>
-        <button type="button" class="danger" data-action="stop">${t('services.action_stop')}</button>
+        <button type="button" data-key="${svc.key}" data-action="start">${t('services.action_start')}</button>
+        <button type="button" data-key="${svc.key}" data-action="restart">${t('services.action_restart')}</button>
+        <button type="button" class="danger" data-key="${svc.key}" data-action="stop">${t('services.action_stop')}</button>
       </div>
       <div class="action-msg" id="${svc.key}-action-msg"></div>
     </div>
