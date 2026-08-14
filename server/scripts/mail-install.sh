@@ -53,10 +53,21 @@ getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - 
 # pakiecie. Bez tego dkim-install.sh (przycisk "Zainstaluj DKIM" w
 # panelu) failuje "brak polecenia opendkim-genkey" - potwierdzone na
 # zywym serwerze 2026-08-14.
-# sqlite (CLI /usr/bin/sqlite3) i dovecot-sqlite (driver passdb/userdb dla
-# Dovecota) - wymagane dla wirtualnych domen/skrzynek ponizej, obie sa
-# osobnymi (male) podpakietami, nie czescia bazowego "dovecot"/systemu.
-dnf install -y postfix dovecot opendkim opendkim-tools sqlite dovecot-sqlite || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools, sqlite, dovecot-sqlite) nie powiodla sie."
+# sqlite (CLI /usr/bin/sqlite3) - wymagany dla wirtualnych domen/skrzynek
+# ponizej, osobny (maly) podpakiet, nie czesc bazowego systemu.
+dnf install -y postfix dovecot opendkim opendkim-tools sqlite || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools, sqlite) nie powiodla sie."
+
+# Sterownik sqlite dla Dovecota (passdb/userdb SQL dla wirtualnych
+# domen/skrzynek ponizej) bywa OSOBNYM podpakietem (np. starsze EL9) ALBO
+# WBUDOWANY w sam pakiet "dovecot" - potwierdzone na AlmaLinux 10.2
+# (dovecot 2.3.21-19.el10_2): pakiet "dovecot-sqlite" tam W OGOLE NIE
+# ISTNIEJE ("Unable to find a match"), bo libdriver_sqlite.so juz siedzi
+# w samym "dovecot". Probujemy doinstalowac OSOBNY pakiet, ale NIE
+# failujemy jesli go nie ma - prawdziwym testem jest obecnosc samej
+# biblioteki sterownika, sprawdzana ponizej.
+dnf install -y dovecot-sqlite >/dev/null 2>&1 || true
+find /usr/lib64/dovecot /usr/lib/dovecot -name 'libdriver_sqlite.so' 2>/dev/null | grep -q . \
+  || err "Brak sterownika sqlite dla Dovecota (libdriver_sqlite.so) - sprawdz recznie: dnf provides '*/libdriver_sqlite.so'."
 
 # --- TLS: self-signed cert (tymczasowy, patrz komentarz na gorze) ---
 CERT_FILE="/etc/pki/tls/certs/mail-selfsigned.crt"
