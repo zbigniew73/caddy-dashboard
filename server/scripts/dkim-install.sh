@@ -108,6 +108,16 @@ if grep -q '^Socket[[:space:]].*localhost' "$OPENDKIM_CONF" 2>/dev/null; then
   OPENDKIM_CHANGED="1"
 fi
 
+# SAMONAPRAWCZE: SigningTable bez prefiksu "refile:" -> wpis wildcard
+# "*@domena" jest CICHO ignorowany (tryb "file:" nie obsluguje wildcardow) -
+# log pokazuje "no signing table match for 'user@domena'" mimo poprawnego
+# wpisu w tabeli. Bez "refile:" nic sie NIGDY nie podpisze, niezaleznie od
+# tresci SigningTable.
+if grep -q '^SigningTable[[:space:]]/etc/opendkim/SigningTable' "$OPENDKIM_CONF" 2>/dev/null; then
+  sed -i 's|^SigningTable[[:space:]]/etc/opendkim/SigningTable|SigningTable refile:/etc/opendkim/SigningTable|' "$OPENDKIM_CONF"
+  OPENDKIM_CHANGED="1"
+fi
+
 # SAMONAPRAWCZE (uprawnienia, NIEZALEZNIE od OPENDKIM_CHANGED powyzej):
 # demon dziala jako opendkim:opendkim, nie root, i nie nalezy do grupy
 # "root" - na tym serwerze umask roota dawal 640/750 (nieczytelne dla

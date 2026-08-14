@@ -201,7 +201,14 @@ ensure_directive "Mode" "sv"
 # jakiejkolwiek niejednoznacznosci IPv4/IPv6 przy rozwiazywaniu "localhost".
 ensure_directive "Socket" "inet:8891@127.0.0.1"
 ensure_directive "KeyTable" "/etc/opendkim/KeyTable"
-ensure_directive "SigningTable" "/etc/opendkim/SigningTable"
+# "refile:" (NIE goła sciezka) - bez tego prefiksu OpenDKIM traktuje plik
+# jako "file:" (dopasowanie tylko doslowne, BEZ WILDCARDOW), a wpis w
+# SigningTable to wlasnie wildcard "*@domena" (patrz komentarz w samym
+# pliku SigningTable, wygenerowanym przez pakiet). Efekt bez "refile:":
+# "no signing table match for 'user@domena'" w logu i wiadomosc wychodzi
+# BEZ PODPISU, mimo poprawnego wpisu w tabeli. Potwierdzone na zywym
+# serwerze 2026-08-14.
+ensure_directive "SigningTable" "refile:/etc/opendkim/SigningTable"
 ensure_directive "PidFile" "/run/opendkim/opendkim.pid"
 ensure_directive "InternalHosts" "refile:/etc/opendkim/TrustedHosts"
 ensure_directive "ExternalIgnoreList" "refile:/etc/opendkim/TrustedHosts"
