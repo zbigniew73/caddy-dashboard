@@ -68,12 +68,19 @@ case "$ACTION" in
     ERR_LOG="$(mktemp)"
     trap 'rm -f "$TMP" "$ERR_LOG"' EXIT
 
+    # Blok dopisywany NA KONCU pliku, nigdy na poczatku - jesli admin ma
+    # juz skonfigurowany profil wydajnosci Caddy (caddy-set-performance.sh),
+    # to blok BEZ klucza domeny (globalne opcje `{ admin ... }`), a Caddy
+    # wymaga, zeby taki blok byl ZAWSZE pierwszy w pliku - wstawienie
+    # czegokolwiek przed nim psuje adaptacje ("server block without any
+    # key ... must be first"). Dopisywanie na koncu nigdy nie narusza tej
+    # kolejnosci, niezaleznie czy blok wydajnosci istnieje czy nie.
     STRIPPED="$(read_current | strip_block)"
     {
-      printf '%s\n' "$MARK_START"
-      printf '%s\n' "$NEW_BLOCK"
-      printf '%s\n\n' "$MARK_END"
       printf '%s' "$STRIPPED"
+      printf '\n\n%s\n' "$MARK_START"
+      printf '%s\n' "$NEW_BLOCK"
+      printf '%s\n' "$MARK_END"
     } > "$TMP"
 
     caddy fmt --overwrite "$TMP" >"$ERR_LOG" 2>&1 || err "caddy fmt nie powiodlo sie: $(cat "$ERR_LOG")"
