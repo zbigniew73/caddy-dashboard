@@ -162,8 +162,41 @@ chmod 640 "${DOCROOT}/config/config.inc.php"
 PHP_CLI="/usr/local/bin/php${PHP_ID}"
 [ -x "$PHP_CLI" ] || err "Nie znaleziono wrappera CLI ${PHP_CLI} - PHP ${PHP_VERSION_LABEL} nie wyglada na poprawnie zainstalowany."
 
-(cd "$DOCROOT" && "$PHP_CLI" bin/initdb.sh --dir=SQL) \
-  || err "Inicjalizacja schematu bazy Roundcube (bin/initdb.sh) nie powiodla sie."
+# SQLite: sterownik rcube_db SAM zaklada schemat przy pierwszym
+# polaczeniu z pustym plikiem (potwierdzone na zywym serwerze 2026-08-14 -
+# bin/initdb.sh dla sqlite zawsze failuje "table users already exists",
+# bo w srodku najpierw laczy sie z baza - co JUZ odpala auto-init - a
+# dopiero potem sam probuje jeszcze raz zalozyc te same tabele). Dla MySQL
+# tego mechanizmu nie ma, wiec tam initdb.sh zostaje jak bylo. Zamiast
+# initdb.sh dla sqlite robimy jedno kontrolowane zapytanie testowe, zeby
+# auto-init odpalil sie TERAZ (instalacja), a nie dopiero przy pierwszym
+# realnym logowaniu admina do webmaila.
+INITDB_SCRIPT="$(mktemp --suffix=.php)"
+if [ "$DB_ENGINE" = "mysql" ]; then
+  cat > "$INITDB_SCRIPT" <<'PHPEOF'
+<?php
+define('INSTALL_PATH', getcwd() . '/');
+require_once INSTALL_PATH . 'program/include/clisetup.php';
+rcmail_utils::db();
+rcmail_utils::db_init('SQL');
+PHPEOF
+else
+  cat > "$INITDB_SCRIPT" <<'PHPEOF'
+<?php
+define('INSTALL_PATH', getcwd() . '/');
+require_once INSTALL_PATH . 'program/include/clisetup.php';
+$db = rcmail_utils::db();
+$db->query('SELECT 1 FROM users');
+if ($db->is_error()) {
+    fwrite(STDERR, "BLAD: zapytanie testowe po polaczeniu z SQLite nie powiodlo sie: " . $db->is_error() . "\n");
+    exit(1);
+}
+PHPEOF
+fi
+(cd "$DOCROOT" && "$PHP_CLI" "$INITDB_SCRIPT")
+INITDB_EXIT=$?
+rm -f "$INITDB_SCRIPT"
+[ "$INITDB_EXIT" -eq 0 ] || err "Inicjalizacja schematu bazy Roundcube nie powiodla sie."
 
 chown -R "$OWNER" "$DOCROOT"
 chmod 640 "${DOCROOT}/config/config.inc.php"
