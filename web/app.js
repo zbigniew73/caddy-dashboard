@@ -731,14 +731,73 @@ function wireDovecotLimitsSection(content) {
   };
 }
 
+// Dwa kafelki pod "Dovecot - ustawienia" - dziela JEDEN wspolny odczyt
+// statusu (GET /mail/mydestination), zeby zawsze pokazywaly spojny
+// snapshot, nie dwa niezalezne zapytania, ktore moglyby sie rozjechac w
+// czasie. Lewy dopisuje WYKRYTA domene bazowa (ten sam mechanizm co
+// Roundcube - detectBaseDomain) do `mydestination` Postfixa. Prawy jest
+// CZYSTO informacyjny - pokazuje gotowy adres <realny user procesu
+// panelu>@<domena>, dopiero gdy domena juz jest dodana.
+function mailDomainSectionHtml(status) {
+  const domain = status.detectedDomain;
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.domain_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.domain_description')}</p>
+      ${domain ? `
+        <dl style="margin:0 0 16px;">
+          <dt>${t('mail.domain_detected_label')}</dt><dd style="font-family:monospace;">${escapeHtml(domain)}</dd>
+          <dt>${t('mail.domain_status_label')}</dt><dd><span class="status-badge ${status.included ? 'active' : 'inactive'}">${status.included ? t('mail.domain_status_added') : t('mail.domain_status_not_added')}</span></dd>
+        </dl>
+        <button type="button" id="mail-domain-add-btn" ${status.included ? 'disabled' : ''}>${t('mail.domain_add_button')}</button>
+        <div class="action-msg" id="mail-domain-msg"></div>
+      ` : `<div class="empty-state">${t('mail.domain_not_detected')}</div>`}
+    </div>
+  `;
+}
+
+function wireMailDomainSection(content, status) {
+  const btn = document.getElementById('mail-domain-add-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('mail-domain-msg');
+  btn.onclick = async () => {
+    if (!window.confirm(t('mail.domain_confirm_add', { domain: status.detectedDomain }))) return;
+    btn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/mydestination', { domain: status.detectedDomain });
+      await renderMailTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
+function mailAdminAddressSectionHtml(status) {
+  const ready = status.included && status.detectedDomain;
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.admin_address_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.admin_address_description')}</p>
+      ${ready
+        ? `<p style="margin:0;color:var(--accent);font-size:16px;font-family:var(--mono);">${escapeHtml(status.serviceUsername)}@${escapeHtml(status.detectedDomain)}</p>`
+        : `<div class="empty-state">${t('mail.admin_address_not_ready')}</div>`}
+    </div>
+  `;
+}
+
 async function renderMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [postfix, dovecot, postfixLimitsHtml, dovecotLimitsHtml, accessHtml, statsHtml] = await Promise.all([
+    const [postfix, dovecot, postfixLimitsHtml, dovecotLimitsHtml, domainStatus, accessHtml, statsHtml] = await Promise.all([
       api('GET', '/services/postfix'),
       api('GET', '/services/dovecot'),
       renderPostfixLimitsSection(),
       renderDovecotLimitsSection(),
+      api('GET', '/mail/mydestination'),
       renderMailAccessSection(),
       renderMailStatsSection()
     ]);
@@ -752,6 +811,10 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;">${dovecotLimitsHtml}</div>
       </div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
+        <div style="flex:1 1 0;min-width:320px;">${mailDomainSectionHtml(domainStatus)}</div>
+        <div style="flex:1 1 0;min-width:320px;">${mailAdminAddressSectionHtml(domainStatus)}</div>
+      </div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${accessHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${statsHtml}</div>
       </div>
@@ -760,6 +823,7 @@ async function renderMailTab(content) {
     wireMailServiceCards(content);
     wirePostfixLimitsSection(content);
     wireDovecotLimitsSection(content);
+    wireMailDomainSection(content, domainStatus);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
   } catch (e) {

@@ -284,8 +284,48 @@ async function setDovecotLimits(maxUseripConnections) {
   }
 }
 
+const MYDESTINATION_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-add-mydestination.sh');
+const DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+
+// Odczyt bezposredni (bez sudo) - `postconf -h mydestination` (ten sam
+// mechanizm jak wszystkie inne odczyty w tym pliku). Zwraca ROZWINIETA
+// (nie surowa `$myhostname` itp.) liste domen, ktore Postfix uwaza za
+// "wlasne" - wiec kazdy lokalny user systemowy jest osiagalny jako
+// <user>@<ktoraz z tych domen>.
+async function getMydestinationStatus(domain) {
+  try {
+    const { stdout } = await execFileAsync('postconf', ['-h', 'mydestination']);
+    const domains = stdout.split(',').map((d) => d.trim()).filter(Boolean);
+    return { domains, included: domain ? domains.includes(domain) : false };
+  } catch {
+    return { domains: [], included: false };
+  }
+}
+
+async function addMydestinationDomain(domain) {
+  if (!DOMAIN_RE.test(domain)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', MYDESTINATION_SCRIPT_PATH, domain],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla dopisania domeny do Postfixa - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
   getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
-  getDovecotLimits, setDovecotLimits
+  getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain
 };

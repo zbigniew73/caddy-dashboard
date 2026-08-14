@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1205,6 +1205,42 @@ router.post('/mail/dovecot-limits', async (req, res) => {
     const maxUseripConnections = parseInt(req.body?.maxUseripConnections, 10);
     const result = await setDovecotLimits(maxUseripConnections);
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Dwa kafelki pod "Dovecot - ustawienia": lewy dodaje WYKRYTA domene
+// bazowa panelu do `mydestination` Postfixa (ten sam mechanizm
+// wykrywania co Roundcube - detectBaseDomain w roundcubeSite.js), prawy
+// jest czysto informacyjny - pokazuje gotowy adres
+// <realny user procesu panelu>@<domena>, dopiero gdy domena juz jest w
+// mydestination. Uzytkownik brany z `os.userInfo()` (realny user, pod
+// ktorym dziala PROCES panelu - SVC_USER z instalacji, np. cdadmin),
+// zamiast zaszytego na sztywno "cdadmin" - to i tak ten sam user.
+router.get('/mail/mydestination', async (req, res) => {
+  try {
+    const { suggested } = await detectBaseDomain();
+    const status = await getMydestinationStatus(suggested);
+    res.json({
+      detectedDomain: suggested,
+      mydestinationDomains: status.domains,
+      included: status.included,
+      serviceUsername: os.userInfo().username
+    });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/mydestination', async (req, res) => {
+  const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json(await addMydestinationDomain(domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
