@@ -153,8 +153,18 @@ postfix check || err "Konfiguracja Postfixa nie przeszla walidacji (postfix chec
 # wartosci pakietu zostaja). KeyTable/SigningTable na razie PUSTE -
 # generowanie kluczy per-domena to kolejny krok. ---
 OPENDKIM_CONF="/etc/opendkim.conf"
-mkdir -p /etc/opendkim
+mkdir -p /etc/opendkim /etc/opendkim/keys
 touch /etc/opendkim/KeyTable /etc/opendkim/SigningTable
+# Demon dziala jako opendkim:opendkim (UserID w opendkim.conf), NIE jako
+# root, i nie nalezy do grupy "root" - pliki utworzone tu jako root
+# musza byc jawnie czytelne, bo umask roota na serwerze potrafi dac 640
+# (nieczytelne dla nikogo poza rootem/grupa root). Zadna z tych trzech
+# rzeczy (KeyTable/SigningTable/katalog kluczy) nie zawiera samego
+# materialu klucza - to tylko sciezki/nazwy, wiec swiatoczytelnosc jest
+# bezpieczna (sam prywatny klucz .private ma osobne, wlasciwe chmod 640
+# opendkim:opendkim, patrz dkim-install.sh).
+chmod 644 /etc/opendkim/KeyTable /etc/opendkim/SigningTable
+chmod 755 /etc/opendkim/keys
 
 # TrustedHosts/InternalHosts - BEZ TEGO opendkim TYLKO weryfikuje przychodzaca
 # poczte, nigdy nie PODPISUJE wychodzacej z localhost (Postfix->milter to
@@ -167,6 +177,7 @@ cat > /etc/opendkim/TrustedHosts <<'EOF'
 ::1
 localhost
 EOF
+chmod 644 /etc/opendkim/TrustedHosts
 
 ensure_directive() {
   local key="$1" value="$2"

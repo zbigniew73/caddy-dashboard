@@ -93,6 +93,22 @@ if ! grep -q '^ExternalIgnoreList[[:space:]]' "$OPENDKIM_CONF" 2>/dev/null; then
   OPENDKIM_CHANGED="1"
 fi
 
+# SAMONAPRAWCZE (uprawnienia, NIEZALEZNIE od OPENDKIM_CHANGED powyzej):
+# demon dziala jako opendkim:opendkim, nie root, i nie nalezy do grupy
+# "root" - na tym serwerze umask roota dawal 640/750 (nieczytelne dla
+# opendkim) na TrustedHosts/KeyTable/SigningTable/katalogu kluczy,
+# co powodowalo "dkimf_db_open(): Permission denied" i opendkim w ogole
+# nie startowal (status 78/CONFIG). Ustawiane bezwarunkowo przy KAZDYM
+# uruchomieniu - tanie, zawsze bezpieczne, naprawia juz zle utworzone
+# pliki bez potrzeby ich usuwania. Zaden z tych plikow nie zawiera
+# materialu klucza (tylko sciezki/nazwy), wiec swiatoczytelnosc jest OK -
+# sam prywatny klucz .private ma osobny, wlasciwy chmod 640 opendkim:opendkim
+# nizej.
+chmod 644 "$TRUSTED_HOSTS" 2>/dev/null || true
+chmod 644 "$KEY_TABLE" "$SIGNING_TABLE" 2>/dev/null || true
+mkdir -p /etc/opendkim/keys
+chmod 755 /etc/opendkim/keys 2>/dev/null || true
+
 mkdir -p "$KEY_DIR"
 
 GENERATED=""
