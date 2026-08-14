@@ -8,21 +8,25 @@
 # jej nie ma. Walidacja (`doveconf -n`) PRZED przeladowaniem, backup+
 # rollback jesli sie nie powiedzie.
 #
-# SAMONAPRAWCZE (przy okazji, przy KAZDYM uruchomieniu): dopisuje tez
-# auth_username_format = %n, jesli jeszcze go nie ma - na instalacjach
-# Poczty sprzed tej poprawki logowanie w Roundcube pelnym adresem
-# (user@domena) failowalo, bo PAM zna tylko gole nazwy systemowe. Ten sam
-# wzorzec co pam_listfile w mail-toggle-access.sh - kliknij "Zapisz" na
+# SAMONAPRAWCZE (przy okazji, przy KAZDYM uruchomieniu): nadpisuje TEZ
+# auth_username_format warunkowym %{if;%d;eq;<domena_bazowa>;%n;%u} -
+# BEZWARUNKOWO (nie tylko "jesli brak"), zeby zawsze odzwierciedlal
+# aktualnie wykryta domene bazowa panelu. Zwykle %n (obciecie domeny)
+# jest potrzebne dla PAM (kont systemowych/SSH), ALE globalne, bezwarunkowe
+# %n zabija tez %d dla wirtualnych skrzynek klientow (SQL passdb, patrz
+# mail-install.sh) - warunkowa forma obcina domene TYLKO dla domeny
+# panelu, zachowuje ja dla kazdej innej (wirtualnej). Kliknij "Zapisz" na
 # tym kafelku (nawet bez zmiany wartosci), zeby naprawic juz dzialajaca
 # instalacje bez ponownego uruchamiania mail-install.sh.
 #
-# Uzycie: dovecot-set-limits.sh <mail_max_userip_connections>
+# Uzycie: dovecot-set-limits.sh <mail_max_userip_connections> <domena_bazowa>
 
 set -uo pipefail
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
 VALUE="${1:-}"
+BASE_DOMAIN="${2:-}"
 DOVECOT_CONF="/etc/dovecot/conf.d/90-caddy-dashboard.conf"
 
 [[ "$VALUE" =~ ^[0-9]+$ ]] && [ "$VALUE" -ge 1 ] || err "nieprawidlowa wartosc mail_max_userip_connections: '${VALUE}' (oczekiwano liczby calkowitej >= 1)."
@@ -37,8 +41,15 @@ else
   printf '\nmail_max_userip_connections = %s\n' "$VALUE" >> "$DOVECOT_CONF"
 fi
 
-if ! grep -q '^auth_username_format = ' "$DOVECOT_CONF"; then
-  printf '\nauth_username_format = %%n\n' >> "$DOVECOT_CONF"
+if [ -n "$BASE_DOMAIN" ]; then
+  AUTH_USERNAME_FORMAT="%{if;%d;eq;${BASE_DOMAIN};%n;%u}"
+else
+  AUTH_USERNAME_FORMAT='%n'
+fi
+if grep -q '^auth_username_format = ' "$DOVECOT_CONF"; then
+  sed -i "s|^auth_username_format = .*|auth_username_format = ${AUTH_USERNAME_FORMAT}|" "$DOVECOT_CONF"
+else
+  printf '\nauth_username_format = %s\n' "$AUTH_USERNAME_FORMAT" >> "$DOVECOT_CONF"
 fi
 
 if ! doveconf -n >/dev/null 2>/tmp/dovecot-set-limits.err; then

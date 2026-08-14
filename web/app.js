@@ -866,6 +866,368 @@ function wireMailAdminAddressSection(content, status) {
   };
 }
 
+// Wirtualne domeny/skrzynki pocztowe (klienci hostingu, NIEZALEZNE od
+// kont systemowych/SSH - patrz Faza 1 wyzej) - patrz
+// [[project_caddy_dashboard_virtual_mail_plan]]. Prosty widok
+// lista<->zarzadzanie (bez routingu), stan trzymany w module-level
+// zmiennej, tak jak reszta tego pliku trzyma biezacy tab.
+let mailVirtualSelectedDomain = null;
+
+async function mailVirtualDkimSectionHtml(domain) {
+  let dkim = { installed: false, recordName: null, recordValue: null };
+  let spfDmarc = null;
+  try {
+    dkim = await api('GET', `/mail/dkim-status?domain=${encodeURIComponent(domain)}`);
+  } catch {
+    dkim = { installed: false, recordName: null, recordValue: null };
+  }
+  try {
+    spfDmarc = await api('GET', `/mail/spf-dmarc?domain=${encodeURIComponent(domain)}`);
+  } catch {
+    spfDmarc = null;
+  }
+  const spfDmarcHtml = spfDmarc ? `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h3 style="margin-bottom:8px;">${t('mail.spf_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.spf_dns_hint')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+      </dl>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dmarc_dns_hint')}</p>
+      <dl style="margin:0 0 16px;">
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+      </dl>
+    </div>
+  ` : '';
+  return `
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+      <h3 style="margin-bottom:8px;">${t('mail.dkim_title')}</h3>
+      ${dkim.installed ? `
+        <p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('mail.dkim_installed_hint')}</p>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_dns_hint')}</p>
+        <dl style="margin:0 0 16px;">
+          <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
+          <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
+          <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+        </dl>
+      ` : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
+      <button type="button" class="secondary" data-mail-virtual-dkim-domain="${escapeHtml(domain)}">${dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
+      <div class="action-msg" id="mail-virtual-dkim-msg"></div>
+    </div>
+    ${spfDmarcHtml}
+  `;
+}
+
+async function renderMailVirtualListHtml() {
+  let domains, siteDomains;
+  try {
+    [{ items: domains }, { items: siteDomains }] = await Promise.all([
+      api('GET', '/mail/virtual/domains'),
+      api('GET', '/mail/virtual/site-domains')
+    ]);
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const virtualDomainSet = new Set(domains.map((d) => d.domain));
+  const availableSiteDomains = siteDomains.filter((s) => !virtualDomainSet.has(s.domain));
+
+  const rows = domains.map((d) => `
+    <tr>
+      <td>${escapeHtml(d.domain)}</td>
+      <td>${escapeHtml(d.ownerAccount)}</td>
+      <td>
+        <button type="button" class="secondary" data-mail-virtual-manage="${escapeHtml(d.domain)}">${t('mail.virtual_manage_button')}</button>
+        <button type="button" class="danger" data-mail-virtual-remove="${escapeHtml(d.domain)}">${t('mail.virtual_remove_button')}</button>
+      </td>
+    </tr>
+  `).join('');
+
+  const addFormHtml = availableSiteDomains.length ? `
+    <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
+      <select id="mail-virtual-add-select">
+        ${availableSiteDomains.map((s) => `<option value="${escapeHtml(s.domain)}" data-owner="${escapeHtml(s.username)}">${escapeHtml(s.domain)} (${escapeHtml(s.username)})</option>`).join('')}
+      </select>
+      <button type="button" id="mail-virtual-add-btn">${t('mail.virtual_add_domain_button')}</button>
+    </div>
+  ` : `<p style="margin:16px 0 0;color:var(--muted);font-size:13px;">${t('mail.virtual_add_domain_select_empty')}</p>`;
+
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.virtual_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.virtual_description')}</p>
+      ${domains.length ? `
+        <table class="firewall-table">
+          <thead>
+            <tr>
+              <th>${t('mail.virtual_column_domain')}</th>
+              <th>${t('mail.virtual_column_owner')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      ` : `<div class="empty-state">${t('mail.virtual_empty')}</div>`}
+      ${addFormHtml}
+      <div class="action-msg" id="mail-virtual-msg"></div>
+    </div>
+  `;
+}
+
+async function renderMailVirtualManageHtml(domain) {
+  let mailboxes, aliases;
+  try {
+    [{ items: mailboxes }, { items: aliases }] = await Promise.all([
+      api('GET', `/mail/virtual/mailboxes?domain=${encodeURIComponent(domain)}`),
+      api('GET', `/mail/virtual/aliases?domain=${encodeURIComponent(domain)}`)
+    ]);
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+
+  const mailboxRows = mailboxes.map((m) => `
+    <tr>
+      <td>${escapeHtml(m.localpart)}@${escapeHtml(domain)}</td>
+      <td>
+        <button type="button" class="secondary" data-mail-virtual-mailbox-passwd="${escapeHtml(m.localpart)}">${t('mail.virtual_changepw_button')}</button>
+        <button type="button" class="danger" data-mail-virtual-mailbox-remove="${escapeHtml(m.localpart)}">${t('mail.virtual_delete_button')}</button>
+      </td>
+    </tr>
+  `).join('');
+
+  const aliasRows = aliases.map((a) => `
+    <tr>
+      <td>${escapeHtml(a.source)}</td>
+      <td>${escapeHtml(a.destination)}</td>
+      <td><button type="button" class="danger" data-mail-virtual-alias-remove="${escapeHtml(a.source)}" data-mail-virtual-alias-dest="${escapeHtml(a.destination)}">${t('mail.virtual_delete_button')}</button></td>
+    </tr>
+  `).join('');
+
+  const dkimHtml = await mailVirtualDkimSectionHtml(domain);
+
+  return `
+    <div class="system-info-card">
+      <button type="button" class="secondary" id="mail-virtual-back-btn">${t('mail.virtual_back_button')}</button>
+      <h3 style="margin-top:12px;">${escapeHtml(domain)}</h3>
+
+      <div style="margin-top:16px;">
+        <h3 style="margin-bottom:8px;">${t('mail.virtual_mailboxes_title')}</h3>
+        ${mailboxes.length ? `
+          <table class="firewall-table">
+            <thead><tr><th>${t('mail.virtual_column_mailbox')}</th><th></th></tr></thead>
+            <tbody>${mailboxRows}</tbody>
+          </table>
+        ` : `<div class="empty-state">${t('mail.virtual_mailbox_empty')}</div>`}
+        <button type="button" style="margin-top:12px;" id="mail-virtual-add-mailbox-btn">${t('mail.virtual_add_mailbox_button')}</button>
+      </div>
+
+      <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+        <h3 style="margin-bottom:8px;">${t('mail.virtual_aliases_title')}</h3>
+        ${aliases.length ? `
+          <table class="firewall-table">
+            <thead><tr><th>${t('mail.virtual_column_source')}</th><th>${t('mail.virtual_column_destination')}</th><th></th></tr></thead>
+            <tbody>${aliasRows}</tbody>
+          </table>
+        ` : `<div class="empty-state">${t('mail.virtual_alias_empty')}</div>`}
+        <button type="button" style="margin-top:12px;" id="mail-virtual-add-alias-btn">${t('mail.virtual_add_alias_button')}</button>
+      </div>
+
+      ${dkimHtml}
+      <div class="action-msg" id="mail-virtual-msg"></div>
+    </div>
+  `;
+}
+
+async function renderMailVirtualSection() {
+  return mailVirtualSelectedDomain
+    ? renderMailVirtualManageHtml(mailVirtualSelectedDomain)
+    : renderMailVirtualListHtml();
+}
+
+function wireMailVirtualSection(content) {
+  const msgEl = () => document.getElementById('mail-virtual-msg');
+
+  if (mailVirtualSelectedDomain) {
+    const domain = mailVirtualSelectedDomain;
+
+    document.getElementById('mail-virtual-back-btn').onclick = async () => {
+      mailVirtualSelectedDomain = null;
+      await renderMailTab(content);
+    };
+
+    content.querySelectorAll('[data-mail-virtual-mailbox-passwd]').forEach((btn) => {
+      btn.onclick = async () => {
+        const localpart = btn.dataset.mailVirtualMailboxPasswd;
+        const password = window.prompt(t('mail.virtual_prompt_password'));
+        if (password === null) return;
+        if (password.length < 8) { window.alert(t('mail.virtual_password_too_short')); return; }
+        btn.disabled = true;
+        msgEl().textContent = t('mail.virtual_working');
+        msgEl().className = 'action-msg';
+        try {
+          await api('PUT', `/mail/virtual/mailboxes/${encodeURIComponent(domain)}/${encodeURIComponent(localpart)}`, { password });
+          await renderMailTab(content);
+        } catch (e) {
+          msgEl().textContent = e.message;
+          msgEl().className = 'action-msg error';
+          btn.disabled = false;
+        }
+      };
+    });
+
+    content.querySelectorAll('[data-mail-virtual-mailbox-remove]').forEach((btn) => {
+      btn.onclick = async () => {
+        const localpart = btn.dataset.mailVirtualMailboxRemove;
+        if (!window.confirm(t('mail.virtual_confirm_remove_mailbox', { mailbox: `${localpart}@${domain}` }))) return;
+        btn.disabled = true;
+        msgEl().textContent = t('mail.virtual_working');
+        msgEl().className = 'action-msg';
+        try {
+          await api('DELETE', `/mail/virtual/mailboxes/${encodeURIComponent(domain)}/${encodeURIComponent(localpart)}`);
+          await renderMailTab(content);
+        } catch (e) {
+          msgEl().textContent = e.message;
+          msgEl().className = 'action-msg error';
+          btn.disabled = false;
+        }
+      };
+    });
+
+    const addMailboxBtn = document.getElementById('mail-virtual-add-mailbox-btn');
+    if (addMailboxBtn) {
+      addMailboxBtn.onclick = async () => {
+        const localpart = window.prompt(t('mail.virtual_prompt_localpart'));
+        if (localpart === null || !localpart.trim()) return;
+        const password = window.prompt(t('mail.virtual_prompt_password'));
+        if (password === null) return;
+        if (password.length < 8) { window.alert(t('mail.virtual_password_too_short')); return; }
+        addMailboxBtn.disabled = true;
+        msgEl().textContent = t('mail.virtual_working');
+        msgEl().className = 'action-msg';
+        try {
+          await api('POST', '/mail/virtual/mailboxes', { domain, localpart: localpart.trim(), password });
+          await renderMailTab(content);
+        } catch (e) {
+          msgEl().textContent = e.message;
+          msgEl().className = 'action-msg error';
+          addMailboxBtn.disabled = false;
+        }
+      };
+    }
+
+    content.querySelectorAll('[data-mail-virtual-alias-remove]').forEach((btn) => {
+      btn.onclick = async () => {
+        const source = btn.dataset.mailVirtualAliasRemove;
+        const destination = btn.dataset.mailVirtualAliasDest;
+        if (!window.confirm(t('mail.virtual_confirm_remove_alias', { source, destination }))) return;
+        btn.disabled = true;
+        msgEl().textContent = t('mail.virtual_working');
+        msgEl().className = 'action-msg';
+        try {
+          await api('DELETE', `/mail/virtual/aliases/${encodeURIComponent(domain)}/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`);
+          await renderMailTab(content);
+        } catch (e) {
+          msgEl().textContent = e.message;
+          msgEl().className = 'action-msg error';
+          btn.disabled = false;
+        }
+      };
+    });
+
+    const addAliasBtn = document.getElementById('mail-virtual-add-alias-btn');
+    if (addAliasBtn) {
+      addAliasBtn.onclick = async () => {
+        const sourceLocalpart = window.prompt(t('mail.virtual_prompt_source'));
+        if (sourceLocalpart === null || !sourceLocalpart.trim()) return;
+        const destination = window.prompt(t('mail.virtual_prompt_destination'));
+        if (destination === null || !destination.trim()) return;
+        addAliasBtn.disabled = true;
+        msgEl().textContent = t('mail.virtual_working');
+        msgEl().className = 'action-msg';
+        try {
+          await api('POST', '/mail/virtual/aliases', { domain, source: sourceLocalpart.trim(), destination: destination.trim() });
+          await renderMailTab(content);
+        } catch (e) {
+          msgEl().textContent = e.message;
+          msgEl().className = 'action-msg error';
+          addAliasBtn.disabled = false;
+        }
+      };
+    }
+
+    content.querySelectorAll('[data-mail-virtual-dkim-domain]').forEach((btn) => {
+      btn.onclick = async () => {
+        if (!window.confirm(t('mail.dkim_confirm_install', { domain }))) return;
+        btn.disabled = true;
+        const dkimMsg = document.getElementById('mail-virtual-dkim-msg');
+        dkimMsg.textContent = t('mail.postfix_limits_working');
+        dkimMsg.className = 'action-msg';
+        try {
+          await api('POST', '/mail/dkim-install', { domain });
+          await renderMailTab(content);
+        } catch (e) {
+          dkimMsg.textContent = e.message;
+          dkimMsg.className = 'action-msg error';
+          btn.disabled = false;
+        }
+      };
+    });
+
+    return;
+  }
+
+  content.querySelectorAll('[data-mail-virtual-manage]').forEach((btn) => {
+    btn.onclick = async () => {
+      mailVirtualSelectedDomain = btn.dataset.mailVirtualManage;
+      await renderMailTab(content);
+    };
+  });
+
+  content.querySelectorAll('[data-mail-virtual-remove]').forEach((btn) => {
+    btn.onclick = async () => {
+      const domain = btn.dataset.mailVirtualRemove;
+      if (!window.confirm(t('mail.virtual_confirm_remove', { domain }))) return;
+      btn.disabled = true;
+      msgEl().textContent = t('mail.virtual_working');
+      msgEl().className = 'action-msg';
+      try {
+        await api('DELETE', `/mail/virtual/domains/${encodeURIComponent(domain)}`);
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl().textContent = e.message;
+        msgEl().className = 'action-msg error';
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const addBtn = document.getElementById('mail-virtual-add-btn');
+  if (addBtn) {
+    addBtn.onclick = async () => {
+      const select = document.getElementById('mail-virtual-add-select');
+      const domain = select.value;
+      const ownerAccount = select.selectedOptions[0]?.dataset.owner;
+      addBtn.disabled = true;
+      msgEl().textContent = t('mail.virtual_working');
+      msgEl().className = 'action-msg';
+      try {
+        await api('POST', '/mail/virtual/domains', { domain, ownerAccount });
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl().textContent = e.message;
+        msgEl().className = 'action-msg error';
+        addBtn.disabled = false;
+      }
+    };
+  }
+}
+
 async function renderMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
@@ -879,6 +1241,7 @@ async function renderMailTab(content) {
       renderMailStatsSection()
     ]);
     const adminAddressHtml = await mailAdminAddressSectionHtml(domainStatus);
+    const virtualHtml = await renderMailVirtualSection();
     content.innerHTML = `
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
@@ -896,6 +1259,7 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;">${adminAddressHtml}</div>
       </div>
       <div style="margin-top:16px;">${accessHtml}</div>
+      <div style="margin-top:16px;">${virtualHtml}</div>
     `;
     applyTranslations();
     wireMailServiceCards(content);
@@ -905,6 +1269,7 @@ async function renderMailTab(content) {
     wireMailAdminAddressSection(content, domainStatus);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
+    wireMailVirtualSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

@@ -18,9 +18,10 @@ const USERNAME_RE = /^srv_[0-9]+$/;
 // stabilny, systemowy zestaw pakietow (postfix + dovecot + opendkim),
 // patrz mail-install.sh. Timeout jak przy MariaDB - instalacja trzech
 // pakietow + generowanie certyfikatu moze potrwac.
-async function installMail() {
+async function installMail(baseDomain) {
   try {
-    const { stdout } = await execFileAsync('sudo', ['-n', SCRIPT_PATH], { timeout: 300000 });
+    const args = baseDomain ? [SCRIPT_PATH, baseDomain] : [SCRIPT_PATH];
+    const { stdout } = await execFileAsync('sudo', ['-n', ...args], { timeout: 300000 });
     return { success: true, message: stdout.trim() };
   } catch (e) {
     const stderr = (e.stderr || '').toString().trim();
@@ -264,13 +265,13 @@ async function getDovecotLimits() {
   }
 }
 
-async function setDovecotLimits(maxUseripConnections) {
+async function setDovecotLimits(maxUseripConnections, baseDomain) {
   if (!Number.isInteger(maxUseripConnections) || maxUseripConnections < 1) {
     throw Object.assign(new Error('Nieprawidlowa wartosc limitu polaczen.'), { status: 400 });
   }
   try {
     const { stdout } = await execFileAsync(
-      'sudo', ['-n', DOVECOT_LIMITS_SCRIPT_PATH, String(maxUseripConnections)],
+      'sudo', ['-n', DOVECOT_LIMITS_SCRIPT_PATH, String(maxUseripConnections), baseDomain || ''],
       { timeout: 15000 }
     );
     return { success: true, message: stdout.trim() };

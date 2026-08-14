@@ -19,11 +19,32 @@
 #   klienci pocztowi pokaza ostrzezenie, dopoki admin nie podmieni go na
 #   prawdziwy certyfikat domeny mailowej (przyszly krok).
 #
-# Uzycie: mail-install.sh (bez argumentow)
+# Uzycie: mail-install.sh [wykryta_domena_bazowa_panelu]
+#   Argument opcjonalny - jesli podany, uzywany do zbudowania warunkowego
+#   auth_username_format (patrz nizej przy 90-caddy-dashboard.conf). Jesli
+#   pominiety/pusty, samonaprawa w dovecot-set-limits.sh uzupelni go
+#   pozniej, gdy tylko domena bazowa bedzie znana.
 
 set -uo pipefail
 
 err() { echo "BLAD: $*" >&2; exit 1; }
+
+BASE_DOMAIN="${1:-}"
+# %n = obcina wszystko od "@" (potrzebne dla PAM, ktory zna tylko gole
+# nazwy systemowe) - ALE globalne, bezwarunkowe %n zabija tez %d (domene)
+# dla PRZYSZLYCH wirtualnych skrzynek (SQL passdb nizej), bo
+# auth_username_format jest stosowany PRZED zbudowaniem %u dla WSZYSTKICH
+# passdb/userdb, nie tylko PAM. %{if;%d;eq;<domena>;%n;%u} rozwiazuje to:
+# dla logowania w domenie panelu (system/PAM) uzywa golej nazwy (%n), dla
+# kazdej innej domeny (wirtualne skrzynki klientow) zachowuje pelny adres
+# (%u), zeby %d/%n byly nadal dostepne dla zapytania SQL. Skladnia
+# %{if;...} dostepna od Dovecota 2.2.33 (potwierdzone w dokumentacji
+# 2026-08-14) - bezpieczna na AlmaLinux/Rocky 9 (2.3.16) i 10 (2.3.21+).
+if [ -n "$BASE_DOMAIN" ]; then
+  AUTH_USERNAME_FORMAT="%{if;%d;eq;${BASE_DOMAIN};%n;%u}"
+else
+  AUTH_USERNAME_FORMAT='%n'
+fi
 
 getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - nietypowa instalacja AlmaLinux/Rocky."
 
@@ -32,7 +53,10 @@ getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - 
 # pakiecie. Bez tego dkim-install.sh (przycisk "Zainstaluj DKIM" w
 # panelu) failuje "brak polecenia opendkim-genkey" - potwierdzone na
 # zywym serwerze 2026-08-14.
-dnf install -y postfix dovecot opendkim opendkim-tools || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools) nie powiodla sie."
+# sqlite (CLI /usr/bin/sqlite3) i dovecot-sqlite (driver passdb/userdb dla
+# Dovecota) - wymagane dla wirtualnych domen/skrzynek ponizej, obie sa
+# osobnymi (male) podpakietami, nie czescia bazowego "dovecot"/systemu.
+dnf install -y postfix dovecot opendkim opendkim-tools sqlite dovecot-sqlite || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools, sqlite, dovecot-sqlite) nie powiodla sie."
 
 # --- TLS: self-signed cert (tymczasowy, patrz komentarz na gorze) ---
 CERT_FILE="/etc/pki/tls/certs/mail-selfsigned.crt"
@@ -65,11 +89,10 @@ disable_plaintext_auth = yes
 
 # PAM zna tylko GOLE nazwy uzytkownikow systemowych (np. "cdadmin"), nie
 # "cdadmin@domena" - bez tego logowanie pelnym adresem (user@domena)
-# zawsze by failowalo, mimo ze sam login "user" dziala. %n obcina
-# wszystko od "@" wlacznie przed przekazaniem do PAM, wiec
-# "cdadmin@20z.eu" i "cdadmin" loguja sie identycznie, jako ten sam
-# system user.
-auth_username_format = %n
+# zawsze by failowalo, mimo ze sam login "user" dziala. Warunkowy format
+# (patrz komentarz przy BASE_DOMAIN na gorze skryptu) obcina domene TYLKO
+# dla domeny panelu (PAM), zachowujac ja dla wirtualnych skrzynek (SQL).
+auth_username_format = ${AUTH_USERNAME_FORMAT}
 
 service auth {
   unix_listener /var/spool/postfix/private/auth {
@@ -161,6 +184,125 @@ smtps     inet  n       -       y       -       -       smtpd
 EOF
 fi
 
+# --- Wirtualne domeny/skrzynki pocztowe (klienci hostingu, NIEZALEZNE od
+# kont systemowych/SSH z Fazy 1 powyzej) - DODATKOWA, rownolegla sciezka,
+# nie zastepuje niczego istniejacego. Dedykowany systemowy user "vmail"
+# (bez logowania) - zadna wirtualna skrzynka NIGDY nie nalezy do
+# prawdziwego konta SSH/PAM. Zrodlo prawdy: SQLite
+# (/etc/caddy-dashboard/mail-virtual.db, patrz server/scripts/
+# mail-virtual-*.sh) - Dovecot czyta go NA ZYWO (wlasny driver sqlite),
+# Postfix (czesto BEZ wkompilowanego sqlite) dostaje plaskie pliki hash:
+# regenerowane z tej samej bazy przez mail-virtual-*.sh (ten sam wzorzec
+# co KeyTable/SigningTable OpenDKIM).
+if ! getent passwd vmail >/dev/null 2>&1; then
+  useradd --system --no-create-home --home-dir /var/mail/vhosts --shell /sbin/nologin vmail \
+    || err "Utworzenie systemowego uzytkownika 'vmail' nie powiodlo sie."
+fi
+VMAIL_UID="$(id -u vmail)"
+VMAIL_GID="$(id -g vmail)"
+mkdir -p /var/mail/vhosts
+chown vmail:vmail /var/mail/vhosts
+chmod 750 /var/mail/vhosts
+
+VMAIL_DB="/etc/caddy-dashboard/mail-virtual.db"
+mkdir -p /etc/caddy-dashboard
+if [ ! -f "$VMAIL_DB" ]; then
+  sqlite3 "$VMAIL_DB" <<'SQL' || err "Inicjalizacja schematu SQLite (${VMAIL_DB}) nie powiodla sie."
+CREATE TABLE domains (
+  id INTEGER PRIMARY KEY,
+  domain TEXT UNIQUE NOT NULL,
+  owner_account TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE mailboxes (
+  id INTEGER PRIMARY KEY,
+  domain_id INTEGER NOT NULL REFERENCES domains(id),
+  localpart TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  maildir TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(domain_id, localpart)
+);
+CREATE TABLE aliases (
+  id INTEGER PRIMARY KEY,
+  domain_id INTEGER NOT NULL REFERENCES domains(id),
+  source TEXT NOT NULL,
+  destination TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+SQL
+fi
+# Dovecot laczy sie do tej bazy jako grupa "dovecot" (proces auth-worker,
+# NIE root) - musi miec jawny dostep grupowy do odczytu (zawiera
+# zahaszowane hasla, wiec NIE world-readable). Ten sam bledny wzorzec
+# (poleganie na umask roota) juz raz zepsul OpenDKIM na tym serwerze
+# (2026-08-14, patrz [[project_caddy_dashboard_mail_access]]) - tu
+# ustawiane jawnie, bezwarunkowo przy KAZDYM uruchomieniu.
+chown root:dovecot "$VMAIL_DB"
+chmod 640 "$VMAIL_DB"
+
+# Plik z zapytaniami SQL (NIE zawiera hasel, tylko sciezke do bazy +
+# zapytania) - Dovecot parsuje WSZYSTKIE pliki configu jako root przy
+# starcie, wiec 0600 root:root (standardowy, bezpieczny wzorzec Dovecota
+# dla *-sql.conf.ext) wystarcza - w przeciwienstwie do samej bazy powyzej,
+# ktora jest odpytywana NA ZYWO przez nieuprzywilejowany proces.
+cat > /etc/dovecot/dovecot-sql-virtual.conf.ext <<EOF
+driver = sqlite
+connect = ${VMAIL_DB}
+default_pass_scheme = SHA512-CRYPT
+password_query = SELECT mailboxes.password_hash AS password FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain = '%d' AND mailboxes.localpart = '%n' AND mailboxes.enabled = 1
+user_query = SELECT '/var/mail/vhosts/' || domains.domain || '/' || mailboxes.localpart AS home, 'maildir:/var/mail/vhosts/' || domains.domain || '/' || mailboxes.localpart || '/Maildir' AS mail, ${VMAIL_UID} AS uid, ${VMAIL_GID} AS gid FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain = '%d' AND mailboxes.localpart = '%n' AND mailboxes.enabled = 1
+EOF
+chmod 600 /etc/dovecot/dovecot-sql-virtual.conf.ext
+
+# WSPOLISTNIEJE z PAM (90-caddy-dashboard.conf, wlaczony przez pakietowy
+# auth-system.conf.ext) - Dovecot probuje kazdy passdb/userdb po kolei,
+# brak dopasowania (0 wierszy z SQL) po prostu przechodzi do nastepnego,
+# zero konfliktu.
+cat > /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf <<'EOF'
+# Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
+passdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql-virtual.conf.ext
+}
+userdb {
+  driver = sql
+  args = /etc/dovecot/dovecot-sql-virtual.conf.ext
+}
+EOF
+chmod 644 /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf
+
+dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (91-caddy-dashboard-virtual.conf) nie przeszla walidacji (dovecot -n)."
+
+# --- Postfix: wirtualne domeny/skrzynki/aliasy - PLASKIE pliki hash:,
+# REGENEROWANE ze zrodla prawdy (SQLite powyzej) przez mail-virtual-*.sh
+# przy kazdej zmianie (ten sam wzorzec co KeyTable/SigningTable OpenDKIM).
+# Tworzone tu jako PUSTE (0 domen) - postmap nizej ma co zwalidowac nawet
+# przy zerowej liczbie wirtualnych domen.
+VIRTUAL_DOMAINS_FILE="/etc/postfix/virtual-domains"
+VIRTUAL_MAILBOX_FILE="/etc/postfix/virtual-mailboxes"
+VIRTUAL_ALIAS_FILE="/etc/postfix/virtual-aliases"
+# chmod 644 PO KAZDYM postmap (nie tylko przy tworzeniu) - `postmap`
+# generuje plik .db od nowa za kazdym razem, wiec dziedziczy AKTUALNY
+# umask roota (na tym serwerze potrafi dac 640, patrz OpenDKIM
+# 2026-08-14) - bez jawnego chmod proces "postfix" (odebrane uprawnienia,
+# NIE root) nie moglby odczytac WLASNYCH map wirtualnych domen/skrzynek.
+for f in "$VIRTUAL_DOMAINS_FILE" "$VIRTUAL_MAILBOX_FILE" "$VIRTUAL_ALIAS_FILE"; do
+  [ -f "$f" ] || : > "$f"
+  postmap "$f" || err "postmap ${f} nie powiodlo sie."
+  chmod 644 "$f" "${f}.db" 2>/dev/null || true
+done
+
+postconf -e "virtual_mailbox_base=/var/mail/vhosts"
+postconf -e "virtual_mailbox_domains=hash:${VIRTUAL_DOMAINS_FILE}"
+postconf -e "virtual_mailbox_maps=hash:${VIRTUAL_MAILBOX_FILE}"
+postconf -e "virtual_alias_maps=hash:${VIRTUAL_ALIAS_FILE}"
+postconf -e "virtual_uid_maps=static:${VMAIL_UID}"
+postconf -e "virtual_gid_maps=static:${VMAIL_GID}"
+postconf -e "virtual_minimum_uid=${VMAIL_UID}"
+postconf -e 'virtual_transport = virtual'
+
 postfix check || err "Konfiguracja Postfixa nie przeszla walidacji (postfix check) po zmianach."
 
 # --- OpenDKIM: pojedyncze dyrektywy w pliku pakietu (brak wlasnego
@@ -223,6 +365,14 @@ ensure_directive "ExternalIgnoreList" "refile:/etc/opendkim/TrustedHosts"
 
 systemctl enable --now postfix dovecot opendkim \
   || err "Pakiety zainstalowane, ale nie udalo sie uruchomic/wlaczyc jednej z uslug (postfix/dovecot/opendkim)."
+# Skrypt jest idempotentny i moze byc URUCHOMIONY PONOWNIE na juz
+# dzialajacej instalacji (np. zeby dolozyc obsluge wirtualnych domen do
+# istniejacej Poczty) - `enable --now` na juz aktywnej uslugie NIC nie
+# robi (start na running unit to no-op), wiec bez jawnego reload/restart
+# ponizej nowa konfiguracja (Postfix virtual_*, nowy plik Dovecota) NIGDY
+# by sie nie zaladowala na zywym serwerze bez recznego restartu.
+systemctl reload postfix >/dev/null 2>&1 || true
+systemctl reload dovecot >/dev/null 2>&1 || true
 
 # --- Firewall: SMTP/Submission/SMTPS + IMAP/IMAPS - SWIADOMIE bez POP3/POP3S ---
 firewall-cmd --permanent --add-service=smtp >/dev/null 2>&1 || true

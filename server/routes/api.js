@@ -46,6 +46,12 @@ import {
 import { detectBaseDomain, applyCaddyConfig, removeCaddyConfig, getCaddyConfigStatus } from '../services/roundcubeSite.js';
 import { getRoundcubeConfig, setRoundcubeConfig, clearRoundcubeConfig } from '../services/roundcubeConfig.js';
 import { getAllMailLimits, setMailLimit, DEFAULT_LIMIT as DEFAULT_MAIL_LIMIT } from '../services/mailLimits.js';
+import {
+  listVirtualDomains, addVirtualDomain, removeVirtualDomain,
+  listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
+  listVirtualAliases, addVirtualAlias, removeVirtualAlias
+} from '../services/mailVirtual.js';
+import { listSiteOwners } from '../services/hostingUserSites.js';
 
 const router = Router();
 const execFileAsync = promisify(execFile);
@@ -590,7 +596,12 @@ router.post('/mariadb/install', async (req, res) => {
 
 router.post('/mail/install', async (req, res) => {
   try {
-    const result = await installMail();
+    // Wykryta domena bazowa (jesli juz dostepna - np. reinstalacja na
+    // serwerze z istniejacymi stronami) trafia od razu do warunkowego
+    // auth_username_format (patrz mail-install.sh) - jesli jeszcze
+    // niedostepna, dovecot-set-limits.sh uzupelni ja pozniej.
+    const { suggested } = await detectBaseDomain();
+    const result = await installMail(suggested);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -1203,7 +1214,8 @@ router.get('/mail/dovecot-limits', async (req, res) => {
 router.post('/mail/dovecot-limits', async (req, res) => {
   try {
     const maxUseripConnections = parseInt(req.body?.maxUseripConnections, 10);
-    const result = await setDovecotLimits(maxUseripConnections);
+    const { suggested } = await detectBaseDomain();
+    const result = await setDovecotLimits(maxUseripConnections, suggested);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
@@ -1286,6 +1298,108 @@ router.get('/mail/spf-dmarc', async (req, res) => {
   }
   try {
     res.json(await getSpfDmarcInfo(domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Wirtualne domeny/skrzynki pocztowe (klienci hostingu, NIEZALEZNE od kont
+// systemowych/SSH) - patrz server/services/mailVirtual.js i
+// server/scripts/mail-virtual-*.sh. DODATKOWA sciezka obok Fazy 1
+// (system/PAM) powyzej, nie zastepuje niczego istniejacego.
+router.get('/mail/virtual/site-domains', (req, res) => {
+  try {
+    res.json({ items: listSiteOwners() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/virtual/domains', async (req, res) => {
+  try {
+    res.json({ items: await listVirtualDomains() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/virtual/domains', async (req, res) => {
+  try {
+    res.json(await addVirtualDomain(req.body?.domain, req.body?.ownerAccount));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/virtual/domains/:domain', async (req, res) => {
+  try {
+    res.json(await removeVirtualDomain(req.params.domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/virtual/mailboxes', async (req, res) => {
+  const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json({ items: await listVirtualMailboxes(domain) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/virtual/mailboxes', async (req, res) => {
+  try {
+    res.json(await addVirtualMailbox(req.body?.domain, req.body?.localpart, req.body?.password));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/mail/virtual/mailboxes/:domain/:localpart', async (req, res) => {
+  try {
+    res.json(await setVirtualMailboxPassword(req.params.domain, req.params.localpart, req.body?.password));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/virtual/mailboxes/:domain/:localpart', async (req, res) => {
+  try {
+    res.json(await removeVirtualMailbox(req.params.domain, req.params.localpart));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/virtual/aliases', async (req, res) => {
+  const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+  if (!domain) {
+    res.status(400).json({ error: 'Podaj domene.' });
+    return;
+  }
+  try {
+    res.json({ items: await listVirtualAliases(domain) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/virtual/aliases', async (req, res) => {
+  try {
+    res.json(await addVirtualAlias(req.body?.domain, req.body?.source, req.body?.destination));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/virtual/aliases/:domain/:source/:destination', async (req, res) => {
+  try {
+    res.json(await removeVirtualAlias(req.params.domain, req.params.source, req.params.destination));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
