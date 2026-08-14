@@ -9,6 +9,7 @@ import apiRoutes from './routes/api.js';
 import userApiRoutes from './routes/userApi.js';
 import pmaGateRoutes from './routes/pmaGate.js';
 import admGateRoutes from './routes/admGate.js';
+import rcGateRoutes from './routes/rcGate.js';
 import { requireAuth, requireUserAuth, getAllowedUsers, isSameOrigin } from './services/auth.js';
 import { APP_VERSION } from './version.js';
 
@@ -156,6 +157,7 @@ app.use((req, res, next) => {
 // powyzej), patrz server/routes/pmaGate.js.
 app.use('/pma-gate', pmaGateRoutes);
 app.use('/adm-gate', admGateRoutes);
+app.use('/rc-gate', rcGateRoutes);
 
 app.use(express.static(path.join(__dirname, '../web')));
 // SPA fallback dla panelu klienta (/user/*) - MUSI byc przed catch-allem
