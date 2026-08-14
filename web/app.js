@@ -357,7 +357,7 @@ function mailServiceCardHtml(title, svc) {
   if (!svc.found) {
     return `
       <div class="system-info-card">
-        <h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>
+        <h3>${escapeHtml(title)}</h3>
         <div class="empty-state">${t('mail.not_installed_hint')}</div>
       </div>
     `;
@@ -2213,7 +2213,7 @@ function serviceDetailHtml(svc, title) {
   const isEnabled = svc.enabled === 'enabled';
   return `
     <div class="system-info-card">
-      ${title ? `<h3 style="margin:0 0 12px;font-size:15px;">${escapeHtml(title)}</h3>` : ''}
+      ${title ? `<h3>${escapeHtml(title)}</h3>` : ''}
       <dl>
         <dt data-i18n="services.unit"></dt><dd>${escapeHtml(svc.unit)}</dd>
         <dt data-i18n="services.status"></dt><dd><span class="status-badge ${isActive ? 'active' : 'inactive'}">${isActive ? t('services.active') : t('services.inactive')}</span> (${escapeHtml(svc.subState)})</dd>
@@ -3482,7 +3482,7 @@ function redisInstancesListCardHtml(instances) {
     : `<tr><td colspan="4" style="text-align:center;color:var(--muted);">${t('redisadmin.empty')}</td></tr>`;
 
   return `
-    <h3 style="margin:0 0 12px;font-size:15px;">${t('redisadmin.list_title')}</h3>
+    <h3>${t('redisadmin.list_title')}</h3>
     <div style="overflow-x:auto;">
       <table class="firewall-table">
         <thead>
@@ -3504,7 +3504,7 @@ function redisInstancesStatsCardHtml(instances) {
   const totalMb = instances.reduce((sum, i) => sum + i.maxMemoryMb, 0);
 
   return `
-    <h3 style="margin:0 0 12px;font-size:15px;">${t('redisadmin.stats_title')}</h3>
+    <h3>${t('redisadmin.stats_title')}</h3>
     <div class="info-grid">
       <div class="info-label">${t('redisadmin.stats_total')}</div><div class="info-value">${instances.length}</div>
       <div class="info-label">${t('redisadmin.stats_running')}</div><div class="info-value">${runningCount}</div>
