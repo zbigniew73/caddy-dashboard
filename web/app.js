@@ -2681,6 +2681,13 @@ function serviceTitleFor(svc) {
 // 'title' to opcjonalny naglowek karty (wzor jak w redisadmin) - uzywany
 // tam, gdzie kilka kart uslug wystepuje razem na jednej zakladce (np.
 // Poczta: Postfix + Dovecot) i trzeba je podpisac.
+//
+// Caddy (jedyny wyjatek): brak Start/Stop, tylko Restart. Caddy to
+// reverse proxy CALEGO panelu (typowa instalacja EXPOSURE=world) - Stop
+// odcina dostep do panelu (i wszystkich stron) bez mozliwosci ponownego
+// Startu z poziomu UI (polaczenie z przegladarka i tak idzie przez
+// Caddy), a Start i tak nigdy nie bylby klikalny w praktyce z tego
+// samego powodu - jesli Caddy nie dziala, panel jest nieosiagalny.
 function serviceDetailHtml(svc, title) {
   if (!svc.found) {
     return `<div class="empty-state">${t('services.not_installed_detail')}</div>`;
@@ -2698,9 +2705,9 @@ function serviceDetailHtml(svc, title) {
         <dt data-i18n="services.since"></dt><dd>${escapeHtml(svc.since || '-')}</dd>
       </dl>
       <div class="service-actions">
-        <button type="button" data-key="${svc.key}" data-action="start">${t('services.action_start')}</button>
+        ${svc.key === 'caddy' ? '' : `<button type="button" data-key="${svc.key}" data-action="start">${t('services.action_start')}</button>`}
         <button type="button" data-key="${svc.key}" data-action="restart">${t('services.action_restart')}</button>
-        <button type="button" class="danger" data-key="${svc.key}" data-action="stop">${t('services.action_stop')}</button>
+        ${svc.key === 'caddy' ? '' : `<button type="button" class="danger" data-key="${svc.key}" data-action="stop">${t('services.action_stop')}</button>`}
       </div>
       <div class="action-msg" id="${svc.key}-action-msg"></div>
     </div>
