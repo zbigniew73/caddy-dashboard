@@ -27,7 +27,12 @@ err() { echo "BLAD: $*" >&2; exit 1; }
 
 getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - nietypowa instalacja AlmaLinux/Rocky."
 
-dnf install -y postfix dovecot opendkim || err "Instalacja pakietow (postfix, dovecot, opendkim) nie powiodla sie."
+# opendkim-tools to OSOBNY podpakiet w EPEL (sam "opendkim" ma tylko
+# demona) - opendkim-genkey/opendkim-testkey zyja tam, nie w glownym
+# pakiecie. Bez tego dkim-install.sh (przycisk "Zainstaluj DKIM" w
+# panelu) failuje "brak polecenia opendkim-genkey" - potwierdzone na
+# zywym serwerze 2026-08-14.
+dnf install -y postfix dovecot opendkim opendkim-tools || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools) nie powiodla sie."
 
 # --- TLS: self-signed cert (tymczasowy, patrz komentarz na gorze) ---
 CERT_FILE="/etc/pki/tls/certs/mail-selfsigned.crt"

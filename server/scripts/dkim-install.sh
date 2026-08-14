@@ -57,8 +57,18 @@ if [ "$ACTION" = "status" ]; then
   exit 0
 fi
 
-command -v opendkim-genkey >/dev/null 2>&1 || err "brak polecenia opendkim-genkey - czy Poczta (OpenDKIM) jest zainstalowana?"
 [ -f "$KEY_TABLE" ] && [ -f "$SIGNING_TABLE" ] || err "brak ${KEY_TABLE}/${SIGNING_TABLE} - Poczta (OpenDKIM) jest jeszcze niezainstalowana."
+
+# SAMONAPRAWCZE: opendkim-genkey zyje w OSOBNYM podpakiecie EPEL
+# (opendkim-tools), ktorego mail-install.sh sprzed tej poprawki nie
+# instalowal - na instalacjach Poczty sprzed niej sam "opendkim" jest,
+# ale narzedzia (genkey/testkey) nie. Zamiast tylko sie skarzyc,
+# doinstaluj i sprobuj ponownie - nie trzeba ponownego klikania
+# "Zainstaluj" w zakladce Instalator.
+if ! command -v opendkim-genkey >/dev/null 2>&1; then
+  dnf install -y opendkim-tools >/dev/null 2>&1 || true
+fi
+command -v opendkim-genkey >/dev/null 2>&1 || err "brak polecenia opendkim-genkey nawet po probie doinstalowania opendkim-tools - sprawdz recznie (dnf install opendkim-tools)."
 
 mkdir -p "$KEY_DIR"
 
