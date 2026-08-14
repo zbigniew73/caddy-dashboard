@@ -4036,6 +4036,7 @@ function wireServiceActions(key) {
         if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
         if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
         document.getElementById('content').innerHTML = html;
+        applyTranslations();
         wireServiceActions(key);
         if (key === 'ssh' && svc.found) wireSshPortSection();
         if (key === 'firewall' && svc.found) wireFirewallSection();
@@ -4107,6 +4108,7 @@ async function renderServiceDetailTab(key, content) {
     if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
     if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
     content.innerHTML = html;
+    applyTranslations();
     wireServiceActions(key);
     if (key === 'ssh' && svc.found) wireSshPortSection();
     if (key === 'firewall' && svc.found) wireFirewallSection();
