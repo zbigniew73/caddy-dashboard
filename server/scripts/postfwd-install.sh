@@ -47,8 +47,21 @@ chmod 644 /etc/sysconfig/postfwd
 
 POSTFWD_CF="/etc/postfwd/postfwd.cf"
 mkdir -p /etc/postfwd
-if [ ! -f "$POSTFWD_CF" ]; then
-  cat > "$POSTFWD_CF" <<'EOF'
+# Pakiet SAM dostarcza /etc/postfwd (root:postfwd, 750 - grupowe, NIE
+# world-readable) I domyslny /etc/postfwd/postfwd.cf (maly plik-zaslepka,
+# data budowy pakietu, np. 2020) - potwierdzone na zywym serwerze
+# 2026-08-14. Dwa nastepstwa:
+# 1) katalog trzeba jawnie otworzyc (755), inaczej panel (inny user niz
+#    "postfwd") nie moze nawet do niego wejsc, zeby przeczytac status -
+#    ten sam bledny wzorzec (poleganie na domyslnych uprawnieniach) co
+#    OpenDKIM wczesniej tego samego dnia.
+# 2) NIGDY nie warunkuj zapisu "tylko jesli plik nie istnieje" - pakiet
+#    JUZ go dostarczyl, wiec taki warunek nigdy by sie nie spelnil i
+#    nasze reguly (20/180/900) nigdy by tam nie trafily. Plik jest w
+#    calosci NASZ (zarzadzany rowniez przez postfwd-set-limits.sh) -
+#    nadpisujemy bezwarunkowo, zawsze.
+chmod 755 /etc/postfwd
+cat > "$POSTFWD_CF" <<'EOF'
 # Zarzadzane przez Caddy Dashboard - server/scripts/postfwd-set-limits.sh
 # Limit tempa wysylki PER uwierzytelnione konto (sasl_username) - trzy
 # niezalezne okna naraz (minuta/godzina/dzien), kazde musi byc realnie
@@ -69,8 +82,7 @@ id=RATE_DAY
 id=DEFAULT
         action=dunno
 EOF
-  chmod 644 "$POSTFWD_CF"
-fi
+chmod 644 "$POSTFWD_CF"
 
 # smtpd_recipient_restrictions jest WSPOLDZIELONE z postfix-antispam.sh
 # (DNSBL Spamhaus) - SKLADAMY cala wartosc na nowo za kazdym razem, zamiast
