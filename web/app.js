@@ -614,12 +614,77 @@ function wireMailTlsSwapSection(content) {
   if (disableBtn) disableBtn.onclick = () => run(false, t('mail.tls_confirm_disable'));
 }
 
+// Kafelek "Postfix - ustawienia" (Poczta, PRZED kafelkiem dostepu do
+// poczty) - realne wartosci z /etc/postfix/main.cf (GET /mail/postfix-
+// limits, patrz getPostfixLimits w services/mail.js - postconf -h, bez
+// sudo), nie zmyslone liczby. Postfix nie ma osobnego limitu "na
+// zalacznik" - message_size_limit to limit CALEJ wiadomosci (naglowki +
+// tresc + wszystkie zalaczniki razem), tak jak wyjasnione userowi przed
+// zbudowaniem tego kafelka.
+async function renderPostfixLimitsSection() {
+  let limits;
+  try {
+    limits = await api('GET', '/mail/postfix-limits');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  const mailboxMb = limits.mailboxSizeBytes === null ? '' : Math.round(limits.mailboxSizeBytes / 1000000);
+  const messageMb = limits.messageSizeBytes === null ? '' : Math.round(limits.messageSizeBytes / 1000000);
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.postfix_limits_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.postfix_limits_description')}</p>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.postfix_limits_mailbox_label')}</label>
+      <input type="number" id="postfix-limit-mailbox-input" min="0" value="${mailboxMb}" style="width:160px;margin-bottom:14px;">
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.postfix_limits_message_label')}</label>
+      <input type="number" id="postfix-limit-message-input" min="0" value="${messageMb}" style="width:160px;margin-bottom:16px;">
+      <div>
+        <button type="button" id="postfix-limits-save-btn">${t('mail.postfix_limits_save_button')}</button>
+      </div>
+      <div class="action-msg" id="postfix-limits-msg"></div>
+    </div>
+  `;
+}
+
+function wirePostfixLimitsSection(content) {
+  const btn = document.getElementById('postfix-limits-save-btn');
+  if (!btn) return;
+  const msgEl = document.getElementById('postfix-limits-msg');
+  btn.onclick = async () => {
+    const mailboxMb = parseInt(document.getElementById('postfix-limit-mailbox-input').value, 10);
+    const messageMb = parseInt(document.getElementById('postfix-limit-message-input').value, 10);
+    if (!Number.isInteger(mailboxMb) || mailboxMb < 0 || !Number.isInteger(messageMb) || messageMb < 0) {
+      msgEl.textContent = t('mail.postfix_limits_invalid');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mail.postfix_limits_confirm'))) return;
+    btn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/postfix-limits', {
+        mailboxSizeBytes: mailboxMb * 1000000,
+        messageSizeBytes: messageMb * 1000000
+      });
+      msgEl.textContent = t('mail.postfix_limits_success');
+      msgEl.className = 'action-msg success';
+      btn.disabled = false;
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      btn.disabled = false;
+    }
+  };
+}
+
 async function renderMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('services.loading')}</div>`;
   try {
-    const [postfix, dovecot, accessHtml, statsHtml] = await Promise.all([
+    const [postfix, dovecot, limitsHtml, accessHtml, statsHtml] = await Promise.all([
       api('GET', '/services/postfix'),
       api('GET', '/services/dovecot'),
+      renderPostfixLimitsSection(),
       renderMailAccessSection(),
       renderMailStatsSection()
     ]);
@@ -628,6 +693,7 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}</div>
       </div>
+      <div style="margin-top:16px;">${limitsHtml}</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
         <div style="flex:1 1 0;min-width:320px;">${accessHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${statsHtml}</div>
@@ -635,6 +701,7 @@ async function renderMailTab(content) {
     `;
     applyTranslations();
     wireMailServiceCards(content);
+    wirePostfixLimitsSection(content);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
   } catch (e) {

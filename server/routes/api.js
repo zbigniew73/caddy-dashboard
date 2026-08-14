@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1161,6 +1161,28 @@ router.post('/mail/tls-swap', async (req, res) => {
   }
   try {
     const result = await setMailTlsSwap(`mail.${config.domain}`, !!req.body?.enabled);
+    res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Kafelek "Postfix - ustawienia" (Poczta, przed kafelkiem dostepu do
+// poczty) - realne wartosci z /etc/postfix/main.cf, patrz
+// getPostfixLimits/setPostfixLimits w services/mail.js.
+router.get('/mail/postfix-limits', async (req, res) => {
+  try {
+    res.json(await getPostfixLimits());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/postfix-limits', async (req, res) => {
+  try {
+    const mailboxSizeBytes = parseInt(req.body?.mailboxSizeBytes, 10);
+    const messageSizeBytes = parseInt(req.body?.messageSizeBytes, 10);
+    const result = await setPostfixLimits(mailboxSizeBytes, messageSizeBytes);
     res.json(result);
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });

@@ -194,7 +194,58 @@ async function setMailTlsSwap(domain, enabled) {
   }
 }
 
+const LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-set-limits.sh');
+
+// Odczyt bezposredni (bez sudo), ten sam powod co getMailTlsStatus -
+// `postconf -h` czyta /etc/postfix/main.cf (world-readable), nie wymaga
+// roota. Postfix zwraca swoje WBUDOWANE domyslne wartosci (50MB skrzynka,
+// 10MB wiadomosc), jesli admin nigdy ich nie zmienil - `mail-install.sh`
+// tych dwoch parametrow NIE ustawia, wiec dopoki ktos nie kliknie
+// "Zapisz" tutaj, panel po prostu pokazuje prawdziwe defaulty Postfixa,
+// nie zmyslone liczby.
+async function getPostfixLimits() {
+  try {
+    const [mailboxRes, messageRes] = await Promise.all([
+      execFileAsync('postconf', ['-h', 'mailbox_size_limit']),
+      execFileAsync('postconf', ['-h', 'message_size_limit'])
+    ]);
+    const mailboxSizeBytes = parseInt(mailboxRes.stdout.trim(), 10);
+    const messageSizeBytes = parseInt(messageRes.stdout.trim(), 10);
+    return {
+      mailboxSizeBytes: Number.isFinite(mailboxSizeBytes) ? mailboxSizeBytes : null,
+      messageSizeBytes: Number.isFinite(messageSizeBytes) ? messageSizeBytes : null
+    };
+  } catch {
+    return { mailboxSizeBytes: null, messageSizeBytes: null };
+  }
+}
+
+async function setPostfixLimits(mailboxSizeBytes, messageSizeBytes) {
+  if (!Number.isInteger(mailboxSizeBytes) || mailboxSizeBytes < 0) {
+    throw Object.assign(new Error('Nieprawidlowy maksymalny rozmiar skrzynki.'), { status: 400 });
+  }
+  if (!Number.isInteger(messageSizeBytes) || messageSizeBytes < 0) {
+    throw Object.assign(new Error('Nieprawidlowy maksymalny rozmiar wiadomosci/zalacznika.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', LIMITS_SCRIPT_PATH, String(mailboxSizeBytes), String(messageSizeBytes)],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla zmiany limitow Postfixa - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
-  getMailTlsStatus, setMailTlsSwap
+  getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits
 };
