@@ -16,11 +16,14 @@
 #            "roundcube" z wygenerowanym haslem (ten sam wzorzec co
 #            hosting-db-mariadb.sh).
 #   sqlite - zero zaleznosci od innych uslug, plik bazy w
-#            /opt/webmail/db/roundcube.sqlite. Wymaga pakietu
-#            php84-php-pdo-sqlite (doinstalowywanego tutaj) - DOKLADNA
-#            nazwa pakietu w repozytorium Remi NIE byla weryfikowana na
-#            zywo, jesli dnf install zwroci blad "brak pakietu", sprawdz
-#            prawdziwa nazwe w Remi dla PHP 8.4 i popraw ta linie.
+#            /opt/webmail/db/roundcube.sqlite. pdo_sqlite jest juz
+#            WBUDOWANY w bazowy pakiet php84-php-pdo (potwierdzone na
+#            zywym serwerze 2026-08-14: `php84 -m` pokazuje pdo_sqlite i
+#            sqlite3 bez zadnej dodatkowej instalacji) - w odroznieniu od
+#            phpMyAdmin/pdo_mysql nie ma tu osobnego pakietu Remi do
+#            doinstalowania (wczesniejsza proba `dnf install
+#            php84-php-pdo-sqlite` konczyla sie "Unable to find a match",
+#            bo taki pakiet w ogole nie istnieje - usuniete).
 #
 # Wersja Roundcube pobierana dynamicznie z GitHub Releases (najnowszy tag),
 # NIE zaszyta na sztywno - identyczny powod co w phpmyadmin-install.sh.
@@ -109,8 +112,8 @@ FLUSH PRIVILEGES;
 SQL
   DB_DSNW="mysql://roundcube:${DB_PASS}@localhost/roundcube"
 else
-  dnf install -y "php${PHP_ID}-php-pdo-sqlite" \
-    || err "Instalacja php${PHP_ID}-php-pdo-sqlite nie powiodla sie - sprawdz prawdziwa nazwe pakietu sqlite dla PHP ${PHP_VERSION_LABEL} w repozytorium Remi i popraw ta linie w roundcube-install.sh."
+  "/usr/local/bin/php${PHP_ID}" -m | grep -qi '^pdo_sqlite$' \
+    || err "Rozszerzenie pdo_sqlite nie jest dostepne w PHP ${PHP_VERSION_LABEL} (sprawdzono przez 'php${PHP_ID} -m') - nietypowa instalacja, sprawdz recznie."
   mkdir -p "${DOCROOT}/db"
   : > "${DOCROOT}/db/roundcube.sqlite"
   DB_DSNW="sqlite:////opt/webmail/db/roundcube.sqlite"
