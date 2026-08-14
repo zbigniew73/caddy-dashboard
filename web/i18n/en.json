@@ -640,5 +640,22 @@
   "mail.virtual_prompt_source": "Source login (part before @, in this domain):",
   "mail.virtual_prompt_destination": "Destination address (any email):",
   "mail.virtual_confirm_remove_alias": "Remove alias {source} → {destination}?",
-  "mail.virtual_working": "Saving..."
+  "mail.virtual_working": "Saving...",
+  "mail.postfwd_title": "Sending rate limit (anti-spam)",
+  "mail.postfwd_description": "postfwd - caps the sending rate for EACH authenticated account separately (protects against a compromised account mass-spamming through this server, which could get the whole IP blacklisted).",
+  "mail.postfwd_install_button": "Install postfwd",
+  "mail.postfwd_confirm_install": "Install postfwd and wire the sending rate limit into Postfix? Defaults: 20/minute, 180/hour, 900/day per account.",
+  "mail.postfwd_minute_label": "Per minute",
+  "mail.postfwd_hour_label": "Per hour",
+  "mail.postfwd_day_label": "Per day",
+  "mail.postfwd_invalid": "Invalid value - enter whole numbers of 1 or more.",
+  "mail.postfwd_confirm_save": "Save the new sending limits? The postfwd service will be restarted.",
+  "mail.antispam_title": "Postfix anti-spam protection",
+  "mail.antispam_description": "Rejects senders without PTR/A records, requires a valid HELO, and checks the Spamhaus blacklists (zen/dbl) - pure config, no new services. Our own authenticated hosting accounts are never subject to these checks.",
+  "mail.antispam_enabled": "Enabled",
+  "mail.antispam_disabled": "Disabled",
+  "mail.antispam_enable_button": "Enable",
+  "mail.antispam_disable_button": "Disable",
+  "mail.antispam_confirm_enable": "Enable Postfix anti-spam protection (PTR/HELO/Spamhaus)?",
+  "mail.antispam_confirm_disable": "Disable Postfix anti-spam protection? The server will go back to accepting mail without these checks."
 }

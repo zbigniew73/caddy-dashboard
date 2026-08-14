@@ -640,5 +640,22 @@
   "mail.virtual_prompt_source": "Login źródłowy (część przed @, w tej domenie):",
   "mail.virtual_prompt_destination": "Adres docelowy (dowolny e-mail):",
   "mail.virtual_confirm_remove_alias": "Usunąć alias {source} → {destination}?",
-  "mail.virtual_working": "Zapisywanie..."
+  "mail.virtual_working": "Zapisywanie...",
+  "mail.postfwd_title": "Limit wysyłki (antyspam)",
+  "mail.postfwd_description": "postfwd - ogranicza tempo wysyłki NA KAŻDE uwierzytelnione konto z osobna (chroni przed przejętym kontem masowo spamującym przez ten serwer, co groziłoby wpisaniem całego IP na czarne listy).",
+  "mail.postfwd_install_button": "Zainstaluj postfwd",
+  "mail.postfwd_confirm_install": "Zainstalować postfwd i podpiąć limit wysyłki do Postfixa? Domyślnie: 20/minutę, 180/godzinę, 900/dzień na konto.",
+  "mail.postfwd_minute_label": "Na minutę",
+  "mail.postfwd_hour_label": "Na godzinę",
+  "mail.postfwd_day_label": "Na dzień",
+  "mail.postfwd_invalid": "Nieprawidłowa wartość - podaj liczby całkowite 1 lub większe.",
+  "mail.postfwd_confirm_save": "Zapisać nowe limity wysyłki? Usługa postfwd zostanie zrestartowana.",
+  "mail.antispam_title": "Ochrona antyspamowa Postfixa",
+  "mail.antispam_description": "Odrzuca nadawców bez PTR/rekordu A, wymaga poprawnego HELO oraz sprawdza czarne listy Spamhaus (zen/dbl) - czysta konfiguracja, bez nowych usług. Własne, uwierzytelnione konta hostingowe nigdy nie są tym sprawdzane.",
+  "mail.antispam_enabled": "Włączona",
+  "mail.antispam_disabled": "Wyłączona",
+  "mail.antispam_enable_button": "Włącz",
+  "mail.antispam_disable_button": "Wyłącz",
+  "mail.antispam_confirm_enable": "Włączyć ochronę antyspamową Postfixa (PTR/HELO/Spamhaus)?",
+  "mail.antispam_confirm_disable": "Wyłączyć ochronę antyspamową Postfixa? Serwer wróci do przyjmowania poczty bez tych sprawdzeń."
 }

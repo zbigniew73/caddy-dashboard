@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo, getPostfwdStatus, installPostfwd, setPostfwdLimits, getAntispamStatus, setAntispamStatus } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1298,6 +1298,54 @@ router.get('/mail/spf-dmarc', async (req, res) => {
   }
   try {
     res.json(await getSpfDmarcInfo(domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Postfwd - limiter tempa wysylki per uwierzytelnione konto (sasl_username),
+// chroni PRZED WYCHODZACYM naduzyciem (przejete konto spamujace przez nasz
+// serwer) - patrz server/scripts/postfwd-install.sh.
+router.get('/mail/postfwd-status', async (req, res) => {
+  try {
+    res.json(await getPostfwdStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/postfwd-install', async (req, res) => {
+  try {
+    res.json(await installPostfwd());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/postfwd-limits', async (req, res) => {
+  try {
+    const perMinute = parseInt(req.body?.perMinute, 10);
+    const perHour = parseInt(req.body?.perHour, 10);
+    const perDay = parseInt(req.body?.perDay, 10);
+    res.json(await setPostfwdLimits(perMinute, perHour, perDay));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// Natywna ochrona antyspamowa Postfixa (PTR/HELO/DNSBL Spamhaus) - czysta
+// konfiguracja main.cf, zero nowych uslug - patrz postfix-antispam.sh.
+router.get('/mail/antispam-status', async (req, res) => {
+  try {
+    res.json(await getAntispamStatus());
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/antispam', async (req, res) => {
+  try {
+    res.json(await setAntispamStatus(!!req.body?.enabled));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

@@ -401,9 +401,114 @@ async function getSpfDmarcInfo(domain) {
   };
 }
 
+const POSTFWD_INSTALL_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfwd-install.sh');
+const POSTFWD_LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfwd-set-limits.sh');
+const POSTFWD_CF_PATH = '/etc/postfwd/postfwd.cf';
+
+// postfwd.cf jest 644 (bez sekretow, tylko liczby) - odczyt bezposredni,
+// bez sudo, ten sam wzorzec co postconf -h/doveconf -h dla limitow
+// Postfixa/Dovecota. "installed" = czy usluga faktycznie dziala (nie
+// tylko czy pakiet jest obecny) - `systemctl is-active` nie wymaga roota
+// do samego odczytu.
+async function getPostfwdStatus() {
+  let installed = false;
+  try {
+    const { stdout } = await execFileAsync('systemctl', ['is-active', 'postfwd']);
+    installed = stdout.trim() === 'active';
+  } catch {
+    installed = false;
+  }
+  let limits = null;
+  try {
+    const content = readFileSync(POSTFWD_CF_PATH, 'utf-8');
+    const minMatch = content.match(/RATE_MIN[\s\S]*?rate\(\$\$sasl_username\/(\d+)\/60\//);
+    const hourMatch = content.match(/RATE_HOUR[\s\S]*?rate\(\$\$sasl_username\/(\d+)\/3600\//);
+    const dayMatch = content.match(/RATE_DAY[\s\S]*?rate\(\$\$sasl_username\/(\d+)\/86400\//);
+    if (minMatch && hourMatch && dayMatch) {
+      limits = { perMinute: parseInt(minMatch[1], 10), perHour: parseInt(hourMatch[1], 10), perDay: parseInt(dayMatch[1], 10) };
+    }
+  } catch {
+    limits = null;
+  }
+  return { installed, limits };
+}
+
+async function installPostfwd() {
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', POSTFWD_INSTALL_SCRIPT_PATH], { timeout: 120000 });
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla instalacji postfwd - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+async function setPostfwdLimits(perMinute, perHour, perDay) {
+  const values = [perMinute, perHour, perDay];
+  if (!values.every((n) => Number.isInteger(n) && n >= 1)) {
+    throw Object.assign(new Error('Nieprawidlowe wartosci limitow (liczby calkowite >= 1).'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', POSTFWD_LIMITS_SCRIPT_PATH, String(perMinute), String(perHour), String(perDay)],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla zmiany limitow postfwd - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+const ANTISPAM_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-antispam.sh');
+
+// Odczyt bezposredni bez sudo (postconf -h) - smtpd_helo_restrictions jest
+// ustawiane WYLACZNIE przez postfix-antispam.sh, wiec jego obecnosc = "wlaczone".
+async function getAntispamStatus() {
+  try {
+    const { stdout } = await execFileAsync('postconf', ['-h', 'smtpd_helo_restrictions']);
+    return { enabled: stdout.trim().length > 0 };
+  } catch {
+    return { enabled: false };
+  }
+}
+
+async function setAntispamStatus(enabled) {
+  try {
+    const { stdout } = await execFileAsync(
+      'sudo', ['-n', ANTISPAM_SCRIPT_PATH, enabled ? 'enable' : 'disable'],
+      { timeout: 15000 }
+    );
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla ochrony antyspamowej Postfixa - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
   getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
   getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
-  getDkimStatus, installDkim, getSpfDmarcInfo
+  getDkimStatus, installDkim, getSpfDmarcInfo,
+  getPostfwdStatus, installPostfwd, setPostfwdLimits,
+  getAntispamStatus, setAntispamStatus
 };

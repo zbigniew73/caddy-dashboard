@@ -731,6 +731,157 @@ function wireDovecotLimitsSection(content) {
   };
 }
 
+// Kafelek "Limit wysylki (antyspam)" - postfwd, limiter tempa wysylki
+// PER uwierzytelnione konto (sasl_username), chroni PRZED WYCHODZACYM
+// naduzyciem (przejete konto hostingowe spamujace przez nasz serwer).
+// Bez instalacji: przycisk instalacyjny (jak mailInstallTileHtml). Po
+// instalacji: 3 edytowalne liczby (minuta/godzina/dzien).
+async function renderPostfwdSection() {
+  let status;
+  try {
+    status = await api('GET', '/mail/postfwd-status');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  if (!status.installed || !status.limits) {
+    return `
+      <div class="system-info-card">
+        <h3>${t('mail.postfwd_title')}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.postfwd_description')}</p>
+        <button type="button" id="postfwd-install-btn">${t('mail.postfwd_install_button')}</button>
+        <div class="action-msg" id="postfwd-msg"></div>
+      </div>
+    `;
+  }
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.postfwd_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.postfwd_description')}</p>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.postfwd_minute_label')}</label>
+          <input type="number" id="postfwd-minute-input" min="1" value="${status.limits.perMinute}" style="width:120px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.postfwd_hour_label')}</label>
+          <input type="number" id="postfwd-hour-input" min="1" value="${status.limits.perHour}" style="width:120px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.postfwd_day_label')}</label>
+          <input type="number" id="postfwd-day-input" min="1" value="${status.limits.perDay}" style="width:120px;">
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <button type="button" id="postfwd-limits-save-btn">${t('mail.postfix_limits_save_button')}</button>
+      </div>
+      <div class="action-msg" id="postfwd-msg"></div>
+    </div>
+  `;
+}
+
+function wirePostfwdSection(content) {
+  const installBtn = document.getElementById('postfwd-install-btn');
+  if (installBtn) {
+    const msgEl = document.getElementById('postfwd-msg');
+    installBtn.onclick = async () => {
+      if (!window.confirm(t('mail.postfwd_confirm_install'))) return;
+      installBtn.disabled = true;
+      msgEl.textContent = t('install.installing');
+      msgEl.className = 'action-msg';
+      try {
+        await api('POST', '/mail/postfwd-install');
+        await renderMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        installBtn.disabled = false;
+      }
+    };
+    return;
+  }
+
+  const saveBtn = document.getElementById('postfwd-limits-save-btn');
+  if (!saveBtn) return;
+  const msgEl = document.getElementById('postfwd-msg');
+  saveBtn.onclick = async () => {
+    const perMinute = parseInt(document.getElementById('postfwd-minute-input').value, 10);
+    const perHour = parseInt(document.getElementById('postfwd-hour-input').value, 10);
+    const perDay = parseInt(document.getElementById('postfwd-day-input').value, 10);
+    if ([perMinute, perHour, perDay].some((n) => !Number.isInteger(n) || n < 1)) {
+      msgEl.textContent = t('mail.postfwd_invalid');
+      msgEl.className = 'action-msg error';
+      return;
+    }
+    if (!window.confirm(t('mail.postfwd_confirm_save'))) return;
+    saveBtn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/postfwd-limits', { perMinute, perHour, perDay });
+      msgEl.textContent = t('mail.postfix_limits_success');
+      msgEl.className = 'action-msg success';
+      saveBtn.disabled = false;
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      saveBtn.disabled = false;
+    }
+  };
+}
+
+// Kafelek "Ochrona antyspamowa Postfixa" - PTR/HELO/Spamhaus DNSBL, czysta
+// konfiguracja main.cf (postfix-antispam.sh), zero nowych uslug. Prosty
+// przelacznik Wlacz/Wylacz, ten sam wzorzec co TLS swap (wireMailTlsSwapSection).
+async function renderAntispamSection() {
+  let status;
+  try {
+    status = await api('GET', '/mail/antispam-status');
+  } catch (e) {
+    return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+  }
+  return `
+    <div class="system-info-card">
+      <h3>${t('mail.antispam_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.antispam_description')}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;">
+        <span class="status-badge ${status.enabled ? 'active' : 'inactive'}">${status.enabled ? t('mail.antispam_enabled') : t('mail.antispam_disabled')}</span>
+        <div style="display:flex;gap:10px;flex-shrink:0;">
+          <button type="button" id="antispam-enable-btn" ${status.enabled ? 'disabled' : ''}>${t('mail.antispam_enable_button')}</button>
+          <button type="button" class="danger" id="antispam-disable-btn" ${status.enabled ? '' : 'disabled'}>${t('mail.antispam_disable_button')}</button>
+        </div>
+      </div>
+      <div class="action-msg" id="antispam-msg"></div>
+    </div>
+  `;
+}
+
+function wireAntispamSection(content) {
+  const enableBtn = document.getElementById('antispam-enable-btn');
+  const disableBtn = document.getElementById('antispam-disable-btn');
+  if (!enableBtn || !disableBtn) return;
+  const msgEl = document.getElementById('antispam-msg');
+
+  const run = async (enabled, confirmMsg) => {
+    if (!window.confirm(confirmMsg)) return;
+    enableBtn.disabled = true;
+    disableBtn.disabled = true;
+    msgEl.textContent = t('mail.postfix_limits_working');
+    msgEl.className = 'action-msg';
+    try {
+      await api('POST', '/mail/antispam', { enabled });
+      await renderMailTab(content);
+    } catch (e) {
+      msgEl.textContent = e.message;
+      msgEl.className = 'action-msg error';
+      enableBtn.disabled = enabled;
+      disableBtn.disabled = !enabled;
+    }
+  };
+
+  enableBtn.onclick = () => run(true, t('mail.antispam_confirm_enable'));
+  disableBtn.onclick = () => run(false, t('mail.antispam_confirm_disable'));
+}
+
 // Dwa kafelki pod "Dovecot - ustawienia" - dziela JEDEN wspolny odczyt
 // statusu (GET /mail/mydestination), zeby zawsze pokazywaly spojny
 // snapshot, nie dwa niezalezne zapytania, ktore moglyby sie rozjechac w
@@ -1242,6 +1393,8 @@ async function renderMailTab(content) {
     ]);
     const adminAddressHtml = await mailAdminAddressSectionHtml(domainStatus);
     const virtualHtml = await renderMailVirtualSection();
+    const postfwdHtml = await renderPostfwdSection();
+    const antispamHtml = await renderAntispamSection();
     content.innerHTML = `
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
         <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
@@ -1259,6 +1412,10 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;">${adminAddressHtml}</div>
       </div>
       <div style="margin-top:16px;">${accessHtml}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
+        <div style="flex:1 1 0;min-width:320px;">${antispamHtml}</div>
+        <div style="flex:1 1 0;min-width:320px;">${postfwdHtml}</div>
+      </div>
       <div style="margin-top:16px;">${virtualHtml}</div>
     `;
     applyTranslations();
@@ -1269,6 +1426,8 @@ async function renderMailTab(content) {
     wireMailAdminAddressSection(content, domainStatus);
     wireMailAccessSection(content);
     wireMailTlsSwapSection(content);
+    wireAntispamSection(content);
+    wirePostfwdSection(content);
     wireMailVirtualSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
