@@ -99,6 +99,8 @@
   "sites.field_mail": "Obsluga poczty",
   "sites.mail_none": "Brak poczty",
   "sites.mail_enabled": "Wlacz obsluge poczty",
+  "sites.mail_dns_warning": "Uwaga: w pierwszej kolejnosci dodaj rekord mail do DNS.",
+  "sites.mail_dns_example": "np. mail.example.com",
   "sites.field_template": "Szablon",
   "sites.template_html": "HTML",
   "sites.template_php": "PHP",

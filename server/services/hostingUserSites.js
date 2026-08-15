@@ -231,7 +231,24 @@ function listUsedProxyPorts() {
 // podany (non-null) dla tych dwoch szablonow - wywolujacy (createSite)
 // zaklada pool PRZED wywolaniem tej funkcji, zeby socket juz istnial, gdy
 // Caddy dostanie ten config.
-function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort, phpSocketPath) {
+// Stub "mail.<domena>" - ZAWSZE ten sam plaski `respond`, niezaleznie od
+// template/wpInstall (HTML/PHP/WORDPRESS - w tym KAZDA wersja instalatora
+// WordPressa - none/en/pl - i REVERSE PROXY generuja go identycznie, bo
+// dotyczy WYLACZNIE osobnej domeny "mail.", nie tej ktora serwuje strone).
+// Cel NIE jest kosmetyczny: to osobny blok Caddy w TYM SAMYM pliku
+// per-site, wiec Caddy sam wystawia dla niego certyfikat Let's Encrypt
+// (ten sam mechanizm, ktory mail-tls-swap.sh pozniej kopiuje do
+// Postfixa/Dovecota - patrz komentarz przy LE_CERT_PATH w mail.js) -
+// bez tego bloku Caddy nigdy by nie wiedzial, ze "mail.<domena>" ma byc
+// obslugiwana i nie zadalby dla niej certyfikatu.
+function buildMailStubBlock(domain) {
+  return `mail.${domain} {
+	respond "Serwer pocztowy - ten adres nie serwuje strony WWW." 200
+}
+`;
+}
+
+function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort, phpSocketPath, mailEnabled) {
   const publicRoot = `${homeDir}/domains/${domain}/public`;
   const logFile = `/var/log/caddy/${domain}.log`;
 
@@ -240,6 +257,8 @@ function buildSiteBlock(homeDir, domain, redirectMode, template, proxyPort, phpS
     : (template === 'php' || template === 'wordpress')
       ? `\troot * ${publicRoot}\n\tphp_fastcgi unix/${phpSocketPath}\n\tfile_server`
       : `\troot * ${publicRoot}\n\tfile_server`;
+
+  const mailBlock = mailEnabled ? `\n${buildMailStubBlock(domain)}` : '';
 
   if (redirectMode === 'none') {
     return `${domain} {
@@ -250,7 +269,7 @@ ${bodyDirectives}
 		format json
 	}
 }
-`;
+${mailBlock}`;
   }
 
   const wwwDomain = `www.${domain}`;
@@ -268,7 +287,7 @@ ${bodyDirectives}
 		format json
 	}
 }
-`;
+${mailBlock}`;
 }
 
 function sudoErrorMessage(stderr) {
@@ -403,7 +422,7 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     phpSocketPath = sitePhpSocketPath(id, phpVersionValue);
   }
 
-  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath);
+  const content = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath, !!mailEnabled);
   await runSiteScript('apply', username, domainValue, content, templateValue, wpInstallValue);
 
   const record = {
@@ -437,6 +456,18 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
       saveData(all);
     } catch (e) {
       mailWarning = e.message;
+      // Rejestracja sie nie powiodla - zdejmujemy stub "mail.<domena>" z
+      // powrotem z configu Caddy, zeby PLIK i record.mailEnabled (false)
+      // byly spojne. Jesli TA proba tez zawiedzie (rzadkie), stub zostaje
+      // w configu jako nieszkodliwy, samotny "respond 200" - naprawi sie
+      // sam przy najblizszej edycji przekierowania (updateSiteRedirect
+      // zawsze generuje config na nowo z record.mailEnabled).
+      try {
+        const rollbackContent = buildSiteBlock(account.homeDir, domainValue, redirectValue, templateValue, proxyPortValue, phpSocketPath, false);
+        await runSiteScript('apply', username, domainValue, rollbackContent, templateValue, wpInstallValue);
+      } catch {
+        // best effort, patrz komentarz wyzej
+      }
     }
   }
 
@@ -468,7 +499,7 @@ async function updateSiteRedirect(username, id, redirectMode) {
   const phpSocketPath = (record.template === 'php' || record.template === 'wordpress') && record.phpVersion
     ? sitePhpSocketPath(record.id, record.phpVersion)
     : null;
-  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort, phpSocketPath);
+  const content = buildSiteBlock(account.homeDir, record.domain, redirectValue, record.template, record.proxyPort, phpSocketPath, record.mailEnabled);
   await runSiteScript('apply', username, record.domain, content, record.template, 'none');
 
   record.redirectMode = redirectValue;

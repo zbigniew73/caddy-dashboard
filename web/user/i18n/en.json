@@ -99,6 +99,8 @@
   "sites.field_mail": "Mail handling",
   "sites.mail_none": "No mail",
   "sites.mail_enabled": "Enable mail handling",
+  "sites.mail_dns_warning": "Note: first add a mail DNS record.",
+  "sites.mail_dns_example": "e.g. mail.example.com",
   "sites.field_template": "Template",
   "sites.template_html": "HTML",
   "sites.template_php": "PHP",

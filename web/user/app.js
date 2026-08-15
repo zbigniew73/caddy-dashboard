@@ -2064,6 +2064,8 @@ function sitesManageCardHtml(data, phpVersions) {
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_mail')}</label>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteMailRadios('site-new-mail', 'none')}</div>
+        <p style="margin:4px 0 0;color:var(--danger);font-size:11px;">${t('sites.mail_dns_warning')}</p>
+        <p style="margin:2px 0 0;color:var(--muted);font-size:11px;">${t('sites.mail_dns_example')}</p>
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
