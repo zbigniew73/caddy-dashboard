@@ -261,6 +261,7 @@ submission inet n       -       y       -       -       smtpd
   -o smtpd_tls_security_level=encrypt
   -o smtpd_sasl_auth_enable=yes
   -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_helo_restrictions=
 EOF
 fi
 if ! postconf -M 2>/dev/null | awk '{print $1}' | grep -qx smtps; then
@@ -271,8 +272,33 @@ smtps     inet  n       -       y       -       -       smtpd
   -o smtpd_tls_wrappermode=yes
   -o smtpd_sasl_auth_enable=yes
   -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_helo_restrictions=
 EOF
 fi
+# Samonaprawa dla JUZ istniejacych instalacji (powyzsze dwa bloki dopisuja
+# CALA stanze tylko przy PIERWSZYM zalozeniu - re-run tego skryptu na juz
+# dzialajacej Poczcie NIGDY by nie dolozyl tej jednej nowej linii do
+# stanzy zalozonej wczesniejsza wersja skryptu). `postconf -P` to
+# oficjalny mechanizm edycji pojedynczych parametrow w master.cf per
+# usluga, idempotentny (ustawienie tej samej wartosci ponownie nic nie
+# zmienia). Powod: submission/smtps maja chroot=y (5te pole "y"), a
+# /var/spool/postfix/etc/resolv.conf NIGDY nie zostal tam zmirrorowany na
+# tym serwerze (potwierdzone na zywym serwerze 2026-08-15, pusty/brakujacy
+# katalog) - wiec chrootowany smtpd nie ma zadnego dzialajacego resolwera
+# DNS, a globalne smtpd_helo_restrictions (ustawiane przez postfix-
+# antispam.sh) zawieraja reject_unknown_helo_hostname, ktore WYMAGA
+# dzialajacego DNS - kazda proba wyslania poczty przez webmail (submission/
+# smtps) konczyla sie "450 4.7.1 Helo command rejected: Host not found",
+# mimo ze rekord DNS dla helo hostname FAKTYCZNIE istnial (`dig` z samego
+# serwera go widzial - problem byl wylacznie w niedostepnosci resolwera
+# WEWNATRZ chroota, nie w samym DNS). Restrykcje HELO maja sens dla
+# anonimowego ruchu na porcie 25 (obcy nadawcy) - ruch uwierzytelniony
+# przez SASL na submission/smtps i tak juz jest ograniczony przez
+# smtpd_relay_restrictions=permit_sasl_authenticated,reject powyzej, wiec
+# wylaczenie akurat tej jednej kontroli tu nie osłabia ochrony
+# antyspamowej portu 25.
+postconf -P 'submission/inet/smtpd_helo_restrictions='
+postconf -P 'smtps/inet/smtpd_helo_restrictions='
 
 # --- Wirtualne domeny/skrzynki pocztowe (klienci hostingu, NIEZALEZNE od
 # kont systemowych/SSH z Fazy 1 powyzej) - DODATKOWA, rownolegla sciezka,
