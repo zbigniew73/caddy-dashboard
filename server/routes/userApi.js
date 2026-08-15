@@ -12,7 +12,8 @@ import { getOwnMail } from '../services/hostingUserMail.js';
 import {
   listOwnMailDomains,
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
-  listOwnAliases, createOwnAlias, removeOwnAlias
+  listOwnAliases, createOwnAlias, removeOwnAlias,
+  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo
 } from '../services/hostingUserMailboxes.js';
 import {
   listPythonVersions,
@@ -293,6 +294,33 @@ router.post('/mail/aliases', async (req, res) => {
 router.delete('/mail/aliases/:domain/:source/:destination', async (req, res) => {
   try {
     res.json(await removeOwnAlias(req.hostingUser, req.params.domain, req.params.source, req.params.destination));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/dkim-status', async (req, res) => {
+  try {
+    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+    res.json(await getOwnDkimStatus(req.hostingUser, domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/dkim-install', async (req, res) => {
+  try {
+    const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
+    res.json(await installOwnDkim(req.hostingUser, domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/spf-dmarc', async (req, res) => {
+  try {
+    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+    res.json(await getOwnSpfDmarcInfo(req.hostingUser, domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

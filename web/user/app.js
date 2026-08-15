@@ -922,7 +922,63 @@ function aliasManageCardHtml(domains, selectedDomain, aliases) {
   `;
 }
 
-function renderMailSection(status, domains, selectedDomain, mailboxes, aliases) {
+// Trzeci, PELNOSZEROKI kafelek Poczty - DKIM (+ SPF/DMARC ponizej, czysto
+// informacyjne, bez zadnej instalacji - patrz getSpfDmarcInfo w mail.js).
+// DKIM podpisuje "d=<domena>" dopasowane do adresu FROM, wiec zawsze
+// dotyczy domeny BAZOWEJ - ten sam selektor domen co mailbox/alias wyzej
+// (dzielony stan mailSelectedDomain, przelaczenie w ktoromkolwiek z
+// trzech selektorow odswieza cala zakladke tym samym mechanizmem).
+function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
+  if (!domains.length) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.dkim_title')}</h3>
+      <div class="empty-state">${t('mail.mailbox_no_domains')}</div>
+    `;
+  }
+  const domainOptionsHtml = domains.map((d) => `<option value="${escapeHtml(d)}" ${d === selectedDomain ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+
+  const spfDmarcHtml = spfDmarc ? `
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h4 style="margin:0 0 8px;font-size:14px;">${t('mail.spf_title')}</h4>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:12px;">${t('mail.spf_dns_hint')}</p>
+      <dl>
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+      </dl>
+    </div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+      <h4 style="margin:0 0 8px;font-size:14px;">${t('mail.dmarc_title')}</h4>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:12px;">${t('mail.dmarc_dns_hint')}</p>
+      <dl>
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+      </dl>
+    </div>
+  ` : '';
+
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.dkim_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_manage_description')}</p>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_domain')}</label>
+    <select id="dkim-domain-select" style="width:100%;box-sizing:border-box;margin-bottom:14px;">${domainOptionsHtml}</select>
+    ${dkim && dkim.installed ? `
+      <p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('mail.dkim_installed_hint')}</p>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.dkim_dns_hint')}</p>
+      <dl>
+        <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
+        <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+      </dl>
+    ` : `<p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
+    <button type="button" id="dkim-install-btn">${dkim && dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
+    <div class="action-msg" id="dkim-msg"></div>
+    ${spfDmarcHtml}
+  `;
+}
+
+function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
@@ -940,6 +996,9 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases) 
         ${aliasManageCardHtml(domains, selectedDomain, aliases)}
       </div>
     </div>
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-top:16px;">
+      ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
+    </div>
   `;
 }
 
@@ -956,6 +1015,31 @@ function wireMailManageSection(content) {
     aliasDomainSelect.onchange = async () => {
       mailSelectedDomain = aliasDomainSelect.value;
       await refreshMailTab(content);
+    };
+  }
+  const dkimDomainSelect = document.getElementById('dkim-domain-select');
+  if (dkimDomainSelect) {
+    dkimDomainSelect.onchange = async () => {
+      mailSelectedDomain = dkimDomainSelect.value;
+      await refreshMailTab(content);
+    };
+  }
+
+  const dkimInstallBtn = document.getElementById('dkim-install-btn');
+  if (dkimInstallBtn) {
+    dkimInstallBtn.onclick = async () => {
+      const msgEl = document.getElementById('dkim-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      dkimInstallBtn.disabled = true;
+      try {
+        await api('POST', '/mail/dkim-install', { domain: mailSelectedDomain });
+        await refreshMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        dkimInstallBtn.disabled = false;
+      }
     };
   }
 
@@ -1069,13 +1153,22 @@ async function refreshMailTab(content) {
     }
     let mailboxes = [];
     let aliases = [];
+    let dkim = null;
+    let spfDmarc = null;
     if (mailSelectedDomain) {
-      [{ items: mailboxes }, { items: aliases }] = await Promise.all([
-        api('GET', `/mail/mailboxes?domain=${encodeURIComponent(mailSelectedDomain)}`),
-        api('GET', `/mail/aliases?domain=${encodeURIComponent(mailSelectedDomain)}`)
+      const encoded = encodeURIComponent(mailSelectedDomain);
+      const [mailboxesRes, aliasesRes, dkimRes, spfDmarcRes] = await Promise.all([
+        api('GET', `/mail/mailboxes?domain=${encoded}`),
+        api('GET', `/mail/aliases?domain=${encoded}`),
+        api('GET', `/mail/dkim-status?domain=${encoded}`).catch(() => null),
+        api('GET', `/mail/spf-dmarc?domain=${encoded}`).catch(() => null)
       ]);
+      mailboxes = mailboxesRes.items;
+      aliases = aliasesRes.items;
+      dkim = dkimRes;
+      spfDmarc = spfDmarcRes;
     }
-    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases);
+    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases, dkim, spfDmarc);
     wireMailManageSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

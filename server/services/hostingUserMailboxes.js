@@ -3,6 +3,7 @@ import {
   listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
   listVirtualAliases, addVirtualAlias, removeVirtualAlias
 } from './mailVirtual.js';
+import { getDkimStatus, installDkim, getSpfDmarcInfo } from './mail.js';
 
 // Self-service warstwa dla panelu /user/ nad mailVirtual.js (do tej pory
 // wywolywanym WYLACZNIE z panelu admina) - Poczta -> "Dodaj konto e-mail"/
@@ -77,8 +78,30 @@ async function removeOwnAlias(username, domain, sourceLocalpart, destination) {
   return removeVirtualAlias(domain, sourceLocalpart, destination);
 }
 
+// DKIM podpisuje wychodzaca poczte jako "d=<domena>" dopasowane do adresu
+// FROM (SigningTable "*@domena", patrz dkim-install.sh) - stad zawsze
+// dotyczy domeny BAZOWEJ (np. "autoai.qd.je"), nigdy "mail.<domena>" (pod
+// nia nie ma zadnych adresow e-mail) - dokladnie ta sama lista co
+// listOwnMailDomains wyzej, wiec kafelek DKIM w /user/ uzywa tego samego
+// selektora domeny co "Dodaj konto e-mail"/"Dodaj alias".
+async function getOwnDkimStatus(username, domain) {
+  await assertOwnDomain(username, domain);
+  return getDkimStatus(domain);
+}
+
+async function installOwnDkim(username, domain) {
+  await assertOwnDomain(username, domain);
+  return installDkim(domain);
+}
+
+async function getOwnSpfDmarcInfo(username, domain) {
+  await assertOwnDomain(username, domain);
+  return getSpfDmarcInfo(domain);
+}
+
 export {
   listOwnMailDomains,
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
-  listOwnAliases, createOwnAlias, removeOwnAlias
+  listOwnAliases, createOwnAlias, removeOwnAlias,
+  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo
 };
