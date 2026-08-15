@@ -774,6 +774,82 @@ function bytesToMb(bytes) {
   return typeof bytes === 'number' ? Math.round((bytes / 1024 / 1024) * 10) / 10 : null;
 }
 
+// Lewy kafelek Poczty - dostep (wlacza/wylacza WYLACZNIE administracja,
+// patrz mail-toggle-access.sh/pam_listfile w Glowne->Poczta admina, wiec
+// tu tylko odczyt statusu, bez przelacznika) + wlasny adres e-mail
+// (<username>@<domena bazowa panelu> - server/services/hostingUserMail.js
+// sklada go z detectBaseDomain(), tak samo jak admin-side "Adres e-mail
+// administratora").
+function mailAccessCardHtml(status) {
+  if (!status.mailInstalled) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.access_title')}</h3>
+      <div class="empty-state">${t('mail.not_available')}</div>
+    `;
+  }
+  const statusBadge = `<span class="status-badge ${status.accessEnabled ? 'active' : 'inactive'}">${status.accessEnabled ? t('mail.status_enabled') : t('mail.status_disabled')}</span>`;
+  const hintHtml = !status.accessEnabled
+    ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px;">${t('mail.disabled_hint')}</p>`
+    : '';
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.access_title')} ${statusBadge}</h3>
+    <div class="info-grid" style="margin-top:10px;">
+      <div class="info-label">${t('mail.field_email')}</div><div class="info-value" style="font-family:var(--mono);">${escapeHtml(status.emailAddress || '-')}</div>
+    </div>
+    ${hintHtml}
+  `;
+}
+
+// Prawy kafelek Poczty - statystyki skrzynki (~/Maildir), rozmiar +
+// liczba wiadomosci z hosting-user-mailbox-stats.sh, limit rozmiaru z
+// tego samego Postfixowego mailbox_size_limit, ktory admin ustawia w
+// Glowne->Poczta (server/services/mail.js getPostfixLimits) - brak
+// limitu (Postfix nigdy nie skonfigurowany recznie) pokazuje sama
+// wartosc bez paska.
+function mailStatsCardHtml(status) {
+  if (!status.mailInstalled) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.stats_title')}</h3>
+      <div class="empty-state">${t('mail.not_available')}</div>
+    `;
+  }
+  const hasLimit = typeof status.mailboxLimitMb === 'number' && status.mailboxLimitMb > 0;
+  const percent = hasLimit ? Math.min(100, Math.round((status.sizeMb / status.mailboxLimitMb) * 100)) : 0;
+  const sizeText = hasLimit ? `${status.sizeMb} MB / ${status.mailboxLimitMb} MB` : `${status.sizeMb} MB`;
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.stats_title')}</h3>
+    <div class="stat-label">${t('mail.stats_size')}</div>
+    <div class="stat-value" style="margin:2px 0 6px;">${escapeHtml(sizeText)}</div>
+    <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
+    <div class="info-grid" style="margin-top:14px;">
+      <div class="info-label">${t('mail.stats_messages')}</div><div class="info-value">${status.messageCount}</div>
+    </div>
+  `;
+}
+
+function renderMailSection(status) {
+  return `
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${mailAccessCardHtml(status)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${mailStatsCardHtml(status)}
+      </div>
+    </div>
+  `;
+}
+
+async function refreshMailTab(content) {
+  content.innerHTML = `<div class="empty-state">${t('mail.loading')}</div>`;
+  try {
+    const status = await api('GET', '/mail');
+    content.innerHTML = renderMailSection(status);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
+  }
+}
+
 function redisManageCardHtml(status) {
   if (!status.available) {
     return `
@@ -2686,6 +2762,8 @@ function renderTab() {
     refreshSshTab(content);
   } else if (currentTab === 'sites') {
     refreshSitesTab(content);
+  } else if (currentTab === 'mail') {
+    refreshMailTab(content);
   } else if (currentTab === 'backup') {
     refreshBackupTab(content);
   } else if (currentTab === 'python') {

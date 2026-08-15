@@ -8,6 +8,7 @@ import {
 } from '../services/hostingUserSites.js';
 import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
+import { getOwnMail } from '../services/hostingUserMail.js';
 import {
   listPythonVersions,
   listApps as listPythonApps, createApp as createPythonApp, startApp as startPythonApp,
@@ -210,6 +211,14 @@ router.delete('/databases/:id', async (req, res) => {
   try {
     await deleteDatabase(req.hostingUser, req.params.id);
     res.json({ success: true });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail', async (req, res) => {
+  try {
+    res.json(await getOwnMail(req.hostingUser));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
