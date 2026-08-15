@@ -2065,7 +2065,29 @@ function sitesManageCardHtml(data, phpVersions) {
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_mail')}</label>
         <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteMailRadios('site-new-mail', 'none')}</div>
         <p style="margin:4px 0 0;color:var(--danger);font-size:11px;">${t('sites.mail_dns_warning')}</p>
-        <p style="margin:2px 0 0;color:var(--muted);font-size:11px;">${t('sites.mail_dns_example')}</p>
+        <p style="margin:6px 0 4px;color:var(--muted);font-size:11px;">${t('sites.mail_dns_example_caption')}</p>
+        <div style="background:#ffffff;border:1px solid var(--border);border-radius:6px;padding:10px 12px;overflow-x:auto;">
+          <table style="border-collapse:collapse;font-family:var(--mono);font-size:12px;color:#1c1d1f;white-space:nowrap;">
+            <thead>
+              <tr style="color:#6b7078;text-align:left;">
+                <th style="padding:0 16px 4px 0;font-weight:normal;">Type</th>
+                <th style="padding:0 16px 4px 0;font-weight:normal;">Name</th>
+                <th style="padding:0 16px 4px 0;font-weight:normal;">Content</th>
+                <th style="padding:0 16px 4px 0;font-weight:normal;">Proxy status</th>
+                <th style="padding:0 0 4px;font-weight:normal;">TTL</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding:2px 16px 0 0;">A</td>
+                <td style="padding:2px 16px 0 0;">mail</td>
+                <td style="padding:2px 16px 0 0;">203.0.113.10</td>
+                <td style="padding:2px 16px 0 0;">DNS only</td>
+                <td style="padding:2px 0 0;">Auto</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
       <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>

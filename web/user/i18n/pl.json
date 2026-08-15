@@ -100,7 +100,7 @@
   "sites.mail_none": "Brak poczty",
   "sites.mail_enabled": "Wlacz obsluge poczty",
   "sites.mail_dns_warning": "Uwaga: w pierwszej kolejnosci dodaj rekord mail do DNS.",
-  "sites.mail_dns_example": "np. mail.example.com",
+  "sites.mail_dns_example_caption": "Przyklad (Cloudflare) - podmien adres IP na adres Twojego serwera. Proxy status musi zostac \"DNS only\" (szara chmurka, WYLACZONA):",
   "sites.field_template": "Szablon",
   "sites.template_html": "HTML",
   "sites.template_php": "PHP",
