@@ -8,6 +8,27 @@
 # (`postfix check`) PRZED przeladowaniem - jesli walidacja sie nie
 # powiedzie, przywraca poprzednie wartosci.
 #
+# SAMONAPRAWCZE (przy KAZDYM uruchomieniu): ustawia TEZ
+# `virtual_mailbox_limit=${MAILBOX_LIMIT}` (dla wirtualnych domen/
+# skrzynek, patrz [[project_caddy_dashboard_virtual_mail_plan]]) -
+# Postfix ma dla niego WLASNY, STALY domyslny limit (51200000 B, ~51MB),
+# NIEZALEZNY od mailbox_size_limit (mimo ze oba nazywaja sie podobnie) -
+# jesli admin kiedykolwiek podniesie message_size_limit powyzej tej
+# wartosci bez rownoczesnego dotkniecia virtual_mailbox_limit (co ten
+# skrypt wczesniej w ogole nie robil), `postfix check` przechodzi CZYSTO,
+# ale sam PROCES agenta `virtual` odmawia startu przy pierwszej realnej
+# dostawie: "fatal: configuration error: virtual_mailbox_limit is smaller
+# than message_size_limit" - i throttluje sie w kolko (`bad command
+# startup -- throttling`), wiec KAZDA poczta do KAZDEJ wirtualnej
+# skrzynki (i przychodzaca z internetu, i wewnetrzna) po cichu ginie,
+# mimo ze admin nigdy nie dostal zadnego komunikatu bledu przy zapisie
+# limitow. Potwierdzone na zywym serwerze 2026-08-15 (`postconf -h
+# virtual_mailbox_limit` = 51200000, mimo mailbox_size_limit=512000000).
+# Dostawa lokalna (`local`, konta systemowe/SSH) nie ma tej samej
+# walidacji przy starcie, wiec ten bug byl caly czas niewidoczny, dopoki
+# ktos faktycznie nie wyslal poczty na pierwsza realna wirtualna
+# skrzynke.
+#
 # Uzycie: postfix-set-limits.sh <mailbox_size_limit> <message_size_limit>
 #   (oba w bajtach, liczby calkowite >= 0)
 #
@@ -49,6 +70,7 @@ MESSAGE_LIMIT="${2:-}"
 
 OLD_MAILBOX="$(postconf -h mailbox_size_limit 2>/dev/null || true)"
 OLD_MESSAGE="$(postconf -h message_size_limit 2>/dev/null || true)"
+OLD_VIRTUAL_MAILBOX_LIMIT="$(postconf -h virtual_mailbox_limit 2>/dev/null || true)"
 OLD_HOME_MAILBOX="$(postconf -h home_mailbox 2>/dev/null || true)"
 OLD_SMTPD_MILTERS="$(postconf -h smtpd_milters 2>/dev/null || true)"
 OLD_NON_SMTPD_MILTERS="$(postconf -h non_smtpd_milters 2>/dev/null || true)"
@@ -57,6 +79,7 @@ OLD_INET_INTERFACES="$(postconf -h inet_interfaces 2>/dev/null || true)"
 rollback() {
   [ -n "$OLD_MAILBOX" ] && postconf -e "mailbox_size_limit=${OLD_MAILBOX}" >/dev/null 2>&1
   [ -n "$OLD_MESSAGE" ] && postconf -e "message_size_limit=${OLD_MESSAGE}" >/dev/null 2>&1
+  [ -n "$OLD_VIRTUAL_MAILBOX_LIMIT" ] && postconf -e "virtual_mailbox_limit=${OLD_VIRTUAL_MAILBOX_LIMIT}" >/dev/null 2>&1
   [ -n "$OLD_HOME_MAILBOX" ] && postconf -e "home_mailbox=${OLD_HOME_MAILBOX}" >/dev/null 2>&1
   [ -n "$OLD_SMTPD_MILTERS" ] && postconf -e "smtpd_milters=${OLD_SMTPD_MILTERS}" >/dev/null 2>&1
   [ -n "$OLD_NON_SMTPD_MILTERS" ] && postconf -e "non_smtpd_milters=${OLD_NON_SMTPD_MILTERS}" >/dev/null 2>&1
@@ -66,6 +89,7 @@ rollback() {
 
 postconf -e "mailbox_size_limit=${MAILBOX_LIMIT}"
 postconf -e "message_size_limit=${MESSAGE_LIMIT}"
+postconf -e "virtual_mailbox_limit=${MAILBOX_LIMIT}"
 if [ "$OLD_HOME_MAILBOX" != "Maildir/" ]; then
   postconf -e "home_mailbox=Maildir/"
 fi

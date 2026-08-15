@@ -376,8 +376,22 @@ chmod 600 /etc/dovecot/dovecot-sql-virtual.conf.ext
 # auth-system.conf.ext) - Dovecot probuje kazdy passdb/userdb po kolei,
 # brak dopasowania (0 wierszy z SQL) po prostu przechodzi do nastepnego,
 # zero konfliktu.
-cat > /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf <<'EOF'
+# first_valid_uid domyslnie 1000 (pakietowe ustawienie Dovecota,
+# 10-mail.conf, ladowane WCZESNIEJ alfabetycznie niz ten plik "91-...") -
+# blokuje dostep dla KAZDEGO UID ponizej 1000, w tym samego "vmail"
+# ("useradd --system" wyzej przydziela UID z puli systemowej, ponizej
+# 1000 - potwierdzone na zywym serwerze 2026-08-15: UID 987). Efekt:
+# Dovecot odmawial dostepu do KAZDEJ wirtualnej skrzynki ("Mail access for
+# users with UID ... not permitted"), mimo poprawnej reszty configu -
+# konta systemowe (PAM, userdb=passwd, UID >= 1000 ze standardowego
+# useradd w hosting-account-create.sh) nigdy na to nie trafialy, wiec bylo
+# to niewidoczne az do pierwszego realnego logowania na wirtualna
+# skrzynke. Dopuszczamy WYLACZNIE ten jeden, znany, bezpieczny UID (NIE
+# obnizamy globalnej bariery dla wszystkiego innego ponizej 1000, np.
+# roota) - stad zmienna VMAIL_UID w tym pliku, nie sztywna liczba.
+cat > /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf <<EOF
 # Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
+first_valid_uid = ${VMAIL_UID}
 passdb {
   driver = sql
   args = /etc/dovecot/dovecot-sql-virtual.conf.ext
@@ -422,6 +436,17 @@ postconf -e "virtual_uid_maps=static:${VMAIL_UID}"
 postconf -e "virtual_gid_maps=static:${VMAIL_GID}"
 postconf -e "virtual_minimum_uid=${VMAIL_UID}"
 postconf -e 'virtual_transport = virtual'
+# Postfixowy WLASNY, STALY domyslny virtual_mailbox_limit (51200000 B,
+# ~51MB) jest NIEZALEZNY od mailbox_size_limit mimo podobnej nazwy - jesli
+# message_size_limit jest juz wiekszy (np. admin podniosl go wczesniej w
+# Poczta -> ustawienia, patrz postfix-set-limits.sh), agent `virtual`
+# odmawia startu przy pierwszej dostawie ("virtual_mailbox_limit is
+# smaller than message_size_limit"), niezaleznie od tego ze `postfix
+# check` przechodzi czysto. Potwierdzone na zywym serwerze 2026-08-15 -
+# dopasowujemy go tu od razu do aktualnego mailbox_size_limit, zeby swiezy
+# install (albo re-run na juz dzialajacym message_size_limit) nigdy nie
+# zaczynal w tym zepsutym stanie.
+postconf -e "virtual_mailbox_limit=$(postconf -h mailbox_size_limit 2>/dev/null || echo 0)"
 
 postfix check || err "Konfiguracja Postfixa nie przeszla walidacji (postfix check) po zmianach."
 
