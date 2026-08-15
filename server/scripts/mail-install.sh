@@ -192,13 +192,23 @@ postconf -e 'smtpd_tls_security_level = may'
 # skrypt (idempotentny/re-runowalny) nie moze go nadpisywac pusta mapa
 # przy kazdym ponownym uruchomieniu (dokladnie ten sam blad co certyfikat
 # self-signed wyzej).
+# lmdb: (NIE hash:/btree:) - na AlmaLinux/Rocky 10 Postfix jest budowany
+# BEZ Berkeley DB (usunieta z bazowego systemu, problem licencyjny
+# Oracle) - `postconf -m` na tym build'zie w ogole nie wymienia hash/
+# btree wsrod dostepnych typow map. Potwierdzone na zywym serwerze
+# 2026-08-15 realnym bledem "unsupported dictionary type: hash. Is the
+# postfix-hash package installed?" - psulo TLS dla WSZYSTKICH polaczen
+# (nie tylko SNI), bo Postfix nie moze otworzyc mapy = nie moze
+# dokonczyc handshake'u. lmdb ma inne rozszerzenie pliku (.lmdb, NIE
+# .db) - patrz tez virtual_mailbox_domains/-maps/virtual_alias_maps
+# nizej, ten sam blad, ta sama poprawka.
 SNI_MAP_FILE="/etc/postfix/mail-sni-map"
 if [ ! -f "$SNI_MAP_FILE" ]; then
   : > "$SNI_MAP_FILE"
-  postmap "$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
-  chmod 644 "$SNI_MAP_FILE" "${SNI_MAP_FILE}.db" 2>/dev/null || true
+  postmap lmdb:"$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
+  chmod 644 "$SNI_MAP_FILE" "${SNI_MAP_FILE}.lmdb" 2>/dev/null || true
 fi
-postconf -e "tls_server_sni_maps=hash:${SNI_MAP_FILE}"
+postconf -e "tls_server_sni_maps=lmdb:${SNI_MAP_FILE}"
 # Dovecot: analogiczny, pusty plik z blokami "local_name { ssl_cert = ...
 # ssl_key = ... }" per domena - regenerowany w calosci przez
 # mail-sni-sync.sh (ten sam wzorzec co Postfixowa mapa wyzej). /etc/
@@ -230,8 +240,20 @@ postconf -e 'non_smtpd_milters = inet:127.0.0.1:8891'
 # zamiast probowac odkomentowac szablon dostarczony z pakietem (rozny
 # dokladny format miedzy wersjami postfixa/dystrybucji) - `postconf -M`
 # to REALNY, autorytatywny odczyt aktywnej konfiguracji (nie dopasowanie
-# tekstu), wiec dopisanie jest bezpiecznie idempotentne.
-if ! postconf -M 2>/dev/null | grep -q '^submission/inet'; then
+# tekstu), wiec dopisanie MIALO byc bezpiecznie idempotentne.
+#
+# BYL TU REALNY BLAD, potwierdzony na zywym serwerze 2026-08-15 (4x
+# zduplikowane stanze submission/smtps w master.cf po samych 4
+# uruchomieniach tego skryptu w ciagu jednej sesji): sprawdzenie
+# `grep -q '^submission/inet'` NIGDY nie pasowalo, bo prawdziwy format
+# `postconf -M` to "submission inet ..." (spacja miedzy nazwa a typem),
+# NIE "submission/inet" (ten drugi zapis to `postconf -Mf`/inny kontekst,
+# nie zwykle `postconf -M`) - w efekcie warunek zawsze wychodzil "nie ma
+# jeszcze", wiec KAZDE ponowne uruchomienie (np. przycisk "Sprawdz/
+# zaktualizuj konfiguracje") dopisywalo kolejna kopie. Naprawa: dopasuj
+# WYLACZNIE pierwsze pole (nazwa uslugli), dokladnie, awk+grep -x -
+# odporne na dowolna liczbe spacji/tabow w kolumnach wyjscia postconf.
+if ! postconf -M 2>/dev/null | awk '{print $1}' | grep -qx submission; then
   cat >> /etc/postfix/master.cf <<'EOF'
 
 submission inet n       -       y       -       -       smtpd
@@ -241,7 +263,7 @@ submission inet n       -       y       -       -       smtpd
   -o smtpd_relay_restrictions=permit_sasl_authenticated,reject
 EOF
 fi
-if ! postconf -M 2>/dev/null | grep -q '^smtps/inet'; then
+if ! postconf -M 2>/dev/null | awk '{print $1}' | grep -qx smtps; then
   cat >> /etc/postfix/master.cf <<'EOF'
 
 smtps     inet  n       -       y       -       -       smtpd
@@ -343,29 +365,33 @@ chmod 644 /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf
 
 dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (91-caddy-dashboard-virtual.conf) nie przeszla walidacji (dovecot -n)."
 
-# --- Postfix: wirtualne domeny/skrzynki/aliasy - PLASKIE pliki hash:,
+# --- Postfix: wirtualne domeny/skrzynki/aliasy - PLASKIE pliki lmdb:,
 # REGENEROWANE ze zrodla prawdy (SQLite powyzej) przez mail-virtual-*.sh
 # przy kazdej zmianie (ten sam wzorzec co KeyTable/SigningTable OpenDKIM).
 # Tworzone tu jako PUSTE (0 domen) - postmap nizej ma co zwalidowac nawet
 # przy zerowej liczbie wirtualnych domen.
+#
+# lmdb: (NIE hash:) - patrz obszerny komentarz przy SNI_MAP_FILE wyzej,
+# ten sam powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10) i ten sam
+# realny blad potwierdzony na zywym serwerze 2026-08-15.
 VIRTUAL_DOMAINS_FILE="/etc/postfix/virtual-domains"
 VIRTUAL_MAILBOX_FILE="/etc/postfix/virtual-mailboxes"
 VIRTUAL_ALIAS_FILE="/etc/postfix/virtual-aliases"
 # chmod 644 PO KAZDYM postmap (nie tylko przy tworzeniu) - `postmap`
-# generuje plik .db od nowa za kazdym razem, wiec dziedziczy AKTUALNY
+# generuje plik .lmdb od nowa za kazdym razem, wiec dziedziczy AKTUALNY
 # umask roota (na tym serwerze potrafi dac 640, patrz OpenDKIM
 # 2026-08-14) - bez jawnego chmod proces "postfix" (odebrane uprawnienia,
 # NIE root) nie moglby odczytac WLASNYCH map wirtualnych domen/skrzynek.
 for f in "$VIRTUAL_DOMAINS_FILE" "$VIRTUAL_MAILBOX_FILE" "$VIRTUAL_ALIAS_FILE"; do
   [ -f "$f" ] || : > "$f"
-  postmap "$f" || err "postmap ${f} nie powiodlo sie."
-  chmod 644 "$f" "${f}.db" 2>/dev/null || true
+  postmap lmdb:"$f" || err "postmap ${f} nie powiodlo sie."
+  chmod 644 "$f" "${f}.lmdb" 2>/dev/null || true
 done
 
 postconf -e "virtual_mailbox_base=/var/mail/vhosts"
-postconf -e "virtual_mailbox_domains=hash:${VIRTUAL_DOMAINS_FILE}"
-postconf -e "virtual_mailbox_maps=hash:${VIRTUAL_MAILBOX_FILE}"
-postconf -e "virtual_alias_maps=hash:${VIRTUAL_ALIAS_FILE}"
+postconf -e "virtual_mailbox_domains=lmdb:${VIRTUAL_DOMAINS_FILE}"
+postconf -e "virtual_mailbox_maps=lmdb:${VIRTUAL_MAILBOX_FILE}"
+postconf -e "virtual_alias_maps=lmdb:${VIRTUAL_ALIAS_FILE}"
 postconf -e "virtual_uid_maps=static:${VMAIL_UID}"
 postconf -e "virtual_gid_maps=static:${VMAIL_GID}"
 postconf -e "virtual_minimum_uid=${VMAIL_UID}"

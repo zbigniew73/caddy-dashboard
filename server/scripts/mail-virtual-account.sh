@@ -54,8 +54,10 @@ regen_virtual_mailboxes() {
   # Format wymagany przez Postfix (virtual_mailbox_maps): "adres wzgledna/sciezka/do/Maildir/"
   sql "SELECT mailboxes.localpart || '@' || domains.domain || ' ' || domains.domain || '/' || mailboxes.localpart || '/Maildir/' FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id;" \
     > "$VIRTUAL_MAILBOX_FILE"
-  postmap "$VIRTUAL_MAILBOX_FILE" || err "postmap ${VIRTUAL_MAILBOX_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_MAILBOX_FILE" "${VIRTUAL_MAILBOX_FILE}.db" 2>/dev/null || true
+  # lmdb: (NIE hash:) - patrz komentarz w mail-virtual-domain.sh, ten sam
+  # powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10).
+  postmap lmdb:"$VIRTUAL_MAILBOX_FILE" || err "postmap ${VIRTUAL_MAILBOX_FILE} nie powiodlo sie."
+  chmod 644 "$VIRTUAL_MAILBOX_FILE" "${VIRTUAL_MAILBOX_FILE}.lmdb" 2>/dev/null || true
   systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
 }
 

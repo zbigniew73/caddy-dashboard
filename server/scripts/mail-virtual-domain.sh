@@ -30,8 +30,17 @@ regen_virtual_domains() {
   sql "SELECT domain FROM domains;" | while IFS= read -r d; do
     printf '%s OK\n' "$d"
   done > "$VIRTUAL_DOMAINS_FILE"
-  postmap "$VIRTUAL_DOMAINS_FILE" || err "postmap ${VIRTUAL_DOMAINS_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_DOMAINS_FILE" "${VIRTUAL_DOMAINS_FILE}.db" 2>/dev/null || true
+  # lmdb: (NIE hash:/btree:) - na AlmaLinux/Rocky 10 Postfix jest budowany
+  # BEZ Berkeley DB (usunieta z bazowego systemu, problem licencyjny
+  # Oracle) - `postconf -m` na tym build'zie w ogole nie wymienia hash/
+  # btree wsrod dostepnych typow map. Potwierdzone na zywym serwerze
+  # 2026-08-15 realnym bledem "unsupported dictionary type: hash. Is the
+  # postfix-hash package installed?" - psulo TLS (SNI) i prawdopodobnie
+  # TEZ te wirtualne mapy (main.cf mowil "hash:", plik faktycznie
+  # zapisany przez `postmap` w formacie default_database_type). lmdb.db
+  # ma inne rozszerzenie pliku (.lmdb, NIE .db).
+  postmap lmdb:"$VIRTUAL_DOMAINS_FILE" || err "postmap ${VIRTUAL_DOMAINS_FILE} nie powiodlo sie."
+  chmod 644 "$VIRTUAL_DOMAINS_FILE" "${VIRTUAL_DOMAINS_FILE}.lmdb" 2>/dev/null || true
   systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
 }
 

@@ -44,8 +44,10 @@ get_domain_id() {
 regen_virtual_aliases() {
   sql "SELECT source || ' ' || destination FROM aliases JOIN domains ON domains.id = aliases.domain_id;" \
     > "$VIRTUAL_ALIAS_FILE"
-  postmap "$VIRTUAL_ALIAS_FILE" || err "postmap ${VIRTUAL_ALIAS_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_ALIAS_FILE" "${VIRTUAL_ALIAS_FILE}.db" 2>/dev/null || true
+  # lmdb: (NIE hash:) - patrz komentarz w mail-virtual-domain.sh, ten sam
+  # powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10).
+  postmap lmdb:"$VIRTUAL_ALIAS_FILE" || err "postmap ${VIRTUAL_ALIAS_FILE} nie powiodlo sie."
+  chmod 644 "$VIRTUAL_ALIAS_FILE" "${VIRTUAL_ALIAS_FILE}.lmdb" 2>/dev/null || true
   systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
 }
 
