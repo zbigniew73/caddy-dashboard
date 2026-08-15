@@ -830,7 +830,99 @@ function mailStatsCardHtml(status) {
   `;
 }
 
-function renderMailSection(status) {
+// Domeny dostepne w obu ponizszych kafelkach = WSZYSTKIE domeny wirtualne
+// zarejestrowane pod tym kontem (baza strony ORAZ "mail.<domena>", patrz
+// hostingUserSites.js createSite -> addVirtualDomain x2) - panel nie
+// zgaduje, ktorej "powinien" uzyc, user sam wybiera z listy.
+let mailSelectedDomain = null;
+
+// Lewy z nowej pary kafelkow - "Dodaj konto e-mail". Formularz + tabela
+// istniejacych skrzynek DLA WYBRANEJ domeny (przelacznik domeny odswieza
+// cala zakladke, patrz wireMailManageSection). Limit (2 konta/domene
+// domyslnie) jest egzekwowany PO STRONIE SERWERA
+// (hostingUserMailboxes.js -> mailVirtual.js -> mailLimits.js), wiec
+// przekroczenie po prostu wraca jako czytelny blad w msgEl, bez
+// duplikowania logiki limitu tutaj.
+function mailboxManageCardHtml(domains, selectedDomain, mailboxes) {
+  if (!domains.length) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.mailbox_manage_title')}</h3>
+      <div class="empty-state">${t('mail.mailbox_no_domains')}</div>
+    `;
+  }
+  const domainOptionsHtml = domains.map((d) => `<option value="${escapeHtml(d)}" ${d === selectedDomain ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+  const rows = mailboxes.map((m) => `
+    <tr>
+      <td>${escapeHtml(m.localpart)}@${escapeHtml(selectedDomain)}</td>
+      <td style="white-space:nowrap;">
+        <button type="button" class="secondary" data-mailbox-passwd="${escapeHtml(m.localpart)}">${t('mail.mailbox_changepw_button')}</button>
+        <button type="button" class="danger" data-mailbox-remove="${escapeHtml(m.localpart)}">${t('mail.mailbox_delete_button')}</button>
+      </td>
+    </tr>
+  `).join('');
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.mailbox_manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.mailbox_manage_description')}</p>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_domain')}</label>
+    <select id="mailbox-domain-select" style="width:100%;box-sizing:border-box;margin-bottom:10px;">${domainOptionsHtml}</select>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_localpart')}</label>
+    <input type="text" id="mailbox-new-localpart" placeholder="${t('mail.localpart_placeholder')}" style="width:100%;box-sizing:border-box;margin-bottom:10px;">
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_password')}</label>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <input type="text" id="mailbox-new-password" style="flex:1;font-family:var(--mono);">
+      <button type="button" class="secondary" id="mailbox-generate-btn">${t('redis.generate_button')}</button>
+    </div>
+    <button type="button" id="mailbox-create-btn">${t('mail.mailbox_add_button')}</button>
+    <div class="action-msg" id="mailbox-msg"></div>
+    ${mailboxes.length ? `
+      <table class="firewall-table" style="margin-top:14px;">
+        <thead><tr><th>${t('mail.mailbox_column')}</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    ` : `<div class="empty-state" style="margin-top:14px;">${t('mail.mailbox_empty')}</div>`}
+  `;
+}
+
+// Prawy z nowej pary kafelkow - "Dodaj przekierowanie/alias". Ten sam
+// wzorzec domena-select + formularz + tabela co lewy kafelek wyzej;
+// destination MOZE byc dowolnym zewnetrznym adresem (nie tylko lokalna
+// skrzynka), zgodnie z addVirtualAlias w mailVirtual.js.
+function aliasManageCardHtml(domains, selectedDomain, aliases) {
+  if (!domains.length) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.alias_manage_title')}</h3>
+      <div class="empty-state">${t('mail.mailbox_no_domains')}</div>
+    `;
+  }
+  const domainOptionsHtml = domains.map((d) => `<option value="${escapeHtml(d)}" ${d === selectedDomain ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
+  const rows = aliases.map((a) => `
+    <tr>
+      <td>${escapeHtml(a.source)}@${escapeHtml(selectedDomain)}</td>
+      <td>${escapeHtml(a.destination)}</td>
+      <td><button type="button" class="danger" data-alias-remove="${escapeHtml(a.source)}" data-alias-dest="${escapeHtml(a.destination)}">${t('mail.mailbox_delete_button')}</button></td>
+    </tr>
+  `).join('');
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.alias_manage_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.alias_manage_description')}</p>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_domain')}</label>
+    <select id="alias-domain-select" style="width:100%;box-sizing:border-box;margin-bottom:10px;">${domainOptionsHtml}</select>
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_alias_source')}</label>
+    <input type="text" id="alias-new-source" placeholder="${t('mail.localpart_placeholder')}" style="width:100%;box-sizing:border-box;margin-bottom:10px;">
+    <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('mail.field_alias_destination')}</label>
+    <input type="text" id="alias-new-destination" placeholder="${t('mail.alias_destination_placeholder')}" style="width:100%;box-sizing:border-box;margin-bottom:10px;">
+    <button type="button" id="alias-create-btn">${t('mail.alias_add_button')}</button>
+    <div class="action-msg" id="alias-msg"></div>
+    ${aliases.length ? `
+      <table class="firewall-table" style="margin-top:14px;">
+        <thead><tr><th>${t('mail.alias_column_source')}</th><th>${t('mail.alias_column_destination')}</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    ` : `<div class="empty-state" style="margin-top:14px;">${t('mail.alias_empty')}</div>`}
+  `;
+}
+
+function renderMailSection(status, domains, selectedDomain, mailboxes, aliases) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
@@ -840,14 +932,151 @@ function renderMailSection(status) {
         ${mailStatsCardHtml(status)}
       </div>
     </div>
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${mailboxManageCardHtml(domains, selectedDomain, mailboxes)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${aliasManageCardHtml(domains, selectedDomain, aliases)}
+      </div>
+    </div>
   `;
+}
+
+function wireMailManageSection(content) {
+  const mailboxDomainSelect = document.getElementById('mailbox-domain-select');
+  if (mailboxDomainSelect) {
+    mailboxDomainSelect.onchange = async () => {
+      mailSelectedDomain = mailboxDomainSelect.value;
+      await refreshMailTab(content);
+    };
+  }
+  const aliasDomainSelect = document.getElementById('alias-domain-select');
+  if (aliasDomainSelect) {
+    aliasDomainSelect.onchange = async () => {
+      mailSelectedDomain = aliasDomainSelect.value;
+      await refreshMailTab(content);
+    };
+  }
+
+  const genBtn = document.getElementById('mailbox-generate-btn');
+  if (genBtn) {
+    genBtn.onclick = () => {
+      document.getElementById('mailbox-new-password').value = generatePassword();
+    };
+  }
+
+  const createMailboxBtn = document.getElementById('mailbox-create-btn');
+  if (createMailboxBtn) {
+    createMailboxBtn.onclick = async () => {
+      const domain = document.getElementById('mailbox-domain-select').value;
+      const localpart = document.getElementById('mailbox-new-localpart').value.trim();
+      const password = document.getElementById('mailbox-new-password').value;
+      const msgEl = document.getElementById('mailbox-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      createMailboxBtn.disabled = true;
+      try {
+        await api('POST', '/mail/mailboxes', { domain, localpart, password });
+        await refreshMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createMailboxBtn.disabled = false;
+      }
+    };
+  }
+
+  content.querySelectorAll('[data-mailbox-passwd]').forEach((btn) => {
+    btn.onclick = async () => {
+      const localpart = btn.dataset.mailboxPasswd;
+      const password = window.prompt(t('mail.mailbox_prompt_password'));
+      if (password === null) return;
+      if (password.length < 8) { window.alert(t('mail.mailbox_password_too_short')); return; }
+      btn.disabled = true;
+      try {
+        await api('PUT', `/mail/mailboxes/${encodeURIComponent(mailSelectedDomain)}/${encodeURIComponent(localpart)}`, { password });
+        await refreshMailTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  content.querySelectorAll('[data-mailbox-remove]').forEach((btn) => {
+    btn.onclick = async () => {
+      const localpart = btn.dataset.mailboxRemove;
+      if (!window.confirm(t('mail.mailbox_confirm_remove', { mailbox: `${localpart}@${mailSelectedDomain}` }))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/mail/mailboxes/${encodeURIComponent(mailSelectedDomain)}/${encodeURIComponent(localpart)}`);
+        await refreshMailTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+
+  const createAliasBtn = document.getElementById('alias-create-btn');
+  if (createAliasBtn) {
+    createAliasBtn.onclick = async () => {
+      const domain = document.getElementById('alias-domain-select').value;
+      const sourceLocalpart = document.getElementById('alias-new-source').value.trim();
+      const destination = document.getElementById('alias-new-destination').value.trim();
+      const msgEl = document.getElementById('alias-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      createAliasBtn.disabled = true;
+      try {
+        await api('POST', '/mail/aliases', { domain, sourceLocalpart, destination });
+        await refreshMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        createAliasBtn.disabled = false;
+      }
+    };
+  }
+
+  content.querySelectorAll('[data-alias-remove]').forEach((btn) => {
+    btn.onclick = async () => {
+      const source = btn.dataset.aliasRemove;
+      const destination = btn.dataset.aliasDest;
+      if (!window.confirm(t('mail.alias_confirm_remove', { source, destination }))) return;
+      btn.disabled = true;
+      try {
+        await api('DELETE', `/mail/aliases/${encodeURIComponent(mailSelectedDomain)}/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`);
+        await refreshMailTab(content);
+      } catch (e) {
+        window.alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
 }
 
 async function refreshMailTab(content) {
   content.innerHTML = `<div class="empty-state">${t('mail.loading')}</div>`;
   try {
-    const status = await api('GET', '/mail');
-    content.innerHTML = renderMailSection(status);
+    const [status, { items: domains }] = await Promise.all([
+      api('GET', '/mail'),
+      api('GET', '/mail/domains')
+    ]);
+    if (!mailSelectedDomain || !domains.includes(mailSelectedDomain)) {
+      mailSelectedDomain = domains[0] || null;
+    }
+    let mailboxes = [];
+    let aliases = [];
+    if (mailSelectedDomain) {
+      [{ items: mailboxes }, { items: aliases }] = await Promise.all([
+        api('GET', `/mail/mailboxes?domain=${encodeURIComponent(mailSelectedDomain)}`),
+        api('GET', `/mail/aliases?domain=${encodeURIComponent(mailSelectedDomain)}`)
+      ]);
+    }
+    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases);
+    wireMailManageSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
   }

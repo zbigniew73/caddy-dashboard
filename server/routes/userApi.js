@@ -10,6 +10,11 @@ import { getInstalledPhp } from '../services/runtimeManagerClient.js';
 import { getOwnRedisStatus, startOwnRedis, stopOwnRedis, testOwnRedis } from '../services/hostingUserRedis.js';
 import { getOwnMail } from '../services/hostingUserMail.js';
 import {
+  listOwnMailDomains,
+  listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
+  listOwnAliases, createOwnAlias, removeOwnAlias
+} from '../services/hostingUserMailboxes.js';
+import {
   listPythonVersions,
   listApps as listPythonApps, createApp as createPythonApp, startApp as startPythonApp,
   stopApp as stopPythonApp, deleteApp as deletePythonApp, getAppLogs as getPythonAppLogs
@@ -219,6 +224,75 @@ router.delete('/databases/:id', async (req, res) => {
 router.get('/mail', async (req, res) => {
   try {
     res.json(await getOwnMail(req.hostingUser));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/domains', async (req, res) => {
+  try {
+    res.json({ items: await listOwnMailDomains(req.hostingUser) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/mailboxes', async (req, res) => {
+  try {
+    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+    res.json({ items: await listOwnMailboxes(req.hostingUser, domain) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/mailboxes', async (req, res) => {
+  try {
+    const { domain, localpart, password } = req.body || {};
+    res.json(await createOwnMailbox(req.hostingUser, domain, localpart, password));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.put('/mail/mailboxes/:domain/:localpart', async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    res.json(await setOwnMailboxPassword(req.hostingUser, req.params.domain, req.params.localpart, password));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/mailboxes/:domain/:localpart', async (req, res) => {
+  try {
+    res.json(await removeOwnMailbox(req.hostingUser, req.params.domain, req.params.localpart));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/aliases', async (req, res) => {
+  try {
+    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+    res.json({ items: await listOwnAliases(req.hostingUser, domain) });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/aliases', async (req, res) => {
+  try {
+    const { domain, sourceLocalpart, destination } = req.body || {};
+    res.json(await createOwnAlias(req.hostingUser, domain, sourceLocalpart, destination));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/aliases/:domain/:source/:destination', async (req, res) => {
+  try {
+    res.json(await removeOwnAlias(req.hostingUser, req.params.domain, req.params.source, req.params.destination));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
