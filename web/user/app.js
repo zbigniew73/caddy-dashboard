@@ -1819,6 +1819,24 @@ function siteRedirectRadios(name, selected) {
   `;
 }
 
+// "Brak poczty" domyslnie zaznaczony - dodanie strony NIE rejestruje
+// domeny jako wirtualnej domeny pocztowej, dopoki user wyraznie tego nie
+// zazada (mailVirtual.js addVirtualDomain, patrz createSite w
+// hostingUserSites.js - najlepszy wysilek, nie blokuje utworzenia
+// strony jesli sie nie powiedzie, np. Poczta nigdy nie zainstalowana).
+function siteMailRadios(name, selected) {
+  return `
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="none" ${selected === 'none' ? 'checked' : ''}>
+      ${t('sites.mail_none')}
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:normal;">
+      <input type="radio" name="${name}" value="enabled" ${selected === 'enabled' ? 'checked' : ''}>
+      ${t('sites.mail_enabled')}
+    </label>
+  `;
+}
+
 // PHP/WORDPRESS/REVERSE PROXY pod HTML (jedna pod druga, nie obok siebie
 // w rzedzie) - przy PHP i WORDPRESS rozwijalna lista z wersjami PHP
 // faktycznie zainstalowanymi w systemie (ten sam mechanizm co selektor
@@ -2044,6 +2062,10 @@ function sitesManageCardHtml(data, phpVersions) {
         <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteRedirectRadios('site-new-redirect', 'www-to-apex')}</div>
       </div>
       <div>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_mail')}</label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;">${siteMailRadios('site-new-mail', 'none')}</div>
+      </div>
+      <div>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('sites.field_template')}</label>
         <div style="display:flex;flex-direction:column;gap:8px;">${siteTemplateRadios('site-new-template', 'html', phpVersions)}</div>
       </div>
@@ -2261,19 +2283,22 @@ function wireSitesSection(content) {
         ? content.querySelector('input[name="site-new-template-proxyport-reverseproxy"]')
         : null;
       const selected = content.querySelector('input[name="site-new-redirect"]:checked');
+      const mailSelected = content.querySelector('input[name="site-new-mail"]:checked');
       const msgEl = document.getElementById('site-msg');
       msgEl.textContent = '';
       msgEl.className = 'action-msg';
       createBtn.disabled = true;
       try {
-        await api('POST', '/sites', {
+        const result = await api('POST', '/sites', {
           domain: domainInput.value.trim(),
           redirectMode: selected ? selected.value : 'www-to-apex',
           template: templateValue,
           phpVersion: phpVersionSelect ? phpVersionSelect.value : undefined,
           wpInstall: wpInstallSelect ? wpInstallSelect.value : undefined,
-          proxyPort: proxyPortInput ? proxyPortInput.value : undefined
+          proxyPort: proxyPortInput ? proxyPortInput.value : undefined,
+          mailEnabled: !!mailSelected && mailSelected.value === 'enabled'
         });
+        if (result && result.mailWarning) window.alert(result.mailWarning);
         await refreshSitesTab(content);
       } catch (e) {
         msgEl.textContent = e.message;

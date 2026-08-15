@@ -115,8 +115,8 @@ router.get('/php-versions', async (req, res) => {
 
 router.post('/sites', async (req, res) => {
   try {
-    const { domain, redirectMode, template, phpVersion, proxyPort, wpInstall } = req.body || {};
-    res.json(await createSite(req.hostingUser, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall }));
+    const { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, mailEnabled } = req.body || {};
+    res.json(await createSite(req.hostingUser, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, mailEnabled }));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

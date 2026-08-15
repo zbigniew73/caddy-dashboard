@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { listAccounts } from './hostingAccounts.js';
+import { addVirtualDomain } from './mailVirtual.js';
 
 const DATA_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../data');
 const DATA_PATH = path.join(DATA_DIR, 'hosting-sites.json');
@@ -152,6 +153,7 @@ function toPublic(record) {
     template: record.template,
     phpVersion: record.phpVersion ?? null,
     proxyPort: record.proxyPort ?? null,
+    mailEnabled: Boolean(record.mailEnabled),
     enabled: record.enabled,
     createdAt: record.createdAt
   };
@@ -362,7 +364,7 @@ function validateRedirectMode(redirectMode) {
   return redirectMode;
 }
 
-async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall }) {
+async function createSite(username, { domain, redirectMode, template, phpVersion, proxyPort, wpInstall, mailEnabled }) {
   const redirectValue = validateRedirectMode(redirectMode);
   const domainValue = validateDomain(domain, redirectValue === 'none');
   const templateValue = TEMPLATES.includes(template) ? template : 'html';
@@ -412,12 +414,33 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
     template: templateValue,
     phpVersion: phpVersionValue,
     proxyPort: proxyPortValue,
+    mailEnabled: false,
     enabled: true,
     createdAt: new Date().toISOString()
   };
   all.push(record);
   saveData(all);
-  return toPublic(record);
+
+  // "Obsluga poczty" = zarejestrowanie tej domeny jako wirtualnej domeny
+  // pocztowej (mailVirtual.js, NIEZALEZNej od systemowego konta/SSH -
+  // patrz [[project_caddy_dashboard_virtual_mail_plan]]) - najlepszy
+  // wysilek, NIE blokuje utworzenia samej strony. Typowe powody
+  // niepowodzenia (Poczta nigdy nie zainstalowana/zainicjalizowana przez
+  // admina, albo domena jest juz domena panelu) trafiaja do
+  // odpowiedzi jako mailWarning, zeby user wiedzial co zrobic dalej -
+  // strona i tak juz istnieje, wiec nie ma sensu cofac calej operacji.
+  let mailWarning = null;
+  if (mailEnabled) {
+    try {
+      await addVirtualDomain(domainValue, username);
+      record.mailEnabled = true;
+      saveData(all);
+    } catch (e) {
+      mailWarning = e.message;
+    }
+  }
+
+  return { ...toPublic(record), mailWarning };
 }
 
 function findOwnRecord(all, username, id) {
