@@ -202,10 +202,21 @@ postconf -e 'smtpd_tls_security_level = may'
 # dokonczyc handshake'u. lmdb ma inne rozszerzenie pliku (.lmdb, NIE
 # .db) - patrz tez virtual_mailbox_domains/-maps/virtual_alias_maps
 # nizej, ten sam blad, ta sama poprawka.
+#
+# `postmap -F` (NIE goly `postmap`) - specyficzne WYLACZNIE dla
+# tls_server_sni_maps: Postfix przy odczycie tego konkretnego parametru
+# oczekuje wartosci zakodowanej w base64 (wewnetrzny mechanizm TLS-
+# kontekstow), a `-F` to ten krok wlacza przy budowaniu mapy - bez niego
+# (zwykle "postmap lmdb:plik") smtpd loguje "malformed BASE64 value" i
+# odrzuca KAZDE polaczenie TLS proszace o SNI dla domeny w tej mapie
+# (potwierdzone na zywym serwerze 2026-08-15, zrodlo:
+# https://www.mail-archive.com/postfix-users@postfix.org/msg91707.html).
+# Zwykle mapy tego projektu (virtual_mailbox_domains itd.) NIE potrzebuja
+# -F - to wylacznie kwirk tls_server_sni_maps.
 SNI_MAP_FILE="/etc/postfix/mail-sni-map"
 if [ ! -f "$SNI_MAP_FILE" ]; then
   : > "$SNI_MAP_FILE"
-  postmap lmdb:"$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
+  postmap -F lmdb:"$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
   chmod 644 "$SNI_MAP_FILE" "${SNI_MAP_FILE}.lmdb" 2>/dev/null || true
 fi
 postconf -e "tls_server_sni_maps=lmdb:${SNI_MAP_FILE}"

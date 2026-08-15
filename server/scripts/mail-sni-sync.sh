@@ -84,7 +84,13 @@ regenerate_maps() {
   # na zywym serwerze 2026-08-15, "unsupported dictionary type: hash").
   # Musi byc zgodne z postconf -e "tls_server_sni_maps=lmdb:..." w
   # mail-install.sh - plik .lmdb, NIE .db.
-  postmap lmdb:"$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
+  # `-F` OBOWIAZKOWE dla tls_server_sni_maps (inaczej niz dla zwyklych
+  # tabel routingu w tym projekcie) - bez tego smtpd loguje "malformed
+  # BASE64 value" i odrzuca KAZDE polaczenie TLS z SNI dopasowanym do tej
+  # mapy (potwierdzone na zywym serwerze 2026-08-15, realny Gmail
+  # inbound do mail.autoai.qd.je - zrodlo:
+  # https://www.mail-archive.com/postfix-users@postfix.org/msg91707.html).
+  postmap -F lmdb:"$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
   chmod 644 "$SNI_MAP_FILE" "${SNI_MAP_FILE}.lmdb" 2>/dev/null || true
 
   mv "${SNI_DOVECOT_FILE}.tmp" "$SNI_DOVECOT_FILE"
@@ -155,7 +161,7 @@ if [ "$ACTION" = "sync" ] || [ "$ACTION" = "remove" ]; then
 
   rollback() {
     cp -p "$MAP_BACKUP" "$SNI_MAP_FILE"
-    postmap lmdb:"$SNI_MAP_FILE" >/dev/null 2>&1 || true
+    postmap -F lmdb:"$SNI_MAP_FILE" >/dev/null 2>&1 || true
     cp -p "$DOVECOT_BACKUP" "$SNI_DOVECOT_FILE"
     systemctl reload postfix dovecot >/dev/null 2>&1 || true
     rm -f "$MAP_BACKUP" "$DOVECOT_BACKUP"
