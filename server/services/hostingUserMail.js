@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { readDisabledUsernames, getPostfixLimits } from './mail.js';
 import { getServiceDef, getServiceStatus } from './systemServices.js';
 import { detectBaseDomain } from './roundcubeSite.js';
+import { getRoundcubeConfig } from './roundcubeConfig.js';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url)) + '/../scripts';
 
@@ -45,11 +46,22 @@ function getMailboxStats(username) {
 // gdzie Poczta nigdy nie zostala zainstalowana przez admina.
 async function getOwnMail(username) {
   const postfixStatus = await getServiceStatus(getServiceDef('postfix'));
+  // Adres webmaila (Roundcube) - "webmail.<domena>" jest ZAWSZE ta sama
+  // konwencja, ktorej roundcubeSite.js uzywa do budowy bloku Caddy
+  // (buildCaddyBlock), wiec skladamy go tu sami zamiast wolac Caddy -
+  // domena to ta, ktora admin ustawil przy konfiguracji Roundcube
+  // (roundcubeConfig.js), NIE koniecznie ta sama co detectBaseDomain()
+  // ponizej (admin mogl wpisac inna). Brak skonfigurowanej domeny (
+  // Roundcube nigdy nie skonfigurowany) = brak linku, nie zmyslony adres.
+  const roundcubeDomain = getRoundcubeConfig().domain;
+  const webmailUrl = roundcubeDomain ? `https://webmail.${roundcubeDomain}` : null;
+
   if (!postfixStatus.found) {
     return {
       mailInstalled: false,
       accessEnabled: false,
       emailAddress: null,
+      webmailUrl,
       sizeMb: 0,
       messageCount: 0,
       mailboxLimitMb: null
@@ -67,6 +79,7 @@ async function getOwnMail(username) {
     mailInstalled: true,
     accessEnabled: !disabled.has(username),
     emailAddress: baseDomain ? `${username}@${baseDomain}` : null,
+    webmailUrl,
     sizeMb: stats.sizeMb,
     messageCount: stats.messageCount,
     mailboxLimitMb: Number.isFinite(limits.mailboxSizeBytes) ? Math.round(limits.mailboxSizeBytes / (1024 * 1024)) : null

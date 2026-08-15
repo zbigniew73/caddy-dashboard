@@ -788,14 +788,17 @@ function mailAccessCardHtml(status) {
     `;
   }
   const statusBadge = `<span class="status-badge ${status.accessEnabled ? 'active' : 'inactive'}">${status.accessEnabled ? t('mail.status_enabled') : t('mail.status_disabled')}</span>`;
+  const webmailHtml = status.webmailUrl
+    ? `<p style="margin:4px 0;font-size:14px;">${t('mail.field_webmail')}: <a href="${escapeHtml(status.webmailUrl)}" target="_blank" rel="noopener" style="font-family:var(--mono);">${escapeHtml(status.webmailUrl)}</a></p>`
+    : '';
   const hintHtml = !status.accessEnabled
     ? `<p style="margin:10px 0 0;color:var(--muted);font-size:12px;">${t('mail.disabled_hint')}</p>`
     : '';
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.access_title')} ${statusBadge}</h3>
-    <div class="info-grid" style="margin-top:10px;">
-      <div class="info-label">${t('mail.field_email')}</div><div class="info-value" style="font-family:var(--mono);">${escapeHtml(status.emailAddress || '-')}</div>
-    </div>
+    <p style="margin:10px 0 4px;font-size:14px;">${t('mail.field_email')}: <span style="font-family:var(--mono);">${escapeHtml(status.emailAddress || '-')}</span></p>
+    <p style="margin:4px 0;font-size:14px;">${t('mail.field_password')}: ${t('mail.password_hint')}</p>
+    ${webmailHtml}
     ${hintHtml}
   `;
 }
