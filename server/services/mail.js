@@ -5,7 +5,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import tls from 'tls';
 import { X509Certificate } from 'crypto';
-import os from 'os';
 import { getPublicIp } from './hostingUserSsh.js';
 
 const execFileAsync = promisify(execFile);
@@ -446,18 +445,28 @@ async function installDkim(domain) {
 // bez fabrykowania). DMARC zaczyna od "p=none" (tylko monitorowanie,
 // NIE odrzucanie/kwarantanna) - to standardowo zalecany bezpieczny
 // pierwszy krok przy wdrazaniu DMARC, nie zgadywanie.
+//
+// Adres rua - STALE "dmarc@<domena>" (NIE proces serwisowy panelu, np.
+// cdadmin) - ta funkcja jest dzielona miedzy Glowna->Poczta (wlasna
+// domena panelu) A wirtualne domeny klientow (Domeny wirtualne w panelu
+// admina, kafelek DKIM w panelu usera) - dla domeny klienta typu
+// "autoai.qd.je" adres w stylu "<SVC_USER>@<domena>" (np.
+// "cdadmin@autoai.qd.je") nie mial ZADNEGO sensu, bo cdadmin nie ma tam
+// zadnej skrzynki. "dmarc@<domena>" to tez standardowa, powszechnie
+// przyjeta konwencja dla adresu zbiorczych raportow DMARC - user
+// potwierdzil 2026-08-15 po zobaczeniu realnej wartosci w panelu.
 async function getSpfDmarcInfo(domain) {
   if (!DOMAIN_RE.test(domain)) {
     throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
   }
   const publicIp = await getPublicIp();
-  const adminEmail = `${os.userInfo().username}@${domain}`;
+  const dmarcEmail = `dmarc@${domain}`;
   return {
     publicIp,
     spfRecordName: domain,
     spfRecordValue: `v=spf1 ip4:${publicIp} ~all`,
     dmarcRecordName: `_dmarc.${domain}`,
-    dmarcRecordValue: `v=DMARC1; p=none; rua=mailto:${adminEmail}`
+    dmarcRecordValue: `v=DMARC1; p=none; rua=mailto:${dmarcEmail}`
   };
 }
 

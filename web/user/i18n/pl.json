@@ -195,7 +195,7 @@
   "mail.spf_title": "SPF",
   "mail.spf_dns_hint": "Rekord na korzeniu domeny - autoryzuje prawdziwy publiczny adres IP tego serwera jako nadawce poczty. Nic nie trzeba instalowac po stronie serwera, to tylko wpis DNS.",
   "mail.dmarc_title": "DMARC",
-  "mail.dmarc_dns_hint": "Zaczyna od p=none (tylko monitorowanie, bez odrzucania/kwarantanny) - zalecany bezpieczny pierwszy krok.",
+  "mail.dmarc_dns_hint": "Zaczyna od p=none (tylko monitorowanie, bez odrzucania/kwarantanny) - zalecany bezpieczny pierwszy krok. Raporty zbiorcze idą na dmarc@<domena>.",
   "databases.loading": "Wczytywanie...",
   "databases.manage_title": "Twoje bazy danych",
   "databases.manage_description": "Baza danych ma zawsze nazwe <twoj_login>_<nazwa> - jeden identyfikator dla bazy i jej uzytkownika.",

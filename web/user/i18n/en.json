@@ -195,7 +195,7 @@
   "mail.spf_title": "SPF",
   "mail.spf_dns_hint": "Record at the domain root - authorizes this server's real public IP as a mail sender. Nothing to install server-side, it's just a DNS entry.",
   "mail.dmarc_title": "DMARC",
-  "mail.dmarc_dns_hint": "Starts at p=none (monitoring only, no reject/quarantine) - the recommended safe first step.",
+  "mail.dmarc_dns_hint": "Starts at p=none (monitoring only, no reject/quarantine) - the recommended safe first step. Aggregate reports go to dmarc@<domain>.",
   "databases.loading": "Loading...",
   "databases.manage_title": "Your databases",
   "databases.manage_description": "A database is always named <your_login>_<name> - one identifier for both the database and its user.",

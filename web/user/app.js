@@ -988,9 +988,6 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
         ${mailStatsCardHtml(status)}
       </div>
     </div>
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-top:16px;">
-      ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
-    </div>
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         ${mailboxManageCardHtml(domains, selectedDomain, mailboxes)}
@@ -998,6 +995,9 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
         ${aliasManageCardHtml(domains, selectedDomain, aliases)}
       </div>
+    </div>
+    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-top:16px;">
+      ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
     </div>
   `;
 }

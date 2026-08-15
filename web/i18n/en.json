@@ -575,7 +575,7 @@
   "mail.spf_title": "SPF",
   "mail.spf_dns_hint": "Record at the domain root - authorizes this server's real public IP as a mail sender. Nothing to install server-side, it's just a DNS entry.",
   "mail.dmarc_title": "DMARC",
-  "mail.dmarc_dns_hint": "Starts at p=none (monitoring only, no reject/quarantine) - the recommended safe first step. Aggregate reports go to the admin address from the tile above.",
+  "mail.dmarc_dns_hint": "Starts at p=none (monitoring only, no reject/quarantine) - the recommended safe first step. Aggregate reports go to dmarc@<domain>.",
   "mail.access_title": "Users with mail access",
   "mail.access_limit_note": "Limit per website: 2 mailboxes and 10 aliases/forwards",
   "mail.access_empty": "No hosting accounts.",

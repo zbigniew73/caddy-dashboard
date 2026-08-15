@@ -575,7 +575,7 @@
   "mail.spf_title": "SPF",
   "mail.spf_dns_hint": "Rekord na korzeniu domeny - autoryzuje prawdziwy publiczny adres IP tego serwera jako nadawcę poczty. Nic nie trzeba instalować po stronie serwera, to tylko wpis DNS.",
   "mail.dmarc_title": "DMARC",
-  "mail.dmarc_dns_hint": "Zaczyna od p=none (tylko monitorowanie, bez odrzucania/kwarantanny) - zalecany bezpieczny pierwszy krok. Raporty zbiorcze idą na adres administratora z kafelka powyżej.",
+  "mail.dmarc_dns_hint": "Zaczyna od p=none (tylko monitorowanie, bez odrzucania/kwarantanny) - zalecany bezpieczny pierwszy krok. Raporty zbiorcze idą na dmarc@<domena>.",
   "mail.access_title": "Użytkownicy z dostępem do poczty",
   "mail.access_limit_note": "Limit na jedną stronę www 2 konta e-mail i 10 aliasów/przekierowań",
   "mail.access_empty": "Brak kont hostingowych.",
