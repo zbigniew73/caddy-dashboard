@@ -454,6 +454,20 @@ async function createSite(username, { domain, redirectMode, template, phpVersion
       await addVirtualDomain(domainValue, username);
       record.mailEnabled = true;
       saveData(all);
+      // Postfix ma dostac informacje o OBU adresach - glownej domenie
+      // strony ORAZ o "mail.<domena>" (ta sama nazwa, dla ktorej Caddy
+      // wlasnie zaczal serwowac stub wyzej, buildMailStubBlock - user
+      // jawnie potwierdzil 2026-08-15, ze DNS dla obu juz ma ustawiony u
+      // operatora). Osobny, NIEBLOKUJACY warning - niepowodzenie tej
+      // drugiej rejestracji nie cofa juz udanej rejestracji glownej
+      // domeny (ta juz normalnie dziala) - user nie ma wlasnego dostepu do
+      // Domen wirtualnych (to funkcja panelu admina), wiec warning ma tu
+      // podpowiedziec, ze trzeba poprosic administracje o reczne dodanie.
+      try {
+        await addVirtualDomain(`mail.${domainValue}`, username);
+      } catch (e2) {
+        mailWarning = e2.message;
+      }
     } catch (e) {
       mailWarning = e.message;
       // Rejestracja sie nie powiodla - zdejmujemy stub "mail.<domena>" z
