@@ -24,7 +24,7 @@ import { getStatus as getCaddyPerformanceStatus, applyPerformanceConfig, readCad
 import { ensureCaddyLogs } from '../services/caddyLogs.js';
 import { getAllowedUsers } from '../services/auth.js';
 import { getLocalRepoVersion, installMariadb } from '../services/mariadb.js';
-import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo, getPostfwdStatus, installPostfwd, setPostfwdLimits, getAntispamStatus, setAntispamStatus, getSpamassassinStatus, installSpamassassin, setSpamassassinThreshold } from '../services/mail.js';
+import { installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted, getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, getPostfixLimits, setPostfixLimits, getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain, getDkimStatus, installDkim, getSpfDmarcInfo, getPostfwdStatus, installPostfwd, setPostfwdLimits, getAntispamStatus, setAntispamStatus, getSpamassassinStatus, installSpamassassin, setSpamassassinThreshold } from '../services/mail.js';
 import { getRamRecommendation, applyPerformanceConfig as applyMariadbPerformanceConfig } from '../services/mariadbPerformance.js';
 import { getTestDbStatus as getMariadbTestDbStatus, createTestDb as createMariadbTestDb, dropTestDb as dropMariadbTestDb } from '../services/mariadbTestDb.js';
 import { getTestDbStatus as getPostgresqlTestDbStatus, createTestDb as createPostgresqlTestDb, dropTestDb as dropPostgresqlTestDb } from '../services/postgresqlTestDb.js';
@@ -1173,6 +1173,35 @@ router.post('/mail/tls-swap', async (req, res) => {
   try {
     const result = await setMailTlsSwap(`mail.${config.domain}`, !!req.body?.enabled);
     res.json(result);
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+// SNI - certyfikaty TLS per "mail.<domena>" WLASNYCH domen mailowych
+// klientow hostingu (Strony -> "Obsluga poczty" w panelu usera), przez
+// prawdziwe SNI (server/scripts/mail-sni-sync.sh) - ODREBNE od
+// /mail/tls-status/-swap wyzej (te dotycza wylacznie pojedynczego
+// domyslnego/fallbackowego certu panelu).
+router.get('/mail/sni-domains', async (req, res) => {
+  try {
+    res.json({ items: await listMailSni() });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/sni-sync/:domain', async (req, res) => {
+  try {
+    res.json(await syncMailSni(req.params.domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/sni-sync/:domain', async (req, res) => {
+  try {
+    res.json(await removeMailSni(req.params.domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

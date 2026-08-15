@@ -197,6 +197,66 @@ async function setMailTlsSwap(domain, enabled) {
   }
 }
 
+const SNI_SYNC_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/mail-sni-sync.sh');
+const SNI_DOMAIN_RE = /^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+
+// SNI = certyfikat TLS dedykowany dla "mail.<domena>" WLASNYCH domen
+// mailowych klientow (Strony -> "Obsluga poczty" w panelu usera) - patrz
+// mail-sni-sync.sh na gorze. Odrebne od getMailTlsStatus/setMailTlsSwap
+// wyzej (te dotycza WYLACZNIE pojedynczego, domyslnego/fallbackowego
+// certu panelu, mail.<domena bazowa panelu>).
+async function syncMailSni(domain) {
+  const value = String(domain || '').trim().toLowerCase();
+  if (!SNI_DOMAIN_RE.test(value)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', SNI_SYNC_SCRIPT_PATH, 'sync', value], { timeout: 30000 });
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla synchronizacji SNI poczty - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+async function removeMailSni(domain) {
+  const value = String(domain || '').trim().toLowerCase();
+  if (!SNI_DOMAIN_RE.test(value)) {
+    throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
+  }
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', SNI_SYNC_SCRIPT_PATH, 'remove', value], { timeout: 30000 });
+    return { success: true, message: stdout.trim() };
+  } catch (e) {
+    const stderr = (e.stderr || '').toString().trim();
+    if (/password is required/i.test(stderr)) {
+      throw Object.assign(
+        new Error('Brak uprawnien sudo bez hasla dla synchronizacji SNI poczty - sprawdz /etc/sudoers.d/caddy-dashboard'),
+        { status: 403 }
+      );
+    }
+    throw Object.assign(new Error(stderr || e.message), { status: 500 });
+  }
+}
+
+// Odczyt (list) - jakie domeny maja juz zsynchronizowany certyfikat SNI.
+// Idzie przez ten sam skrypt/sudo (katalog /etc/pki/tls/mail-sni/ nie
+// jest world-readable, zawiera material klucza obok certow).
+async function listMailSni() {
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', SNI_SYNC_SCRIPT_PATH, 'list'], { timeout: 15000 });
+    return stdout.split('\n').map((l) => l.trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
 const LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-set-limits.sh');
 
 // Odczyt bezposredni (bez sudo), ten sam powod co getMailTlsStatus -
@@ -574,7 +634,7 @@ async function setSpamassassinThreshold(threshold) {
 
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
-  getMailTlsStatus, setMailTlsSwap, getPostfixLimits, setPostfixLimits,
+  getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, getPostfixLimits, setPostfixLimits,
   getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
   getDkimStatus, installDkim, getSpfDmarcInfo,
   getPostfwdStatus, installPostfwd, setPostfwdLimits,

@@ -85,6 +85,27 @@ if [ ! -f "$CERT_FILE" ] || [ ! -f "$KEY_FILE" ]; then
   chmod 600 "$KEY_FILE"
 fi
 
+# NIE nadpisuj bezwarunkowo aktywnego certyfikatu Let's Encrypt certem
+# self-signed przy KAZDYM ponownym uruchomieniu tego skryptu (ten skrypt
+# jest idempotentny/samonaprawiajacy sie i bywa odpalany ponownie np.
+# przyciskiem "Sprawdz/zaktualizuj konfiguracje" po kazdej aktualizacji
+# panelu) - bez tego sprawdzenia admin klikal "Wlacz" (mail-tls-swap.sh),
+# a kolejne uruchomienie mail-install.sh po cichu cofalo TLS z powrotem na
+# self-signed, mimo ze nic o tym nie mowilo. Zglosone przez usera
+# 2026-08-15 ("po kazdej aktualizacji ... tymczasowy self-signed", mimo ze
+# wczesniej klikal Wlacz). LE_CERT/LE_KEY musza byc IDENTYCZNE ze
+# stalymi w mail-tls-swap.sh.
+LE_CERT="/etc/pki/tls/certs/mail-letsencrypt.crt"
+LE_KEY="/etc/pki/tls/private/mail-letsencrypt.key"
+CURRENT_TLS_CERT="$(postconf -h smtpd_tls_cert_file 2>/dev/null || true)"
+if [ "$CURRENT_TLS_CERT" = "$LE_CERT" ] && [ -f "$LE_CERT" ] && [ -f "$LE_KEY" ]; then
+  ACTIVE_CERT_FILE="$LE_CERT"
+  ACTIVE_KEY_FILE="$LE_KEY"
+else
+  ACTIVE_CERT_FILE="$CERT_FILE"
+  ACTIVE_KEY_FILE="$KEY_FILE"
+fi
+
 # --- Dovecot: wlasny drop-in, NIE dotykamy plikow pakietu (bezpieczne na
 # aktualizacje) - /etc/dovecot/conf.d/ laduje pliki alfabetycznie,
 # pozniejszy nadpisuje wczesniejsze. ---
@@ -98,8 +119,8 @@ mail_location = maildir:~/Maildir
 mail_privileged_group = mail
 
 ssl = required
-ssl_cert = <${CERT_FILE}
-ssl_key = <${KEY_FILE}
+ssl_cert = <${ACTIVE_CERT_FILE}
+ssl_key = <${ACTIVE_KEY_FILE}
 
 disable_plaintext_auth = yes
 
@@ -154,9 +175,40 @@ postconf -e "home_mailbox=Maildir/"
 # otwartego firewalla. Potwierdzone na zywym serwerze 2026-08-14 (Gmail
 # odpowiedz do cdadmin@20z.eu nigdy nie dotarla).
 postconf -e 'inet_interfaces = all'
-postconf -e "smtpd_tls_cert_file=${CERT_FILE}"
-postconf -e "smtpd_tls_key_file=${KEY_FILE}"
+postconf -e "smtpd_tls_cert_file=${ACTIVE_CERT_FILE}"
+postconf -e "smtpd_tls_key_file=${ACTIVE_KEY_FILE}"
 postconf -e 'smtpd_tls_security_level = may'
+
+# --- SNI: certyfikaty TLS per "mail.<domena>" dla wlasnych domen mailowych
+# klientow (Strony -> "Wlacz obsluge poczty" w panelu usera, patrz
+# hostingUserSites.js buildMailStubBlock) - DODATKOWA, opcjonalna mapa
+# obok pojedynczego domyslnego certu ustawionego wyzej (ktory zostaje
+# FALLBACKIEM dla polaczen bez dopasowania SNI, np. bezposrednio po IP,
+# oraz dla wlasnej domeny panelu). Mapa startuje PUSTA - wpisy dopisuje
+# server/scripts/mail-sni-sync.sh za kazdym razem, gdy Caddy faktycznie
+# wyda certyfikat Let's Encrypt dla kolejnej domeny mailowej klienta.
+# Bootstrap TYLKO jesli plik jeszcze nie istnieje - mail-sni-sync.sh jest
+# jedynym wlascicielem tresci tego pliku po pierwszym uruchomieniu, ten
+# skrypt (idempotentny/re-runowalny) nie moze go nadpisywac pusta mapa
+# przy kazdym ponownym uruchomieniu (dokladnie ten sam blad co certyfikat
+# self-signed wyzej).
+SNI_MAP_FILE="/etc/postfix/mail-sni-map"
+if [ ! -f "$SNI_MAP_FILE" ]; then
+  : > "$SNI_MAP_FILE"
+  postmap "$SNI_MAP_FILE" || err "postmap ${SNI_MAP_FILE} nie powiodlo sie."
+  chmod 644 "$SNI_MAP_FILE" "${SNI_MAP_FILE}.db" 2>/dev/null || true
+fi
+postconf -e "tls_server_sni_maps=hash:${SNI_MAP_FILE}"
+# Dovecot: analogiczny, pusty plik z blokami "local_name { ssl_cert = ...
+# ssl_key = ... }" per domena - regenerowany w calosci przez
+# mail-sni-sync.sh (ten sam wzorzec co Postfixowa mapa wyzej). /etc/
+# dovecot/conf.d/*.conf jest ladowany automatycznie (bez osobnej dyrektywy
+# include), wiec sam fakt istnienia pliku wystarczy.
+SNI_DOVECOT_FILE="/etc/dovecot/conf.d/92-caddy-dashboard-sni.conf"
+if [ ! -f "$SNI_DOVECOT_FILE" ]; then
+  printf '%s\n' '# Zarzadzane przez Caddy Dashboard - server/scripts/mail-sni-sync.sh' > "$SNI_DOVECOT_FILE"
+  chmod 644 "$SNI_DOVECOT_FILE"
+fi
 postconf -e 'smtpd_sasl_type = dovecot'
 postconf -e 'smtpd_sasl_path = private/auth'
 postconf -e 'smtpd_sasl_auth_enable = yes'
