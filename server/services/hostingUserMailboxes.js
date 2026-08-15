@@ -22,13 +22,24 @@ async function assertOwnDomain(username, domain) {
   }
 }
 
-// Domeny, na ktorych ten hosting user moze zakladac skrzynki/aliasy - to
-// WSZYSTKIE domeny wirtualne zarejestrowane pod jego kontem (baza strony
-// ORAZ "mail.<domena>", patrz hostingUserSites.js createSite - obie sa
-// rownouprawnione, panel nie odgaduje ktora "powinna" byc uzyta).
+// Domeny, na ktorych ten hosting user moze zakladac skrzynki/aliasy - TYLKO
+// baza strony (np. "nowa.domena.pl"), NIGDY "mail.<domena>". User wyjasnil
+// 2026-08-15: "mail.<domena>" istnieje wylacznie jako hostname serwera
+// Postfixa/Dovecota (na niej stoi rekord MX + certyfikat SNI, patrz
+// buildMailStubBlock w hostingUserSites.js i [[project_caddy_dashboard_mail_sni]])
+// - nikt nie powinien zakladac tam realnych skrzynek. Obie domeny SA
+// rownouprawnione po stronie mailVirtual.js/Postfixa (obie trafiaja do tej
+// samej tabeli domains), wiec filtrowanie jest CELOWO tylko kosmetyczne/
+// UX-owe tutaj, nie zmienia niczego w backendzie - proste odciecie po
+// prefiksie "mail." (edge case: gdyby czyjas prawdziwa domena strony
+// FAKTYCZNIE zaczynala sie od "mail." wlasnie jako jej wlasna nazwa,
+// zostalaby tez ukryta - swiadomie zaakceptowane ryzyko, brzegowy
+// przypadek).
 async function listOwnMailDomains(username) {
   const domains = await listVirtualDomains();
-  return domains.filter((d) => d.ownerAccount === username).map((d) => d.domain);
+  return domains
+    .filter((d) => d.ownerAccount === username && !d.domain.startsWith('mail.'))
+    .map((d) => d.domain);
 }
 
 async function listOwnMailboxes(username, domain) {
