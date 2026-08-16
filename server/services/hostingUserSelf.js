@@ -6,7 +6,6 @@ import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
 import { listAccounts } from './hostingAccounts.js';
 import { countOwnDatabases } from './hostingUserDatabases.js';
-import { getSystemIp } from './hostingUserSsh.js';
 
 const execFileAsync = promisify(execFile);
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url)) + '/../scripts';
@@ -247,7 +246,6 @@ async function getOwnAccount(username) {
     diskQuotaMb: account?.diskQuotaMb ?? null,
     diskUsedMb,
     serverUptimeSeconds: Math.floor(os.uptime()),
-    serverIp: getSystemIp(),
     ramLimitMb: account?.ramLimitMb ?? null,
     maxDomains: account?.maxDomains ?? null,
     maxDatabases: account?.maxDatabases ?? null,

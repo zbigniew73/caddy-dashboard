@@ -146,24 +146,4 @@ async function deleteSshKey(username, keyData) {
   return filtered;
 }
 
-// Adres IP do kafelka Uptime na Dashboardzie usera - user 2026-08-16
-// jawnie odrzucil geo-IP przez zewnetrzny serwis (ipapi.co, wpadl na
-// RateLimited przy pierwszym uzyciu, patrz [[project_caddy_dashboard...]]
-// historia w tej rozmowie) na rzecz adresu WPROST z systemu
-// (os.networkInterfaces(), zero zapytan sieciowych, wiec zero ryzyka
-// limitow/egress). Bierze pierwszy nie-wewnetrzny (nie loopback) adres
-// IPv4 - na typowym VPS to i tak publiczny adres serwera (przypisany
-// wprost do glownego interfejsu, bez NAT), ale to LOKALNY interfejs, nie
-// zewnetrzna weryfikacja - jesli serwer siedzi za NAT-em, pokaze adres
-// wewnetrzny tej sieci, nie publiczny.
-function getSystemIp() {
-  const interfaces = os.networkInterfaces();
-  for (const entries of Object.values(interfaces)) {
-    for (const iface of entries || []) {
-      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
-    }
-  }
-  return null;
-}
-
-export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp, getSystemIp };
+export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp };

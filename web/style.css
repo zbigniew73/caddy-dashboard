@@ -189,7 +189,16 @@
   .tile-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .tile-row-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .tile-row-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .tile-row-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  /* Rownanie wysokosci wyjatkowe TYLKO dla tile-row-6 (jedyne obecne
+     uzycie: 6 kafelkow KPI na Dashboardzie usera - Uptime/CPU/RAM/Dysk/
+     Strony/Bazy) - .tile-row bazowo ma align-items:start (2026-08-16,
+     celowy wybor dla innych rzedow, np. gdzie krotszy "Info" kafelek
+     obok dluzszego wygladalby dziwnie rozciagniety), ale w tym
+     konkretnym rzedzie user chcial rowna wysokosc mimo ze Uptime (bez
+     paska postepu) jest naturalnie krotszy niz reszta (z meter-track) -
+     pierwsza proba (dolozenie 3. linii z adresem IP) zostala odrzucona
+     na rzecz tego prostszego, tresci-niezaleznego rozwiazania. */
+  .tile-row-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: stretch; }
   .tile-stack { display: flex; flex-direction: column; gap: var(--tile-gap); min-width: 0; }
   @media (max-width: 760px) {
     .tile-row-2, .tile-row-3, .tile-row-4, .tile-row-5, .tile-row-6 { grid-template-columns: minmax(0, 1fr); }
