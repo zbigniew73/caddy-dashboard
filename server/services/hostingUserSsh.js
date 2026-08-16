@@ -146,7 +146,7 @@ async function deleteSshKey(username, keyData) {
   return filtered;
 }
 
-// Lokalizacja serwera (miasto/kraj) do kafelka Uptime na Dashboardzie
+// Lokalizacja serwera (miasto/region) do kafelka Uptime na Dashboardzie
 // usera - geo-IP publicznego adresu (ipapi.co, bez klucza API). Cache w
 // module (bez TTL, tak samo jak cachedPublicIp powyzej) - lokalizacja
 // serwera sie nie zmienia, a Dashboard odpytuje /me co 5s (patrz
@@ -163,7 +163,7 @@ async function getServerLocation() {
     const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       const data = await res.json();
-      const parts = [data.city, data.country_name].filter(Boolean);
+      const parts = [data.city, data.region].filter(Boolean);
       cachedServerLocation = parts.length ? parts.join(', ') : null;
       return cachedServerLocation;
     }
