@@ -184,13 +184,15 @@
   .tile-row:first-child { margin-top: 0; }
   .tile-row > .system-info-card,
   .tile-stack > .system-info-card { margin-bottom: 0; max-width: 100%; }
-  .tile-row-1 { grid-template-columns: 1fr; }
-  .tile-row-2 { grid-template-columns: repeat(2, 1fr); }
-  .tile-row-3 { grid-template-columns: repeat(3, 1fr); }
-  .tile-row-4 { grid-template-columns: repeat(4, 1fr); }
+  .tile-row-1 { grid-template-columns: minmax(0, 1fr); }
+  .tile-row-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile-row-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .tile-row-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tile-row-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .tile-row-6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .tile-stack { display: flex; flex-direction: column; gap: var(--tile-gap); min-width: 0; }
   @media (max-width: 760px) {
-    .tile-row-2, .tile-row-3, .tile-row-4 { grid-template-columns: 1fr; }
+    .tile-row-2, .tile-row-3, .tile-row-4, .tile-row-5, .tile-row-6 { grid-template-columns: minmax(0, 1fr); }
   }
 
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }

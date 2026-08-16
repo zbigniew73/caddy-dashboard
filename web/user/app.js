@@ -220,7 +220,7 @@ function stopUsageRefresh() {
 function renderDashboard(content) {
   const a = CURRENT_ACCOUNT;
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(6, minmax(0, 1fr));gap:16px;">
+    <div class="tile-row tile-row-6">
       ${plainTile(t('dashboard.tile_uptime'), formatUptime(a.serverUptimeSeconds ?? 0), 'tile-uptime')}
       ${cpuTile(a.cpuUsedPercent ?? 0, a.cpuPercentLimit, a.cpuModel, 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
@@ -228,8 +228,8 @@ function renderDashboard(content) {
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
       ${usageTile(t('dashboard.tile_databases'), a.databasesUsed ?? 0, a.maxDatabases, '', 'tile-databases')}
     </div>
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;margin-top:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         <h3 style="margin:0 0 4px;font-size:15px;">${t('dashboard.welcome_title', { user: escapeHtml(a.username) })}</h3>
         <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('dashboard.welcome_description')}</p>
         <div class="info-grid">
@@ -241,7 +241,7 @@ function renderDashboard(content) {
           <div class="info-label">${t('dashboard.field_quota')}</div><div class="info-value">${a.diskQuotaMb ? `${a.diskQuotaMb} MB` : '-'}</div>
         </div>
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
       </div>
     </div>
@@ -256,11 +256,11 @@ const PLACEHOLDER_TABS = {};
 
 function renderPlaceholderTab(content, titleKey) {
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         <h3 style="margin:0;font-size:15px;">${t(titleKey)}</h3>
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
       </div>
     </div>
@@ -281,8 +281,8 @@ function generatePassword() {
 
 function renderSettings(content) {
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         <h3 style="margin:0 0 4px;font-size:15px;">${t('settings.password_title')}</h3>
         <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${MUST_CHANGE_PASSWORD ? t('settings.password_forced_hint') : t('settings.password_description')}</p>
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('settings.field_current')}</label>
@@ -298,7 +298,7 @@ function renderSettings(content) {
         <button type="button" id="pwd-save-btn">${t('settings.save_button')}</button>
         <div class="action-msg" id="pwd-msg"></div>
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         <h3 style="margin:0;font-size:15px;">${t('dashboard.info_title')}</h3>
       </div>
     </div>
@@ -472,10 +472,11 @@ function renderCronSection(jobs, phpPaths) {
     : `<tr><td colspan="5" style="text-align:center;color:var(--muted);">${t('cron.empty')}</td></tr>`;
 
   return `
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+    <div class="tile-stack">
+    <div class="system-info-card">
       ${cronFormHtml(phpPaths, editingJob)}
     </div>
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="system-info-card">
       <h3 style="margin:0 0 12px;font-size:15px;">${t('cron.jobs_title')}</h3>
       <div style="overflow-x:auto;">
         <table class="firewall-table">
@@ -491,6 +492,7 @@ function renderCronSection(jobs, phpPaths) {
           <tbody>${rows}</tbody>
         </table>
       </div>
+    </div>
     </div>
   `;
 }
@@ -722,11 +724,11 @@ function databasesStatsCardHtml(data) {
 
 function renderDatabasesSection(data) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${databasesManageCardHtml(data)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${databasesStatsCardHtml(data)}
       </div>
     </div>
@@ -1011,27 +1013,27 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
 
 function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc, sniDomains) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${mailAccessCardHtml(status)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${mailStatsCardHtml(status)}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${mailboxManageCardHtml(domains, selectedDomain, mailboxes)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${aliasManageCardHtml(domains, selectedDomain, aliases)}
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${mailSniSectionHtml(sniDomains)}
       </div>
     </div>
@@ -1377,11 +1379,11 @@ function redisStatsCardHtml(status) {
 
 function renderRedisSection(status) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${redisManageCardHtml(status)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${redisStatsCardHtml(status)}
       </div>
     </div>
@@ -1622,16 +1624,18 @@ function pythonHelpCardHtml() {
 
 function renderPythonSection(versions, apps, portInfo) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${pythonAppsFormCardHtml(versions, portInfo)}
       </div>
-      <div class="system-info-card" id="python-apps-list-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card" id="python-apps-list-card">
         ${pythonAppsListCardHtml(apps)}
       </div>
     </div>
-    <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
-      ${pythonHelpCardHtml()}
+    <div class="tile-row tile-row-1">
+      <div class="system-info-card">
+        ${pythonHelpCardHtml()}
+      </div>
     </div>
   `;
 }
@@ -1925,16 +1929,18 @@ function nodeHelpCardHtml() {
 
 function renderNodeSection(versions, apps, portInfo) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${nodeAppsFormCardHtml(versions, portInfo)}
       </div>
-      <div class="system-info-card" id="node-apps-list-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card" id="node-apps-list-card">
         ${nodeAppsListCardHtml(apps)}
       </div>
     </div>
-    <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
-      ${nodeHelpCardHtml()}
+    <div class="tile-row tile-row-1">
+      <div class="system-info-card">
+        ${nodeHelpCardHtml()}
+      </div>
     </div>
   `;
 }
@@ -2159,11 +2165,11 @@ function sshKeysCardHtml(keys) {
 
 function renderSshSection(data) {
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${sshConnectionCardHtml(data.connection)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${sshKeysCardHtml(data.keys)}
       </div>
     </div>
@@ -2600,17 +2606,19 @@ function sitesListCardHtml(data) {
 function renderSitesSection(data, phpVersions) {
   const editingItem = siteEditingId ? data.items.find((i) => i.id === siteEditingId) : null;
   return `
-    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
         ${sitesManageCardHtml(data, phpVersions)}
       </div>
-      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div class="system-info-card">
         ${sitesListCardHtml(data)}
       </div>
     </div>
     ${editingItem ? `
-      <div class="system-info-card" style="margin-top:16px;width:100%;box-sizing:border-box;">
-        ${siteConfigEditorHtml(editingItem)}
+      <div class="tile-row tile-row-1">
+        <div class="system-info-card">
+          ${siteConfigEditorHtml(editingItem)}
+        </div>
       </div>
     ` : ''}
   `;
@@ -3033,10 +3041,10 @@ function backupJobsCardHtml(jobs, sites, databases, editingJob) {
     : `<tr><td colspan="7" style="text-align:center;color:var(--muted);">${t('backup.empty')}</td></tr>`;
 
   return `
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+    <div class="system-info-card">
       ${backupJobFormHtml(sites, databases, editingJob)}
     </div>
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+    <div class="system-info-card">
       <h3 style="margin:0 0 12px;font-size:15px;">${t('backup.jobs_title')}</h3>
       <div style="overflow-x:auto;">
         <table class="firewall-table">
@@ -3061,13 +3069,15 @@ function backupJobsCardHtml(jobs, sites, databases, editingJob) {
 function renderBackupSection(repo, jobs, snapshots, sites, databases) {
   const editingJob = backupJobEditingId ? jobs.find((j) => j.id === backupJobEditingId) : null;
   return `
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+    <div class="tile-stack">
+    <div class="system-info-card">
       ${backupSnapshotsCardHtml(repo, snapshots)}
     </div>
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-bottom:16px;">
+    <div class="system-info-card">
       ${backupSettingsCardHtml(repo)}
     </div>
     ${backupJobsCardHtml(jobs, sites, databases, editingJob)}
+    </div>
   `;
 }
 
