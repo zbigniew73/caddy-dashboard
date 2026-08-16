@@ -1047,6 +1047,16 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
 // mylaca/niewystarczajaca). Lista+wlasnosc kazdej domeny jest liczona
 // wprost po stronie serwera (listOwnSniDomains w
 // hostingUserMailboxes.js), nie wyprowadzana z mailSelectedDomain.
+// Progi kolorow dla dni do wygasniecia certyfikatu SNI - te same zmienne
+// CSS (--accent/--warning/--danger) co status-badge/meter-fill gdzie
+// indziej w panelu, wiec kolory pozostaja spojne z reszta UI i
+// theme-aware (jasny/ciemny motyw) bez wlasnych definicji.
+function sniCertColor(daysRemaining) {
+  if (daysRemaining < 7) return 'var(--danger)';
+  if (daysRemaining < 30) return 'var(--warning)';
+  return 'var(--accent)';
+}
+
 function mailSniSectionHtml(sniDomains) {
   if (!sniDomains.length) {
     return `
@@ -1062,7 +1072,7 @@ function mailSniSectionHtml(sniDomains) {
         ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span>`
         : `<span style="color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</span>`}</td>
       <td>${certIssuer && Number.isFinite(certDaysRemaining)
-        ? escapeHtml(t(certDaysRemaining >= 0 ? 'mail.sni_cert_valid' : 'mail.sni_cert_expired', { issuer: certIssuer, days: Math.abs(certDaysRemaining) }))
+        ? `<span style="color:${sniCertColor(certDaysRemaining)};">${escapeHtml(t(certDaysRemaining >= 0 ? 'mail.sni_cert_valid' : 'mail.sni_cert_expired', { issuer: certIssuer, days: Math.abs(certDaysRemaining) }))}</span>`
         : `<span style="color:var(--muted);">${t('mail.sni_cert_unknown')}</span>`}</td>
       <td>
         <button type="button" class="secondary" data-sni-sync="${escapeHtml(domain)}">${synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
@@ -1072,7 +1082,8 @@ function mailSniSectionHtml(sniDomains) {
   `).join('');
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
-    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
+    <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
+    <p style="margin:0 0 16px;color:var(--warning);font-size:13px;">${t('mail.sni_refresh_hint')}</p>
     <table class="firewall-table">
       <thead><tr><th>${t('mail.sni_col_domain')}</th><th>${t('mail.sni_col_status')}</th><th>${t('mail.sni_col_cert')}</th><th></th></tr></thead>
       <tbody>${rows}</tbody>

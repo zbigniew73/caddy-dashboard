@@ -1014,6 +1014,7 @@
   "mail.sni_column": "Certyfikat SNI",
   "mail.sni_title": "Certyfikat SNI",
   "mail.sni_description": "Osobny certyfikat TLS Let's Encrypt dla tej domeny (Postfix/Dovecot) - wymaga, żeby Caddy najpierw wystawił dla niej certyfikat.",
+  "mail.sni_refresh_hint": "Caddy odnawia certyfikat automatycznie, ale Postfix/Dovecot o tym nie wiedzą - po odnowieniu kliknij \"Odśwież SNI\", żeby pobrały nowy certyfikat.",
   "mail.sni_not_applicable": "Dotyczy tylko domen \"mail.<domena>\" - ta domena nie jest tego typu.",
   "mail.sni_status_synced": "Zsynchronizowany",
   "mail.sni_status_not_synced": "Jeszcze nie zsynchronizowany.",
