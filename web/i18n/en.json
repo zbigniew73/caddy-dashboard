@@ -1014,7 +1014,7 @@
   "mail.sni_column": "SNI certificate",
   "mail.sni_title": "SNI certificate",
   "mail.sni_description": "A dedicated Let's Encrypt TLS certificate for this domain (Postfix/Dovecot) - requires Caddy to have already issued a certificate for it.",
-  "mail.sni_refresh_hint": "Caddy renews the certificate automatically, but Postfix/Dovecot don't know about it - after renewal, click \"Resync SNI\" so they pick up the new certificate.",
+  "mail.sni_refresh_hint": "Caddy renews the certificate automatically, but Postfix/Dovecot don't know about it.<br>After renewal, click \"Resync SNI\" so they pick up the new certificate.",
   "mail.sni_not_applicable": "Only applies to \"mail.<domain>\" domains - this domain isn't one.",
   "mail.sni_status_synced": "Synced",
   "mail.sni_status_not_synced": "Not synced yet.",
