@@ -1039,8 +1039,9 @@ async function mailAdminAddressSectionHtml(status) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
@@ -1048,8 +1049,9 @@ async function mailAdminAddressSectionHtml(status) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
     </div>
   ` : '';
   return `
@@ -1129,8 +1131,9 @@ async function mailVirtualDkimSectionHtml(domain) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
@@ -1138,12 +1141,13 @@ async function mailVirtualDkimSectionHtml(domain) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
     </div>
   ` : '';
   return `
-    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);">
+    <div class="system-info-card">
       <h3 style="margin-bottom:8px;">${t('mail.dkim_title')}</h3>
       ${dkim.installed ? `
         <p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('mail.dkim_installed_hint')}</p>
@@ -1157,8 +1161,44 @@ async function mailVirtualDkimSectionHtml(domain) {
       <button type="button" class="secondary" data-mail-virtual-dkim-domain="${escapeHtml(domain)}">${dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
       ${dkim.installed ? `<span class="dkim-raw-value" style="display:none;">${escapeHtml(dkim.recordValueRaw || '')}</span><button type="button" class="secondary copy-value-btn" id="mail-virtual-dkim-copy-btn">${t('mail.dkim_copy_button')}</button>` : ''}
       <div class="action-msg" id="mail-virtual-dkim-msg"></div>
+      ${spfDmarcHtml}
     </div>
-    ${spfDmarcHtml}
+  `;
+}
+
+// Kafelek SNI (obok DKIM/SPF/DMARC, 50/50 - patrz .card-row-50) - certyfikat
+// TLS per "mail.<domena>" dla Postfixa/Dovecota (server/scripts/
+// mail-sni-sync.sh), NIEZALEZNY od backendu skrzynek. Ma sens WYLACZNIE
+// dla domen zaczynajacych sie od "mail." (patrz komentarz przy isMailHost
+// w renderMailVirtualListHtml, ten sam powod) - dla kazdej innej domeny
+// (np. bazowej "autoai.qd.je") pokazuje neutralny stan "nie dotyczy"
+// zamiast przycisku, ktory i tak nigdy niczego by nie zsynchronizowal.
+async function mailVirtualSniSectionHtml(domain) {
+  const isMailHost = domain.startsWith('mail.');
+  if (!isMailHost) {
+    return `
+      <div class="system-info-card">
+        <h3 style="margin-bottom:8px;">${t('mail.sni_title')}</h3>
+        <div class="empty-state">${t('mail.sni_not_applicable')}</div>
+      </div>
+    `;
+  }
+  let sniDomains = [];
+  try {
+    ({ items: sniDomains } = await api('GET', '/mail/sni-domains'));
+  } catch {
+    sniDomains = [];
+  }
+  const synced = sniDomains.includes(domain);
+  return `
+    <div class="system-info-card">
+      <h3 style="margin-bottom:8px;">${t('mail.sni_title')}</h3>
+      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
+      ${synced
+        ? `<p style="margin:0 0 16px;"><span class="status-badge active">${t('mail.sni_status_synced')}</span></p>`
+        : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</p>`}
+      <button type="button" class="secondary" data-mail-sni-sync="${escapeHtml(domain)}">${synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
+    </div>
   `;
 }
 
@@ -1261,7 +1301,10 @@ async function renderMailVirtualManageHtml(domain) {
     </tr>
   `).join('');
 
-  const dkimHtml = await mailVirtualDkimSectionHtml(domain);
+  const [dkimHtml, sniHtml] = await Promise.all([
+    mailVirtualDkimSectionHtml(domain),
+    mailVirtualSniSectionHtml(domain)
+  ]);
 
   return `
     <div class="system-info-card">
@@ -1290,8 +1333,12 @@ async function renderMailVirtualManageHtml(domain) {
         <button type="button" style="margin-top:12px;" id="mail-virtual-add-alias-btn">${t('mail.virtual_add_alias_button')}</button>
       </div>
 
-      ${dkimHtml}
       <div class="action-msg" id="mail-virtual-msg"></div>
+    </div>
+
+    <div class="card-row-50" style="margin-top:16px;">
+      ${dkimHtml}
+      ${sniHtml}
     </div>
   `;
 }
@@ -5621,12 +5668,14 @@ function escapeHtml(str) {
 // (word-break:break-all) - reczne zaznaczanie myszka (triple-click) latwo
 // lapie fragment sasiedniego elementu albo pomija znak na zlamaniu linii,
 // user zglosil realny problem z kopiowaniem wartosci DKIM 2026-08-16.
-// Przycisk czyta dokladnie ten sam tekst co jest wyswietlony (textContent
-// poprzedniego elementu, NIE osobno przekazywana wartosc) - zero ryzyka
-// rozjazdu miedzy tym co widac a tym co sie kopiuje.
-function copyableValueHtml(value) {
-  return `<span class="copy-value-text">${escapeHtml(value)}</span> <button type="button" class="copy-value-btn" title="${escapeHtml(t('mail.copy_value_button'))}">📋</button>`;
-}
+// Kazdy rekord (SPF/DMARC/DKIM) ma teraz WLASNY, opisany przyciskiem
+// ("Kopiuj SPF"/"Kopiuj DMARC"/"Kopiuj DKIM") element .copy-value-btn,
+// poprzedzony ukrytym elementem trzymajacym dokladnie ten tekst, ktory ma
+// zostac skopiowany (span.copy-src dla SPF/DMARC, span.dkim-raw-value dla
+// DKIM - ten ostatni w surowym formacie BIND z cudzyslowami, patrz
+// dkim-install.sh) - przycisk czyta textContent poprzedniego elementu,
+// zero ryzyka rozjazdu miedzy tym co ma zostac skopiowane a tym co
+// faktycznie trafia do schowka.
 function wireCopyButtons(container) {
   container.querySelectorAll('.copy-value-btn').forEach((btn) => {
     if (btn.dataset.copyWired) return;

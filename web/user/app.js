@@ -38,12 +38,14 @@ function escapeHtml(str) {
 // (word-break:break-all) - reczne zaznaczanie myszka (triple-click) latwo
 // lapie fragment sasiedniego elementu albo pomija znak na zlamaniu linii,
 // user zglosil realny problem z kopiowaniem wartosci DKIM 2026-08-16.
-// Przycisk czyta dokladnie ten sam tekst co jest wyswietlony (textContent
-// poprzedniego elementu, NIE osobno przekazywana wartosc) - zero ryzyka
-// rozjazdu miedzy tym co widac a tym co sie kopiuje.
-function copyableValueHtml(value) {
-  return `<span class="copy-value-text">${escapeHtml(value)}</span> <button type="button" class="copy-value-btn" title="${escapeHtml(t('mail.copy_value_button'))}">📋</button>`;
-}
+// Kazdy rekord (SPF/DMARC/DKIM) ma teraz WLASNY, opisany przyciskiem
+// ("Kopiuj SPF"/"Kopiuj DMARC"/"Kopiuj DKIM") element .copy-value-btn,
+// poprzedzony ukrytym elementem trzymajacym dokladnie ten tekst, ktory ma
+// zostac skopiowany (span.copy-src dla SPF/DMARC, span.dkim-raw-value dla
+// DKIM - ten ostatni w surowym formacie BIND z cudzyslowami, patrz
+// dkim-install.sh) - przycisk czyta textContent poprzedniego elementu,
+// zero ryzyka rozjazdu miedzy tym co ma zostac skopiowane a tym co
+// faktycznie trafia do schowka.
 function wireCopyButtons(container) {
   container.querySelectorAll('.copy-value-btn').forEach((btn) => {
     if (btn.dataset.copyWired) return;
@@ -970,8 +972,9 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h4 style="margin:0 0 8px;font-size:14px;">${t('mail.dmarc_title')}</h4>
@@ -979,8 +982,9 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
     </div>
   ` : '';
 

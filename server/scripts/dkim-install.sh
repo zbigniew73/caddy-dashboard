@@ -48,7 +48,15 @@ SIGNING_TABLE="/etc/opendkim/SigningTable"
 
 print_record() {
   local record_value record_value_raw
-  record_value="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | sed 's/^"//;s/"$//' | tr -d '\n' | tr -s ' ')"
+  # `tr '\n' ' '` (NIE `tr -d '\n'`) - fragmenty musza byc oddzielone
+  # spacja, inaczej dwa base64 kawalki zlepiaja sie w jeden ciag bez
+  # zadnej przerwy na granicy (np. "...wiOl" + "jIEz1x0T..." ->
+  # "...wiOljIEz1x0T..."), co user zglosil 2026-08-16 jako nieczytelne w
+  # polu "Wartosc". `tr -s ' '` scala ewentualne wielokrotne spacje w
+  # jedna, koncowy `sed` usuwa spacje na samym koncu (po ostatnim
+  # fragmencie, przed zamknieciem cudzyslowu, ktory i tak jest tu juz
+  # usuniety przez `sed 's/^"//;s/"$//'` na kazdym fragmencie z osobna).
+  record_value="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | sed 's/^"//;s/"$//' | tr '\n' ' ' | tr -s ' ' | sed 's/[[:space:]]*$//')"
   [ -n "$record_value" ] || err "nie udalo sie odczytac rekordu DKIM z ${KEY_DIR}/${SELECTOR}.txt."
   # Jak wyzej, ALE cudzyslowy ZOSTAJA - tylko newline miedzy fragmentami
   # zamieniony na spacje (oryginalny plik opendkim-genkey ma kazdy
