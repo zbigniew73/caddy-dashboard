@@ -173,14 +173,25 @@ app.use(express.static(path.join(__dirname, '../web'), {
     res.setHeader('Cache-Control', 'no-cache');
   }
 }));
+// Te dwa route'y NIE ida przez express.static wyzej (to sa SPA fallbacki,
+// `res.sendFile` bezposrednio) - bez wlasnego Cache-Control dostawaly
+// domyslne zachowanie `send` (brak jawnego max-age, ale tez brak "no-cache",
+// wiec przegladarka mogla zastosowac wlasna heurystyke swiezosci i
+// serwowac STARY index.html - a wtedy nawet wersjonowane query stringi
+// przy <script src="app.js?v=..."> WEWNATRZ tego pliku nigdy by sie nie
+// zmienily w oczach przegladarki, bo sam plik HTML nigdy by nie zostal
+// ponownie pobrany). Ten sam powod co Cache-Control przy express.static
+// wyzej - potwierdzone na zywym serwerze 2026-08-16, powtarzajacy sie
+// problem z niewidocznymi zmianami po deployu.
+const NO_CACHE_HEADERS = { headers: { 'Cache-Control': 'no-cache' } };
 // SPA fallback dla panelu klienta (/user/*) - MUSI byc przed catch-allem
 // panelu admina ponizej, inaczej kazda podstrona /user/... (np. po
 // odswiezeniu) dostalaby index.html admina zamiast web/user/index.html.
 app.get(['/user', '/user/*'], (req, res) => {
-  res.sendFile(path.join(__dirname, '../web/user/index.html'));
+  res.sendFile(path.join(__dirname, '../web/user/index.html'), NO_CACHE_HEADERS);
 });
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../web/index.html'));
+  res.sendFile(path.join(__dirname, '../web/index.html'), NO_CACHE_HEADERS);
 });
 
 app.listen(PORT, HOST, () => {
