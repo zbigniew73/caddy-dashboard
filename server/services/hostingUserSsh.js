@@ -146,32 +146,24 @@ async function deleteSshKey(username, keyData) {
   return filtered;
 }
 
-// Lokalizacja serwera (miasto/region) do kafelka Uptime na Dashboardzie
-// usera - geo-IP publicznego adresu (ipapi.co, bez klucza API). Cache w
-// module (bez TTL, tak samo jak cachedPublicIp powyzej) - lokalizacja
-// serwera sie nie zmienia, a Dashboard odpytuje /me co 5s (patrz
-// startUsageRefresh w web/user/app.js), wiec bez tego cache'a kazde
-// odswiezenie bilaby to zewnetrzne zapytanie sieciowe. Cichy null przy
-// niepowodzeniu (brak internetu/egress/limit API) - to czysto
-// kosmetyczna dodatkowa linia, nie moze zablokowac reszty kafelka.
-let cachedServerLocation;
-
-async function getServerLocation() {
-  if (cachedServerLocation !== undefined) return cachedServerLocation;
-  try {
-    const ip = await getPublicIp();
-    const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
-    if (res.ok) {
-      const data = await res.json();
-      const parts = [data.city, data.region].filter(Boolean);
-      cachedServerLocation = parts.length ? parts.join(', ') : null;
-      return cachedServerLocation;
+// Adres IP do kafelka Uptime na Dashboardzie usera - user 2026-08-16
+// jawnie odrzucil geo-IP przez zewnetrzny serwis (ipapi.co, wpadl na
+// RateLimited przy pierwszym uzyciu, patrz [[project_caddy_dashboard...]]
+// historia w tej rozmowie) na rzecz adresu WPROST z systemu
+// (os.networkInterfaces(), zero zapytan sieciowych, wiec zero ryzyka
+// limitow/egress). Bierze pierwszy nie-wewnetrzny (nie loopback) adres
+// IPv4 - na typowym VPS to i tak publiczny adres serwera (przypisany
+// wprost do glownego interfejsu, bez NAT), ale to LOKALNY interfejs, nie
+// zewnetrzna weryfikacja - jesli serwer siedzi za NAT-em, pokaze adres
+// wewnetrzny tej sieci, nie publiczny.
+function getSystemIp() {
+  const interfaces = os.networkInterfaces();
+  for (const entries of Object.values(interfaces)) {
+    for (const iface of entries || []) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
     }
-  } catch {
-    // brak internetu / limit API / IP niepubliczne - honest null ponizej
   }
-  cachedServerLocation = null;
-  return cachedServerLocation;
+  return null;
 }
 
-export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp, getServerLocation };
+export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp, getSystemIp };
