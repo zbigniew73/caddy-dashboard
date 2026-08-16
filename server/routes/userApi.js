@@ -13,7 +13,8 @@ import {
   listOwnMailDomains,
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
-  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo
+  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
+  getOwnSniStatus, syncOwnSni
 } from '../services/hostingUserMailboxes.js';
 import {
   listPythonVersions,
@@ -321,6 +322,24 @@ router.get('/mail/spf-dmarc', async (req, res) => {
   try {
     const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
     res.json(await getOwnSpfDmarcInfo(req.hostingUser, domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/mail/sni-status', async (req, res) => {
+  try {
+    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
+    res.json(await getOwnSniStatus(req.hostingUser, domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.post('/mail/sni-sync', async (req, res) => {
+  try {
+    const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
+    res.json(await syncOwnSni(req.hostingUser, domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

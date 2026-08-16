@@ -626,6 +626,7 @@
   "mail.sni_not_applicable": "Only applies to \"mail.<domain>\" domains - this domain isn't one.",
   "mail.sni_status_synced": "Synced",
   "mail.sni_status_not_synced": "Not synced yet.",
+  "mail.sni_not_enabled": "Mail support isn't enabled for this site - enable it in the site's settings under the Sites tab.",
   "mail.sni_sync_button": "Sync SNI",
   "mail.sni_resync_button": "Resync SNI",
   "mail.virtual_manage_button": "Manage",

@@ -1009,7 +1009,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
   `;
 }
 
-function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc) {
+function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc, sni) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
@@ -1027,9 +1027,49 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
         ${aliasManageCardHtml(domains, selectedDomain, aliases)}
       </div>
     </div>
-    <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;margin-top:16px;">
-      ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
+    <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
+      </div>
+      <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        ${mailSniSectionHtml(domains, selectedDomain, sni)}
+      </div>
     </div>
+  `;
+}
+
+// Kafelek SNI (obok DKIM/SPF/DMARC, 50/50) - certyfikat TLS dla
+// "mail.<domena>" (server/scripts/mail-sni-sync.sh). "selectedDomain" jest
+// zawsze domena BAZOWA (ta sama co selektor DKIM wyzej - listOwnMailDomains
+// celowo wyklucza "mail.*", patrz hostingUserMailboxes.js) - domena
+// "mail.<selectedDomain>" jest wyprowadzana i sprawdzana pod wzgledem
+// wlasnosci dopiero po stronie serwera (getOwnSniStatus/syncOwnSni). Jesli
+// user nigdy nie wlaczyl "Obsluga poczty" przy tworzeniu tej strony,
+// "mail.<domena>" po prostu nie istnieje jako wirtualna domena - serwer
+// zwraca 404, tu renderowane jako neutralny stan (BEZ przycisku, zeby nie
+// prowokowac proby synchronizacji czegos co i tak nie istnieje).
+function mailSniSectionHtml(domains, selectedDomain, sni) {
+  if (!domains.length) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
+      <div class="empty-state">${t('mail.mailbox_no_domains')}</div>
+    `;
+  }
+  if (!sni) {
+    return `
+      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
+      <p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
+      <div class="empty-state">${t('mail.sni_not_enabled')}</div>
+    `;
+  }
+  return `
+    <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
+    <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
+    ${sni.synced
+      ? `<p style="margin:0 0 16px;"><span class="status-badge active">${t('mail.sni_status_synced')}</span></p>`
+      : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</p>`}
+    <button type="button" id="sni-sync-btn">${sni.synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
+    <div class="action-msg" id="sni-msg"></div>
   `;
 }
 
@@ -1071,6 +1111,24 @@ function wireMailManageSection(content) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
         dkimInstallBtn.disabled = false;
+      }
+    };
+  }
+
+  const sniSyncBtn = document.getElementById('sni-sync-btn');
+  if (sniSyncBtn) {
+    sniSyncBtn.onclick = async () => {
+      const msgEl = document.getElementById('sni-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      sniSyncBtn.disabled = true;
+      try {
+        await api('POST', '/mail/sni-sync', { domain: mailSelectedDomain });
+        await refreshMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        sniSyncBtn.disabled = false;
       }
     };
   }
@@ -1187,20 +1245,23 @@ async function refreshMailTab(content) {
     let aliases = [];
     let dkim = null;
     let spfDmarc = null;
+    let sni = null;
     if (mailSelectedDomain) {
       const encoded = encodeURIComponent(mailSelectedDomain);
-      const [mailboxesRes, aliasesRes, dkimRes, spfDmarcRes] = await Promise.all([
+      const [mailboxesRes, aliasesRes, dkimRes, spfDmarcRes, sniRes] = await Promise.all([
         api('GET', `/mail/mailboxes?domain=${encoded}`),
         api('GET', `/mail/aliases?domain=${encoded}`),
         api('GET', `/mail/dkim-status?domain=${encoded}`).catch(() => null),
-        api('GET', `/mail/spf-dmarc?domain=${encoded}`).catch(() => null)
+        api('GET', `/mail/spf-dmarc?domain=${encoded}`).catch(() => null),
+        api('GET', `/mail/sni-status?domain=${encoded}`).catch(() => null)
       ]);
       mailboxes = mailboxesRes.items;
       aliases = aliasesRes.items;
       dkim = dkimRes;
       spfDmarc = spfDmarcRes;
+      sni = sniRes;
     }
-    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases, dkim, spfDmarc);
+    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases, dkim, spfDmarc, sni);
     wireMailManageSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

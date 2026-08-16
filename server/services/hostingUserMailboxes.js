@@ -3,7 +3,7 @@ import {
   listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
   listVirtualAliases, addVirtualAlias, removeVirtualAlias
 } from './mailVirtual.js';
-import { getDkimStatus, installDkim, getSpfDmarcInfo } from './mail.js';
+import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, listMailSni } from './mail.js';
 
 // Self-service warstwa dla panelu /user/ nad mailVirtual.js (do tej pory
 // wywolywanym WYLACZNIE z panelu admina) - Poczta -> "Dodaj konto e-mail"/
@@ -99,9 +99,33 @@ async function getOwnSpfDmarcInfo(username, domain) {
   return getSpfDmarcInfo(domain);
 }
 
+// SNI - w odroznieniu od DKIM/SPF/DMARC (ktore dotycza domeny BAZOWEJ),
+// certyfikat SNI dotyczy WYLACZNIE "mail.<domena>" (patrz mail-sni-sync.sh,
+// [[project_caddy_dashboard_mail_sni]]) - "domain" tu to nadal domena
+// BAZOWA (ta sama, ktora user wybiera w selektorze DKIM/SPF/DMARC), a
+// docelowa domena "mail.<domain>" jest dopiero WYPROWADZANA tutaj.
+// `assertOwnDomain` sprawdza wprost WLASNOSC "mail.<domain>" (nie samej
+// bazowej) - jesli "Obsluga poczty" nigdy nie zostala wlaczona przy
+// tworzeniu strony, ten wpis po prostu nie istnieje w tabeli domains i
+// funkcja poprawnie zwroci 404, zamiast po cichu dzialac na czyms
+// niezarejestrowanym.
+async function getOwnSniStatus(username, domain) {
+  const mailDomain = `mail.${domain}`;
+  await assertOwnDomain(username, mailDomain);
+  const synced = (await listMailSni()).includes(mailDomain);
+  return { domain: mailDomain, synced };
+}
+
+async function syncOwnSni(username, domain) {
+  const mailDomain = `mail.${domain}`;
+  await assertOwnDomain(username, mailDomain);
+  return syncMailSni(mailDomain);
+}
+
 export {
   listOwnMailDomains,
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
-  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo
+  getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
+  getOwnSniStatus, syncOwnSni
 };
