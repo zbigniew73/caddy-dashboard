@@ -107,6 +107,30 @@ case "$ACTION" in
     done
     ;;
 
+  # Jak "list", ale z data wygasniecia certyfikatu (epoch, sekundy) -
+  # user zglosil 2026-08-16 potrzebe pokazania "ile dni zostalo do
+  # odnowienia" w panelu, zamiast samego statusu tak/nie. Certyfikat NIE
+  # odnawia sie tu sam (Caddy go odnawia we WLASNYM magazynie, ale
+  # mail-sni-sync.sh trzeba kliknac RECZNIE zeby skopiowac nowa wersje do
+  # Postfixa/Dovecota) - stad ta informacja ma realna wartosc ostrzegawcza.
+  # dovecot-cert.pem (NIE postfix.pem, ktory zawiera material klucza) -
+  # bezpieczny do odczytu samego certyfikatu, ta sama tresc X.509 co w
+  # postfix.pem, tylko bez klucza prywatnego doklejonego przed nim.
+  list-detail)
+    for dir in "$SNI_DIR"/*/; do
+      [ -d "$dir" ] || continue
+      [ -f "${dir}postfix.pem" ] || continue
+      domain="$(basename "$dir")"
+      cert="${dir}dovecot-cert.pem"
+      not_after_epoch=""
+      if [ -f "$cert" ]; then
+        not_after_raw="$(openssl x509 -enddate -noout -in "$cert" 2>/dev/null | sed 's/^notAfter=//')"
+        [ -n "$not_after_raw" ] && not_after_epoch="$(date -d "$not_after_raw" +%s 2>/dev/null || true)"
+      fi
+      printf '%s|%s\n' "$domain" "$not_after_epoch"
+    done
+    ;;
+
   sync)
     DOMAIN="${2:-}"
     DOMAIN="${DOMAIN,,}"

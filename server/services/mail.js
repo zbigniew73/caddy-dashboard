@@ -256,6 +256,24 @@ async function listMailSni() {
   }
 }
 
+// Jak listMailSni(), ale z data wygasniecia certyfikatu - user zglosil
+// 2026-08-16 potrzebe pokazania w panelu "ile dni zostalo", bo Caddy
+// odnawia certyfikat we WLASNYM magazynie automatycznie, ale
+// mail-sni-sync.sh trzeba kliknac RECZNIE ("Odswiez SNI"), zeby ta nowa
+// wersja faktycznie trafila do Postfixa/Dovecota - bez tego klienci
+// poczty dostana wygasly certyfikat, mimo ze Caddy juz dawno ma swiezy.
+async function listMailSniDetail() {
+  try {
+    const { stdout } = await execFileAsync('sudo', ['-n', SNI_SYNC_SCRIPT_PATH, 'list-detail'], { timeout: 15000 });
+    return stdout.split('\n').map((l) => l.trim()).filter(Boolean).map((line) => {
+      const [domain, notAfterEpoch] = line.split('|');
+      return { domain, notAfterEpoch: notAfterEpoch ? Number(notAfterEpoch) : null };
+    });
+  } catch {
+    return [];
+  }
+}
+
 const LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-set-limits.sh');
 
 // Odczyt bezposredni (bez sudo), ten sam powod co getMailTlsStatus -
@@ -664,7 +682,7 @@ async function setSpamassassinThreshold(threshold) {
 
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
-  getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, getPostfixLimits, setPostfixLimits,
+  getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, listMailSniDetail, getPostfixLimits, setPostfixLimits,
   getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
   getDkimStatus, installDkim, getSpfDmarcInfo,
   getPostfwdStatus, installPostfwd, setPostfwdLimits,

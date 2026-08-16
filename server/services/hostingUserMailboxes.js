@@ -3,7 +3,7 @@ import {
   listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
   listVirtualAliases, addVirtualAlias, removeVirtualAlias
 } from './mailVirtual.js';
-import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, removeMailSni, listMailSni } from './mail.js';
+import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, removeMailSni, listMailSniDetail } from './mail.js';
 
 // Self-service warstwa dla panelu /user/ nad mailVirtual.js (do tej pory
 // wywolywanym WYLACZNIE z panelu admina) - Poczta -> "Dodaj konto e-mail"/
@@ -114,8 +114,19 @@ async function listOwnSniDomains(username) {
     .map((d) => d.domain)
     .sort();
   if (!mailDomains.length) return [];
-  const syncedSet = new Set(await listMailSni());
-  return mailDomains.map((domain) => ({ domain, synced: syncedSet.has(domain) }));
+  // Mapa domain -> dni do wygasniecia (null jesli nieznane/brak certu) -
+  // Math.floor (NIE round) - "1 dzien zostal" ma znaczyc realnie mniej niz
+  // 24h zapasu, nie zaokraglac w gore i dawac falszywe poczucie luzu.
+  const detailByDomain = new Map((await listMailSniDetail()).map((d) => [d.domain, d]));
+  return mailDomains.map((domain) => {
+    const detail = detailByDomain.get(domain);
+    const synced = Boolean(detail);
+    let daysUntilExpiry = null;
+    if (synced && detail.notAfterEpoch) {
+      daysUntilExpiry = Math.floor((detail.notAfterEpoch * 1000 - Date.now()) / 86400000);
+    }
+    return { domain, synced, daysUntilExpiry };
+  });
 }
 
 // sync/remove przyjmuja TERAZ pelna domene "mail.<domena>" wprost (NIE
