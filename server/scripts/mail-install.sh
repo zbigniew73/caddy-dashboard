@@ -53,26 +53,28 @@ getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - 
 # pakiecie. Bez tego dkim-install.sh (przycisk "Zainstaluj DKIM" w
 # panelu) failuje "brak polecenia opendkim-genkey" - potwierdzone na
 # zywym serwerze 2026-08-14.
-# sqlite (CLI /usr/bin/sqlite3) - wymagany dla wirtualnych domen/skrzynek
-# ponizej, osobny (maly) podpakiet, nie czesc bazowego systemu.
-dnf install -y postfix dovecot opendkim opendkim-tools sqlite || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools, sqlite) nie powiodla sie."
+dnf install -y postfix dovecot opendkim opendkim-tools || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools) nie powiodla sie."
 
-# Sterownik sqlite dla Dovecota (passdb/userdb SQL dla wirtualnych
-# domen/skrzynek ponizej) bywa OSOBNYM podpakietem (np. starsze EL9) ALBO
-# WBUDOWANY w sam pakiet "dovecot" - potwierdzone na AlmaLinux 10.2
-# (dovecot 2.3.21-19.el10_2): pakiet "dovecot-sqlite" tam W OGOLE NIE
-# ISTNIEJE ("Unable to find a match"), bo libdriver_sqlite.so juz siedzi
-# w samym "dovecot". Probujemy doinstalowac OSOBNY pakiet, ale NIE
-# failujemy jesli go nie ma - prawdziwym testem jest obecnosc samej
-# biblioteki sterownika, sprawdzana ponizej. Sciezka potwierdzona `rpm -ql
-# dovecot` na zywym serwerze 2026-08-14 (AlmaLinux 10.2) - POJEDYNCZA,
-# konkretna sciezka (NIE `find` po kilku katalogach - `find` z
-# nieistniejacym drugim argumentem potrafi nie zwrocic nic uzytecznego,
-# tak jak sie tu okazalo).
-dnf install -y dovecot-sqlite >/dev/null 2>&1 || true
-DOVECOT_SQLITE_DRIVER="/usr/lib64/dovecot/libdriver_sqlite.so"
-[ -e "$DOVECOT_SQLITE_DRIVER" ] \
-  || err "Brak sterownika sqlite dla Dovecota (${DOVECOT_SQLITE_DRIVER}) - sprawdz recznie: rpm -ql dovecot | grep sqlite."
+# Sterowniki mysql dla Postfixa/Dovecota (wirtualne domeny/skrzynki na
+# MariaDB, patrz sekcja nizej) - dokladne nazwy pakietow/sciezki
+# sterownikow NIE byly (jeszcze) potwierdzone na zywym serwerze (w
+# odroznieniu od dovecot-sqlite ktore mielismy zweryfikowane 2026-08-14,
+# przed przejsciem wirtualnych skrzynek z SQLite na MariaDB) - ten sam
+# defensywny wzorzec: probujemy zainstalowac pakiet, ale prawdziwym testem
+# jest obecnosc samego sterownika, NIE exit code dnf. Jesli te sciezki
+# okaza sie bledne na konkretnej wersji EL, `rpm -ql postfix-mysql` /
+# `rpm -ql dovecot-mysql` (albo `rpm -ql dovecot | grep mysql`, gdyby
+# sterownik byl wbudowany jak przy sqlite) pokaze prawdziwa lokalizacje -
+# poprawic tu.
+dnf install -y postfix-mysql >/dev/null 2>&1 || true
+POSTFIX_MYSQL_DRIVER="$(find /usr/lib64/postfix -maxdepth 1 -iname '*mysql*' 2>/dev/null | head -n1)"
+[ -n "$POSTFIX_MYSQL_DRIVER" ] \
+  || err "Brak sterownika mysql dla Postfixa - sprawdz recznie: rpm -ql postfix-mysql, albo dnf provides '*/postfix-mysql'."
+
+dnf install -y dovecot-mysql >/dev/null 2>&1 || true
+DOVECOT_MYSQL_DRIVER="/usr/lib64/dovecot/libdriver_mysql.so"
+[ -e "$DOVECOT_MYSQL_DRIVER" ] \
+  || err "Brak sterownika mysql dla Dovecota (${DOVECOT_MYSQL_DRIVER}) - sprawdz recznie: rpm -ql dovecot | grep mysql."
 
 # --- TLS: self-signed cert (tymczasowy, patrz komentarz na gorze) ---
 CERT_FILE="/etc/pki/tls/certs/mail-selfsigned.crt"
@@ -315,12 +317,12 @@ postconf -P 'smtps/inet/smtpd_helo_restrictions='
 # kont systemowych/SSH z Fazy 1 powyzej) - DODATKOWA, rownolegla sciezka,
 # nie zastepuje niczego istniejacego. Dedykowany systemowy user "vmail"
 # (bez logowania) - zadna wirtualna skrzynka NIGDY nie nalezy do
-# prawdziwego konta SSH/PAM. Zrodlo prawdy: SQLite
-# (/etc/caddy-dashboard/mail-virtual.db, patrz server/scripts/
-# mail-virtual-*.sh) - Dovecot czyta go NA ZYWO (wlasny driver sqlite),
-# Postfix (czesto BEZ wkompilowanego sqlite) dostaje plaskie pliki hash:
-# regenerowane z tej samej bazy przez mail-virtual-*.sh (ten sam wzorzec
-# co KeyTable/SigningTable OpenDKIM).
+# prawdziwego konta SSH/PAM. Zrodlo prawdy: MariaDB (baza "mailvirtual",
+# patrz server/scripts/mail-virtual-*.sh) - Postfix I Dovecot odpytuja ja
+# NA ZYWO (mysql: mapy / driver mysql), zero regeneracji plaskich plikow
+# (poprzednia wersja z SQLite+lmdb: byla kruchsza - regeneracja/postmap/
+# reload to dodatkowy punkt awarii, ktory juz raz na zywym serwerze psul
+# TLS przez zly typ mapy, patrz komentarz przy SNI_MAP_FILE wyzej).
 if ! getent passwd vmail >/dev/null 2>&1; then
   useradd --system --no-create-home --home-dir /var/mail/vhosts --shell /sbin/nologin vmail \
     || err "Utworzenie systemowego uzytkownika 'vmail' nie powiodlo sie."
@@ -331,55 +333,94 @@ mkdir -p /var/mail/vhosts
 chown vmail:vmail /var/mail/vhosts
 chmod 750 /var/mail/vhosts
 
-VMAIL_DB="/etc/caddy-dashboard/mail-virtual.db"
-mkdir -p /etc/caddy-dashboard
-if [ ! -f "$VMAIL_DB" ]; then
-  sqlite3 "$VMAIL_DB" <<'SQL' || err "Inicjalizacja schematu SQLite (${VMAIL_DB}) nie powiodla sie."
-CREATE TABLE domains (
-  id INTEGER PRIMARY KEY,
-  domain TEXT UNIQUE NOT NULL,
-  owner_account TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE mailboxes (
-  id INTEGER PRIMARY KEY,
-  domain_id INTEGER NOT NULL REFERENCES domains(id),
-  localpart TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
-  maildir TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  UNIQUE(domain_id, localpart)
-);
-CREATE TABLE aliases (
-  id INTEGER PRIMARY KEY,
-  domain_id INTEGER NOT NULL REFERENCES domains(id),
-  source TEXT NOT NULL,
-  destination TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-SQL
-fi
-# Dovecot laczy sie do tej bazy jako grupa "dovecot" (proces auth-worker,
-# NIE root) - musi miec jawny dostep grupowy do odczytu (zawiera
-# zahaszowane hasla, wiec NIE world-readable). Ten sam bledny wzorzec
-# (poleganie na umask roota) juz raz zepsul OpenDKIM na tym serwerze
-# (2026-08-14, patrz [[project_caddy_dashboard_mail_access]]) - tu
-# ustawiane jawnie, bezwarunkowo przy KAZDYM uruchomieniu.
-chown root:dovecot "$VMAIL_DB"
-chmod 640 "$VMAIL_DB"
+# MariaDB jest OSOBNA, juz istniejaca instalacja (patrz
+# server/scripts/mariadb-install.sh, uzywana tez do baz klienckich
+# hostingu przez hosting-db-mariadb.sh) - ten skrypt jej NIE instaluje,
+# tylko wymaga zeby juz dzialala, dokladnie tak jak inne skrypty tego
+# projektu wymagaja juz zainstalowanej Poczty przed dopisaniem czegos do
+# niej (patrz np. check VMAIL_DB w mail-virtual-*.sh sprzed tej zmiany).
+MARIADB_PWFILE="/root/.mariadb"
+[ -f "$MARIADB_PWFILE" ] || err "MariaDB nie jest zainstalowana (brak ${MARIADB_PWFILE}) - zainstaluj MariaDB w panelu (Bazy danych) przed instalacja Poczty z wirtualnymi domenami."
+systemctl is-active --quiet mariadb || err "Usluga mariadb nie dziala - uruchom ja przed instalacja Poczty."
+ROOT_PASS="$(cat "$MARIADB_PWFILE")"
 
-# Plik z zapytaniami SQL (NIE zawiera hasel, tylko sciezke do bazy +
-# zapytania) - Dovecot parsuje WSZYSTKIE pliki configu jako root przy
-# starcie, wiec 0600 root:root (standardowy, bezpieczny wzorzec Dovecota
-# dla *-sql.conf.ext) wystarcza - w przeciwienstwie do samej bazy powyzej,
-# ktora jest odpytywana NA ZYWO przez nieuprzywilejowany proces.
+mkdir -p /etc/caddy-dashboard
+
+# Haslo dedykowanego, SELECT-only uzytkownika MariaDB dla Postfixa/
+# Dovecota (oba demony siecowe, haslo lezy jawnym tekstem w ich configach
+# nizej - stad minimalne uprawnienia, patrz GRANT ponizej) - generowane
+# TYLKO przy pierwszym uruchomieniu i trwale zapisywane, dokladnie ten sam
+# powod co self-signed TLS wyzej: re-run tego (idempotentnego,
+# samonaprawiajacego sie) skryptu NIE MOZE po cichu wygenerowac nowego
+# hasla, bo wszystkie 4 configi (3x Postfix + Dovecot) rozjadyby sie z tym
+# co faktycznie jest ustawione w bazie.
+source "$(dirname "${BASH_SOURCE[0]}")/lib-gen-password.sh"
+MAILVIRTUAL_PWFILE="/etc/caddy-dashboard/mail-virtual-db.pass"
+if [ -f "$MAILVIRTUAL_PWFILE" ]; then
+  MAILVIRTUAL_PASS="$(cat "$MAILVIRTUAL_PWFILE")"
+else
+  MAILVIRTUAL_PASS="$(gen_password)"
+  umask 077
+  printf '%s\n' "$MAILVIRTUAL_PASS" > "$MAILVIRTUAL_PWFILE"
+  chown root:root "$MAILVIRTUAL_PWFILE"
+  chmod 600 "$MAILVIRTUAL_PWFILE"
+fi
+
+# CREATE USER/GRANT sa IDEMPOTENTNE (IF NOT EXISTS), ale ALTER USER jest
+# TU CELOWO bezwarunkowy - gdyby haslo w bazie kiedys rozjechalo sie z
+# plikiem powyzej (np. reczna interwencja DBA), re-run tego skryptu ma je
+# wymusic z powrotem, a nie po cichu zostawic rozjazd niewykryty.
+mariadb -u root -p"${ROOT_PASS}" <<SQL || err "Inicjalizacja schematu MariaDB (mailvirtual) nie powiodla sie."
+CREATE DATABASE IF NOT EXISTS mailvirtual CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mailvirtual.domains (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  domain VARCHAR(255) NOT NULL,
+  owner_account VARCHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_domains_domain (domain)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS mailvirtual.mailboxes (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  domain_id INT UNSIGNED NOT NULL,
+  localpart VARCHAR(128) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  maildir VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL,
+  UNIQUE KEY uq_mailboxes_domain_localpart (domain_id, localpart),
+  CONSTRAINT fk_mailboxes_domain FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS mailvirtual.aliases (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  domain_id INT UNSIGNED NOT NULL,
+  source VARCHAR(255) NOT NULL,
+  destination VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL,
+  CONSTRAINT fk_aliases_domain FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE USER IF NOT EXISTS 'mailvirtual'@'127.0.0.1' IDENTIFIED BY '${MAILVIRTUAL_PASS}';
+ALTER USER 'mailvirtual'@'127.0.0.1' IDENTIFIED BY '${MAILVIRTUAL_PASS}';
+GRANT SELECT ON mailvirtual.* TO 'mailvirtual'@'127.0.0.1';
+FLUSH PRIVILEGES;
+SQL
+
+# Plik z connect stringiem MariaDB - ZAWIERA haslo usera "mailvirtual"
+# jawnym tekstem (w odroznieniu od poprzedniej wersji SQLite, ktora hasla
+# do samej bazy nie potrzebowala) - ale ten user jest SELECT-only na
+# jednej bazie (patrz GRANT przy tworzeniu usera wyzej), wiec blast radius
+# wycieku tego pliku jest ograniczony. Dovecot parsuje WSZYSTKIE pliki
+# configu jako root przy starcie, wiec 0600 root:root (standardowy,
+# bezpieczny wzorzec Dovecota dla *-sql.conf.ext) wystarcza.
 cat > /etc/dovecot/dovecot-sql-virtual.conf.ext <<EOF
-driver = sqlite
-connect = ${VMAIL_DB}
+driver = mysql
+connect = host=127.0.0.1 dbname=mailvirtual user=mailvirtual password=${MAILVIRTUAL_PASS}
 default_pass_scheme = SHA512-CRYPT
 password_query = SELECT mailboxes.password_hash AS password FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain = '%d' AND mailboxes.localpart = '%n' AND mailboxes.enabled = 1
-user_query = SELECT '/var/mail/vhosts/' || domains.domain || '/' || mailboxes.localpart AS home, 'maildir:/var/mail/vhosts/' || domains.domain || '/' || mailboxes.localpart || '/Maildir' AS mail, ${VMAIL_UID} AS uid, ${VMAIL_GID} AS gid FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain = '%d' AND mailboxes.localpart = '%n' AND mailboxes.enabled = 1
+user_query = SELECT CONCAT('/var/mail/vhosts/',domains.domain,'/',mailboxes.localpart) AS home, CONCAT('maildir:/var/mail/vhosts/',domains.domain,'/',mailboxes.localpart,'/Maildir') AS mail, ${VMAIL_UID} AS uid, ${VMAIL_GID} AS gid FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain = '%d' AND mailboxes.localpart = '%n' AND mailboxes.enabled = 1
 EOF
 chmod 600 /etc/dovecot/dovecot-sql-virtual.conf.ext
 
@@ -416,33 +457,61 @@ chmod 644 /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf
 
 dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (91-caddy-dashboard-virtual.conf) nie przeszla walidacji (dovecot -n)."
 
-# --- Postfix: wirtualne domeny/skrzynki/aliasy - PLASKIE pliki lmdb:,
-# REGENEROWANE ze zrodla prawdy (SQLite powyzej) przez mail-virtual-*.sh
-# przy kazdej zmianie (ten sam wzorzec co KeyTable/SigningTable OpenDKIM).
-# Tworzone tu jako PUSTE (0 domen) - postmap nizej ma co zwalidowac nawet
-# przy zerowej liczbie wirtualnych domen.
+# --- Postfix: wirtualne domeny/skrzynki/aliasy - mysql: mapy, ODPYTYWANE
+# NA ZYWO z MariaDB (baza "mailvirtual" powyzej) przy kazdej wiadomosci -
+# ZERO regeneracji plaskich plikow/postmap/reload (poprzednia wersja z
+# SQLite+lmdb: byla kruchsza - regeneracja/postmap/reload to dodatkowy
+# punkt awarii, ktory juz raz na zywym serwerze psul TLS przez zly typ
+# mapy, patrz komentarz przy SNI_MAP_FILE wyzej). Zmiana w bazie (dodanie/
+# usuniecie domeny/skrzynki przez mail-virtual-*.sh) jest widoczna dla
+# Postfixa natychmiast, bez zadnego przeladowania uslugi.
 #
-# lmdb: (NIE hash:) - patrz obszerny komentarz przy SNI_MAP_FILE wyzej,
-# ten sam powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10) i ten sam
-# realny blad potwierdzony na zywym serwerze 2026-08-15.
-VIRTUAL_DOMAINS_FILE="/etc/postfix/virtual-domains"
-VIRTUAL_MAILBOX_FILE="/etc/postfix/virtual-mailboxes"
-VIRTUAL_ALIAS_FILE="/etc/postfix/virtual-aliases"
-# chmod 644 PO KAZDYM postmap (nie tylko przy tworzeniu) - `postmap`
-# generuje plik .lmdb od nowa za kazdym razem, wiec dziedziczy AKTUALNY
-# umask roota (na tym serwerze potrafi dac 640, patrz OpenDKIM
-# 2026-08-14) - bez jawnego chmod proces "postfix" (odebrane uprawnienia,
-# NIE root) nie moglby odczytac WLASNYCH map wirtualnych domen/skrzynek.
-for f in "$VIRTUAL_DOMAINS_FILE" "$VIRTUAL_MAILBOX_FILE" "$VIRTUAL_ALIAS_FILE"; do
-  [ -f "$f" ] || : > "$f"
-  postmap lmdb:"$f" || err "postmap ${f} nie powiodlo sie."
-  chmod 644 "$f" "${f}.lmdb" 2>/dev/null || true
-done
+# hosts = 127.0.0.1 (TCP, NIE socket unixowy /var/lib/mysql/mysql.sock) -
+# submission/smtps ponizej maja chroot=y (patrz postconf -P przy
+# smtpd_helo_restrictions wyzej), a socket plikowy bylby niewidoczny w tym
+# samym chroocie - dokladnie ta sama klasa problemu co juz raz zepsula
+# HELO/DNS w chroocie (2026-08-15). TCP do 127.0.0.1 dziala przezroczyscie
+# z chroota (syscall sieciowy, nie sciezka na dysku). MariaDB musi wiec
+# nasluchiwac na 127.0.0.1 (bind-address w /etc/my.cnf.d/) - domyslnie
+# zwykle tak jest, ale NIE bylo to jeszcze potwierdzone na tym konkretnym
+# serwerze - jesli polaczenie nie dziala, sprawdzic tam najpierw.
+MYSQL_VIRTUAL_DOMAINS_CF="/etc/postfix/mysql-virtual-domains.cf"
+MYSQL_VIRTUAL_MAILBOXES_CF="/etc/postfix/mysql-virtual-mailboxes.cf"
+MYSQL_VIRTUAL_ALIASES_CF="/etc/postfix/mysql-virtual-aliases.cf"
+
+cat > "$MYSQL_VIRTUAL_DOMAINS_CF" <<EOF
+user = mailvirtual
+password = ${MAILVIRTUAL_PASS}
+hosts = 127.0.0.1
+dbname = mailvirtual
+query = SELECT 1 FROM domains WHERE domain='%s'
+EOF
+
+cat > "$MYSQL_VIRTUAL_MAILBOXES_CF" <<EOF
+user = mailvirtual
+password = ${MAILVIRTUAL_PASS}
+hosts = 127.0.0.1
+dbname = mailvirtual
+query = SELECT CONCAT(domains.domain,'/',mailboxes.localpart,'/Maildir/') FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id WHERE domains.domain='%d' AND mailboxes.localpart='%u' AND mailboxes.enabled=1
+EOF
+
+cat > "$MYSQL_VIRTUAL_ALIASES_CF" <<EOF
+user = mailvirtual
+password = ${MAILVIRTUAL_PASS}
+hosts = 127.0.0.1
+dbname = mailvirtual
+query = SELECT destination FROM aliases WHERE source='%s'
+EOF
+
+# root:postfix 0640 - zawieraja haslo jawnym tekstem, proces "postfix"
+# (grupa postfix) musi je odczytac przy kazdym zapytaniu do bazy.
+chown root:postfix "$MYSQL_VIRTUAL_DOMAINS_CF" "$MYSQL_VIRTUAL_MAILBOXES_CF" "$MYSQL_VIRTUAL_ALIASES_CF"
+chmod 640 "$MYSQL_VIRTUAL_DOMAINS_CF" "$MYSQL_VIRTUAL_MAILBOXES_CF" "$MYSQL_VIRTUAL_ALIASES_CF"
 
 postconf -e "virtual_mailbox_base=/var/mail/vhosts"
-postconf -e "virtual_mailbox_domains=lmdb:${VIRTUAL_DOMAINS_FILE}"
-postconf -e "virtual_mailbox_maps=lmdb:${VIRTUAL_MAILBOX_FILE}"
-postconf -e "virtual_alias_maps=lmdb:${VIRTUAL_ALIAS_FILE}"
+postconf -e "virtual_mailbox_domains=mysql:${MYSQL_VIRTUAL_DOMAINS_CF}"
+postconf -e "virtual_mailbox_maps=mysql:${MYSQL_VIRTUAL_MAILBOXES_CF}"
+postconf -e "virtual_alias_maps=mysql:${MYSQL_VIRTUAL_ALIASES_CF}"
 postconf -e "virtual_uid_maps=static:${VMAIL_UID}"
 postconf -e "virtual_gid_maps=static:${VMAIL_GID}"
 postconf -e "virtual_minimum_uid=${VMAIL_UID}"
@@ -458,6 +527,12 @@ postconf -e 'virtual_transport = virtual'
 # install (albo re-run na juz dzialajacym message_size_limit) nigdy nie
 # zaczynal w tym zepsutym stanie.
 postconf -e "virtual_mailbox_limit=$(postconf -h mailbox_size_limit 2>/dev/null || echo 0)"
+
+# Potwierdza, ze DZIALAJACY binarny postfix faktycznie zglasza "mysql"
+# jako dostepny typ mapy - pakiet postfix-mysql moze byc zainstalowany, a
+# wsparcie mimo to niewidoczne bez tego (np. brak wpisu w dynamicmaps.cf).
+postconf -m 2>/dev/null | grep -qx mysql \
+  || err "Postfix nie zglasza 'mysql' jako dostepny typ mapy mimo zainstalowanego postfix-mysql - sprawdz 'postconf -m' i /etc/postfix/dynamicmaps.cf recznie."
 
 postfix check || err "Konfiguracja Postfixa nie przeszla walidacji (postfix check) po zmianach."
 

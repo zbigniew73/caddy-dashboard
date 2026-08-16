@@ -2,9 +2,10 @@
 #
 # Zarzadza wirtualnymi domenami pocztowymi (klienci hostingu, NIEZALEZNE
 # od kont systemowych/SSH - patrz mail-install.sh, sekcja "Wirtualne
-# domeny/skrzynki"). Zrodlo prawdy: SQLite (/etc/caddy-dashboard/
-# mail-virtual.db, tabela "domains"). Kazda zmiana regeneruje plaski plik
-# Postfixa (virtual_mailbox_domains) i przeladowuje uslugE.
+# domeny/skrzynki"). Zrodlo prawdy: MariaDB (baza "mailvirtual", tabela
+# "domains"). Postfix odpytuje ja NA ZYWO (mysql: mapa, patrz
+# virtual_mailbox_domains w mail-install.sh) - zadnej regeneracji plaskich
+# plikow/reloadu tu juz nie ma, zmiana w bazie jest widoczna natychmiast.
 #
 # Uzycie:
 #   mail-virtual-domain.sh add <domena> <owner_account>
@@ -15,40 +16,25 @@ set -uo pipefail
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
-VMAIL_DB="/etc/caddy-dashboard/mail-virtual.db"
-VIRTUAL_DOMAINS_FILE="/etc/postfix/virtual-domains"
+MARIADB_PWFILE="/root/.mariadb"
 DOMAIN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
 ACCOUNT_RE='^srv_[0-9]+$'
 
-[ -f "$VMAIL_DB" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+[ -f "$MARIADB_PWFILE" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+ROOT_PASS="$(cat "$MARIADB_PWFILE")"
 
+# -N -B = bez naglowkow kolumn, tab-separated - identyczny plain output co
+# domyslny sqlite3 CLI (server/services/mailVirtual.js parsuje stdout tych
+# skryptow linia po linii, split('|') - format musi zostac identyczny).
 sql() {
-  sqlite3 "$VMAIL_DB" "$1"
-}
-
-regen_virtual_domains() {
-  sql "SELECT domain FROM domains;" | while IFS= read -r d; do
-    printf '%s OK\n' "$d"
-  done > "$VIRTUAL_DOMAINS_FILE"
-  # lmdb: (NIE hash:/btree:) - na AlmaLinux/Rocky 10 Postfix jest budowany
-  # BEZ Berkeley DB (usunieta z bazowego systemu, problem licencyjny
-  # Oracle) - `postconf -m` na tym build'zie w ogole nie wymienia hash/
-  # btree wsrod dostepnych typow map. Potwierdzone na zywym serwerze
-  # 2026-08-15 realnym bledem "unsupported dictionary type: hash. Is the
-  # postfix-hash package installed?" - psulo TLS (SNI) i prawdopodobnie
-  # TEZ te wirtualne mapy (main.cf mowil "hash:", plik faktycznie
-  # zapisany przez `postmap` w formacie default_database_type). lmdb.db
-  # ma inne rozszerzenie pliku (.lmdb, NIE .db).
-  postmap lmdb:"$VIRTUAL_DOMAINS_FILE" || err "postmap ${VIRTUAL_DOMAINS_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_DOMAINS_FILE" "${VIRTUAL_DOMAINS_FILE}.lmdb" 2>/dev/null || true
-  systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
+  mariadb -u root -p"${ROOT_PASS}" -N -B -D mailvirtual -e "$1"
 }
 
 ACTION="${1:-}"
 
 case "$ACTION" in
   list)
-    sql "SELECT domain || '|' || owner_account || '|' || created_at FROM domains ORDER BY domain;"
+    sql "SELECT CONCAT_WS('|', domain, owner_account, created_at) FROM domains ORDER BY domain;"
     ;;
 
   add)
@@ -77,7 +63,6 @@ case "$ACTION" in
     chown vmail:vmail "/var/mail/vhosts/${DOMAIN}"
     chmod 750 "/var/mail/vhosts/${DOMAIN}"
 
-    regen_virtual_domains
     echo "OK: domena '${DOMAIN}' dodana (wlasciciel: ${OWNER_ACCOUNT})."
     ;;
 
@@ -98,7 +83,6 @@ case "$ACTION" in
     sql "DELETE FROM domains WHERE id = ${DOMAIN_ID};" || err "Usuniecie domeny z bazy nie powiodlo sie."
     rm -rf "/var/mail/vhosts/${DOMAIN}"
 
-    regen_virtual_domains
     echo "OK: domena '${DOMAIN}' usunieta."
     ;;
 

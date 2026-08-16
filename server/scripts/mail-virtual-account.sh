@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
 # Zarzadza kontami (skrzynkami) w ramach juz dodanej wirtualnej domeny
-# pocztowej - patrz mail-virtual-domain.sh. Zrodlo prawdy: SQLite
-# (/etc/caddy-dashboard/mail-virtual.db, tabela "mailboxes"). Kazda zmiana
-# regeneruje plaski plik Postfixa (virtual_mailbox_maps) i przeladowuje
-# usluge; Dovecot czyta baze NA ZYWO (bez potrzeby przeladowania przy
-# zmianach danych, tylko przy zmianach configu).
+# pocztowej - patrz mail-virtual-domain.sh. Zrodlo prawdy: MariaDB (baza
+# "mailvirtual", tabela "mailboxes"). Postfix I Dovecot odpytuja ja NA
+# ZYWO (mysql: mapa / driver mysql) - zadnej regeneracji plaskich plikow
+# ani przeladowania uslugi przy zmianach danych, tylko przy zmianach
+# samego configu (co ten skrypt nigdy nie robi).
 #
 # Haslo idzie na STDIN (jedna linia), NIGDY jako argument - ten sam powod
 # co hosting-user-set-password.sh (argv widoczne przez ps/proc dla
@@ -31,15 +31,18 @@ set -uo pipefail
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
-VMAIL_DB="/etc/caddy-dashboard/mail-virtual.db"
-VIRTUAL_MAILBOX_FILE="/etc/postfix/virtual-mailboxes"
+MARIADB_PWFILE="/root/.mariadb"
 DOMAIN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
 LOCALPART_RE='^[a-z0-9][a-z0-9._-]{0,63}$'
 
-[ -f "$VMAIL_DB" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+[ -f "$MARIADB_PWFILE" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+ROOT_PASS="$(cat "$MARIADB_PWFILE")"
 
+# -N -B = bez naglowkow kolumn, tab-separated - identyczny plain output co
+# domyslny sqlite3 CLI (server/services/mailVirtual.js parsuje stdout tych
+# skryptow linia po linii, split('|') - format musi zostac identyczny).
 sql() {
-  sqlite3 "$VMAIL_DB" "$1"
+  mariadb -u root -p"${ROOT_PASS}" -N -B -D mailvirtual -e "$1"
 }
 esc() {
   printf '%s' "${1//\'/\'\'}"
@@ -48,17 +51,6 @@ esc() {
 get_domain_id() {
   local domain="$1"
   sql "SELECT id FROM domains WHERE domain = '$(esc "$domain")';"
-}
-
-regen_virtual_mailboxes() {
-  # Format wymagany przez Postfix (virtual_mailbox_maps): "adres wzgledna/sciezka/do/Maildir/"
-  sql "SELECT mailboxes.localpart || '@' || domains.domain || ' ' || domains.domain || '/' || mailboxes.localpart || '/Maildir/' FROM mailboxes JOIN domains ON domains.id = mailboxes.domain_id;" \
-    > "$VIRTUAL_MAILBOX_FILE"
-  # lmdb: (NIE hash:) - patrz komentarz w mail-virtual-domain.sh, ten sam
-  # powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10).
-  postmap lmdb:"$VIRTUAL_MAILBOX_FILE" || err "postmap ${VIRTUAL_MAILBOX_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_MAILBOX_FILE" "${VIRTUAL_MAILBOX_FILE}.lmdb" 2>/dev/null || true
-  systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
 }
 
 ACTION="${1:-}"
@@ -70,7 +62,7 @@ case "$ACTION" in
   list)
     DOMAIN_ID="$(get_domain_id "$DOMAIN")"
     [ -n "$DOMAIN_ID" ] || err "Domena '${DOMAIN}' nie jest zarejestrowana jako wirtualna."
-    sql "SELECT localpart || '|' || enabled || '|' || created_at FROM mailboxes WHERE domain_id = ${DOMAIN_ID} ORDER BY localpart;"
+    sql "SELECT CONCAT_WS('|', localpart, enabled, created_at) FROM mailboxes WHERE domain_id = ${DOMAIN_ID} ORDER BY localpart;"
     ;;
 
   add)
@@ -101,7 +93,6 @@ case "$ACTION" in
     sql "INSERT INTO mailboxes (domain_id, localpart, password_hash, enabled, maildir, created_at) VALUES (${DOMAIN_ID}, '$(esc "$LOCALPART")', '$(esc "$HASH")', 1, '${DOMAIN}/${LOCALPART}/Maildir/', '${CREATED_AT}');" \
       || err "Zapis skrzynki do bazy nie powiodl sie."
 
-    regen_virtual_mailboxes
     echo "OK: skrzynka '${LOCALPART}@${DOMAIN}' utworzona."
     ;;
 
@@ -138,7 +129,6 @@ case "$ACTION" in
       || err "Usuniecie skrzynki z bazy nie powiodlo sie."
     rm -rf "/var/mail/vhosts/${DOMAIN}/${LOCALPART}"
 
-    regen_virtual_mailboxes
     echo "OK: skrzynka '${LOCALPART}@${DOMAIN}' usunieta."
     ;;
 

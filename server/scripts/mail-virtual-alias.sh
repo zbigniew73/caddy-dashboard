@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
 # Zarzadza aliasami/przekierowaniami w ramach juz dodanej wirtualnej
-# domeny pocztowej - patrz mail-virtual-domain.sh. Zrodlo prawdy: SQLite
-# (/etc/caddy-dashboard/mail-virtual.db, tabela "aliases"). Kazda zmiana
-# regeneruje plaski plik Postfixa (virtual_alias_maps) i przeladowuje
-# usluge. Cel (<destination>) MOZE byc dowolnym adresem (rowniez spoza
-# tej domeny/serwera) - alias to zwykle przekierowanie, nie musi
-# wskazywac na istniejaca lokalna skrzynke.
+# domeny pocztowej - patrz mail-virtual-domain.sh. Zrodlo prawdy: MariaDB
+# (baza "mailvirtual", tabela "aliases"). Postfix odpytuje ja NA ZYWO
+# (mysql: mapa, virtual_alias_maps w mail-install.sh) - zadnej regeneracji
+# plaskich plikow ani przeladowania uslugi przy zmianach danych. Cel
+# (<destination>) MOZE byc dowolnym adresem (rowniez spoza tej domeny/
+# serwera) - alias to zwykle przekierowanie, nie musi wskazywac na
+# istniejaca lokalna skrzynke.
 #
 # Limit aliasow per DOMENA (ta sama polityka "na jedna strone www" co w
 # mail-virtual-account.sh) - <max_aliases> to juz rozstrzygnieta wartosc
@@ -21,16 +22,19 @@ set -uo pipefail
 
 err() { echo "BLAD: $*" >&2; exit 1; }
 
-VMAIL_DB="/etc/caddy-dashboard/mail-virtual.db"
-VIRTUAL_ALIAS_FILE="/etc/postfix/virtual-aliases"
+MARIADB_PWFILE="/root/.mariadb"
 DOMAIN_RE='^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
 LOCALPART_RE='^[a-z0-9][a-z0-9._-]{0,63}$'
 EMAIL_RE='^[a-z0-9._%+-]+@([a-z0-9-]+\.)+[a-z]{2,}$'
 
-[ -f "$VMAIL_DB" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+[ -f "$MARIADB_PWFILE" ] || err "Poczta (wirtualne domeny) nie jest zainstalowana/zainicjalizowana - uruchom najpierw instalacje Poczty."
+ROOT_PASS="$(cat "$MARIADB_PWFILE")"
 
+# -N -B = bez naglowkow kolumn, tab-separated - identyczny plain output co
+# domyslny sqlite3 CLI (server/services/mailVirtual.js parsuje stdout tych
+# skryptow linia po linii, split('|') - format musi zostac identyczny).
 sql() {
-  sqlite3 "$VMAIL_DB" "$1"
+  mariadb -u root -p"${ROOT_PASS}" -N -B -D mailvirtual -e "$1"
 }
 esc() {
   printf '%s' "${1//\'/\'\'}"
@@ -39,16 +43,6 @@ esc() {
 get_domain_id() {
   local domain="$1"
   sql "SELECT id FROM domains WHERE domain = '$(esc "$domain")';"
-}
-
-regen_virtual_aliases() {
-  sql "SELECT source || ' ' || destination FROM aliases JOIN domains ON domains.id = aliases.domain_id;" \
-    > "$VIRTUAL_ALIAS_FILE"
-  # lmdb: (NIE hash:) - patrz komentarz w mail-virtual-domain.sh, ten sam
-  # powod (Berkeley DB niedostepna na AlmaLinux/Rocky 10).
-  postmap lmdb:"$VIRTUAL_ALIAS_FILE" || err "postmap ${VIRTUAL_ALIAS_FILE} nie powiodlo sie."
-  chmod 644 "$VIRTUAL_ALIAS_FILE" "${VIRTUAL_ALIAS_FILE}.lmdb" 2>/dev/null || true
-  systemctl reload postfix >/dev/null 2>&1 || err "Przeladowanie postfix nie powiodlo sie."
 }
 
 ACTION="${1:-}"
@@ -60,7 +54,7 @@ case "$ACTION" in
   list)
     DOMAIN_ID="$(get_domain_id "$DOMAIN")"
     [ -n "$DOMAIN_ID" ] || err "Domena '${DOMAIN}' nie jest zarejestrowana jako wirtualna."
-    sql "SELECT source || '|' || destination || '|' || created_at FROM aliases WHERE domain_id = ${DOMAIN_ID} ORDER BY source;"
+    sql "SELECT CONCAT_WS('|', source, destination, created_at) FROM aliases WHERE domain_id = ${DOMAIN_ID} ORDER BY source;"
     ;;
 
   add)
@@ -87,7 +81,6 @@ case "$ACTION" in
     sql "INSERT INTO aliases (domain_id, source, destination, created_at) VALUES (${DOMAIN_ID}, '$(esc "$SOURCE")', '$(esc "$DESTINATION")', '${CREATED_AT}');" \
       || err "Zapis aliasu do bazy nie powiodl sie."
 
-    regen_virtual_aliases
     echo "OK: alias '${SOURCE} -> ${DESTINATION}' dodany."
     ;;
 
@@ -108,7 +101,6 @@ case "$ACTION" in
     sql "DELETE FROM aliases WHERE domain_id = ${DOMAIN_ID} AND source = '$(esc "$SOURCE")' AND destination = '$(esc "$DESTINATION")';" \
       || err "Usuniecie aliasu z bazy nie powiodlo sie."
 
-    regen_virtual_aliases
     echo "OK: alias '${SOURCE} -> ${DESTINATION}' usuniety."
     ;;
 
