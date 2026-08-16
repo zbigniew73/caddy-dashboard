@@ -1009,7 +1009,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
   `;
 }
 
-function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc, sni) {
+function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, dkim, spfDmarc, sniDomains) {
   return `
     <div style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;">
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
@@ -1032,47 +1032,48 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
         ${mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc)}
       </div>
       <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
-        ${mailSniSectionHtml(domains, selectedDomain, sni)}
+        ${mailSniSectionHtml(sniDomains)}
       </div>
     </div>
   `;
 }
 
 // Kafelek SNI (obok DKIM/SPF/DMARC, 50/50) - certyfikat TLS dla
-// "mail.<domena>" (server/scripts/mail-sni-sync.sh). "selectedDomain" jest
-// zawsze domena BAZOWA (ta sama co selektor DKIM wyzej - listOwnMailDomains
-// celowo wyklucza "mail.*", patrz hostingUserMailboxes.js) - domena
-// "mail.<selectedDomain>" jest wyprowadzana i sprawdzana pod wzgledem
-// wlasnosci dopiero po stronie serwera (getOwnSniStatus/syncOwnSni). Jesli
-// user nigdy nie wlaczyl "Obsluga poczty" przy tworzeniu tej strony,
-// "mail.<domena>" po prostu nie istnieje jako wirtualna domena - serwer
-// zwraca 404, tu renderowane jako neutralny stan (BEZ przycisku, zeby nie
-// prowokowac proby synchronizacji czegos co i tak nie istnieje).
-function mailSniSectionHtml(domains, selectedDomain, sni) {
-  if (!domains.length) {
-    return `
-      <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
-      <div class="empty-state">${t('mail.mailbox_no_domains')}</div>
-    `;
-  }
-  if (!sni) {
+// "mail.<domena>" (server/scripts/mail-sni-sync.sh). Niezalezny od
+// selektora domeny DKIM/mailboxow (mailSelectedDomain) - klient moze miec
+// WIECEJ NIZ JEDNA strone z "Obsluga poczty", wiec to zawsze tabelka
+// WSZYSTKICH jego domen "mail.<domena>" naraz (user zglosil 2026-08-16,
+// ze poprzednia wersja pokazujaca tylko 1 wybrana domene byla
+// mylaca/niewystarczajaca). Lista+wlasnosc kazdej domeny jest liczona
+// wprost po stronie serwera (listOwnSniDomains w
+// hostingUserMailboxes.js), nie wyprowadzana z mailSelectedDomain.
+function mailSniSectionHtml(sniDomains) {
+  if (!sniDomains.length) {
     return `
       <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
       <p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
       <div class="empty-state">${t('mail.sni_not_enabled')}</div>
     `;
   }
+  const rows = sniDomains.map(({ domain, synced }) => `
+    <tr>
+      <td style="font-family:var(--mono);">${escapeHtml(domain)}</td>
+      <td>${synced
+        ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span>`
+        : `<span style="color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</span>`}</td>
+      <td>
+        <button type="button" class="secondary" data-sni-sync="${escapeHtml(domain)}">${synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
+        ${synced ? `<button type="button" class="danger" data-sni-remove="${escapeHtml(domain)}">${t('mail.sni_remove_button')}</button>` : ''}
+      </td>
+    </tr>
+  `).join('');
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
-      <span style="font-family:var(--mono);font-size:14px;">${escapeHtml(sni.domain)}</span>
-      ${sni.synced
-        ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span>`
-        : `<span style="color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</span>`}
-    </div>
-    <button type="button" id="sni-sync-btn">${sni.synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
-    ${sni.synced ? `<button type="button" class="danger" id="sni-remove-btn">${t('mail.sni_remove_button')}</button>` : ''}
+    <table class="firewall-table">
+      <thead><tr><th>${t('mail.sni_col_domain')}</th><th>${t('mail.sni_col_status')}</th><th></th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
     <div class="action-msg" id="sni-msg"></div>
   `;
 }
@@ -1119,42 +1120,42 @@ function wireMailManageSection(content) {
     };
   }
 
-  const sniSyncBtn = document.getElementById('sni-sync-btn');
-  if (sniSyncBtn) {
-    sniSyncBtn.onclick = async () => {
+  content.querySelectorAll('[data-sni-sync]').forEach((btn) => {
+    btn.onclick = async () => {
+      const domain = btn.dataset.sniSync;
       const msgEl = document.getElementById('sni-msg');
       msgEl.textContent = '';
       msgEl.className = 'action-msg';
-      sniSyncBtn.disabled = true;
+      btn.disabled = true;
       try {
-        await api('POST', '/mail/sni-sync', { domain: mailSelectedDomain });
+        await api('POST', '/mail/sni-sync', { domain });
         await refreshMailTab(content);
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
-        sniSyncBtn.disabled = false;
+        btn.disabled = false;
       }
     };
-  }
+  });
 
-  const sniRemoveBtn = document.getElementById('sni-remove-btn');
-  if (sniRemoveBtn) {
-    sniRemoveBtn.onclick = async () => {
-      if (!window.confirm(t('mail.sni_confirm_remove', { domain: `mail.${mailSelectedDomain}` }))) return;
+  content.querySelectorAll('[data-sni-remove]').forEach((btn) => {
+    btn.onclick = async () => {
+      const domain = btn.dataset.sniRemove;
+      if (!window.confirm(t('mail.sni_confirm_remove', { domain }))) return;
       const msgEl = document.getElementById('sni-msg');
       msgEl.textContent = '';
       msgEl.className = 'action-msg';
-      sniRemoveBtn.disabled = true;
+      btn.disabled = true;
       try {
-        await api('DELETE', `/mail/sni-sync/${encodeURIComponent(mailSelectedDomain)}`);
+        await api('DELETE', `/mail/sni-sync/${encodeURIComponent(domain)}`);
         await refreshMailTab(content);
       } catch (e) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
-        sniRemoveBtn.disabled = false;
+        btn.disabled = false;
       }
     };
-  }
+  });
 
   const genBtn = document.getElementById('mailbox-generate-btn');
   if (genBtn) {
@@ -1268,23 +1269,25 @@ async function refreshMailTab(content) {
     let aliases = [];
     let dkim = null;
     let spfDmarc = null;
-    let sni = null;
+    // Niezalezne od mailSelectedDomain (selektor DKIM/mailboxow/aliasow) -
+    // klient moze miec WIECEJ NIZ JEDNA strone z "Obsluga poczty", wiec
+    // pokazujemy WSZYSTKIE jego domeny "mail.<domena>" naraz, nie tylko
+    // te akurat wybrana gdzie indziej.
+    const sniDomains = domains.length ? await api('GET', '/mail/sni-domains').then((r) => r.items).catch(() => []) : [];
     if (mailSelectedDomain) {
       const encoded = encodeURIComponent(mailSelectedDomain);
-      const [mailboxesRes, aliasesRes, dkimRes, spfDmarcRes, sniRes] = await Promise.all([
+      const [mailboxesRes, aliasesRes, dkimRes, spfDmarcRes] = await Promise.all([
         api('GET', `/mail/mailboxes?domain=${encoded}`),
         api('GET', `/mail/aliases?domain=${encoded}`),
         api('GET', `/mail/dkim-status?domain=${encoded}`).catch(() => null),
-        api('GET', `/mail/spf-dmarc?domain=${encoded}`).catch(() => null),
-        api('GET', `/mail/sni-status?domain=${encoded}`).catch(() => null)
+        api('GET', `/mail/spf-dmarc?domain=${encoded}`).catch(() => null)
       ]);
       mailboxes = mailboxesRes.items;
       aliases = aliasesRes.items;
       dkim = dkimRes;
       spfDmarc = spfDmarcRes;
-      sni = sniRes;
     }
-    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases, dkim, spfDmarc, sni);
+    content.innerHTML = renderMailSection(status, domains, mailSelectedDomain, mailboxes, aliases, dkim, spfDmarc, sniDomains);
     wireMailManageSection(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;

@@ -99,31 +99,35 @@ async function getOwnSpfDmarcInfo(username, domain) {
   return getSpfDmarcInfo(domain);
 }
 
-// SNI - w odroznieniu od DKIM/SPF/DMARC (ktore dotycza domeny BAZOWEJ),
-// certyfikat SNI dotyczy WYLACZNIE "mail.<domena>" (patrz mail-sni-sync.sh,
-// [[project_caddy_dashboard_mail_sni]]) - "domain" tu to nadal domena
-// BAZOWA (ta sama, ktora user wybiera w selektorze DKIM/SPF/DMARC), a
-// docelowa domena "mail.<domain>" jest dopiero WYPROWADZANA tutaj.
-// `assertOwnDomain` sprawdza wprost WLASNOSC "mail.<domain>" (nie samej
-// bazowej) - jesli "Obsluga poczty" nigdy nie zostala wlaczona przy
-// tworzeniu strony, ten wpis po prostu nie istnieje w tabeli domains i
-// funkcja poprawnie zwroci 404, zamiast po cichu dzialac na czyms
-// niezarejestrowanym.
-async function getOwnSniStatus(username, domain) {
-  const mailDomain = `mail.${domain}`;
-  await assertOwnDomain(username, mailDomain);
-  const synced = (await listMailSni()).includes(mailDomain);
-  return { domain: mailDomain, synced };
+// SNI - w odroznieniu od DKIM/SPF/DMARC (ktore dotycza JEDNEJ domeny
+// BAZOWEJ wybranej w selektorze), certyfikat SNI dotyczy domen
+// "mail.<domena>" - user moze miec WIECEJ NIZ JEDNA strone z wlaczona
+// "Obsluga poczty", wiec ta lista NIE jest przywiazana do
+// mailSelectedDomain (poprzednia wersja pokazywala TYLKO domene aktualnie
+// wybrana w zupelnie innym selektorze - user zglosil 2026-08-16, ze to
+// mylace/niewystarczajace, powinna byc tabelka wszystkich). Zwraca WSZYSTKIE
+// "mail.<domena>" nalezace do tego konta na raz.
+async function listOwnSniDomains(username) {
+  const domains = await listVirtualDomains();
+  const mailDomains = domains
+    .filter((d) => d.ownerAccount === username && d.domain.startsWith('mail.'))
+    .map((d) => d.domain)
+    .sort();
+  if (!mailDomains.length) return [];
+  const syncedSet = new Set(await listMailSni());
+  return mailDomains.map((domain) => ({ domain, synced: syncedSet.has(domain) }));
 }
 
-async function syncOwnSni(username, domain) {
-  const mailDomain = `mail.${domain}`;
+// sync/remove przyjmuja TERAZ pelna domene "mail.<domena>" wprost (NIE
+// domene bazowa do wyprowadzenia) - kazdy wiersz tabelki juz zna swoj
+// pelny adres, wiec nie ma po co go tu odtwarzac. `assertOwnDomain`
+// sprawdza wprost WLASNOSC tej konkretnej domeny.
+async function syncOwnSni(username, mailDomain) {
   await assertOwnDomain(username, mailDomain);
   return syncMailSni(mailDomain);
 }
 
-async function removeOwnSni(username, domain) {
-  const mailDomain = `mail.${domain}`;
+async function removeOwnSni(username, mailDomain) {
   await assertOwnDomain(username, mailDomain);
   return removeMailSni(mailDomain);
 }
@@ -133,5 +137,5 @@ export {
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
   getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
-  getOwnSniStatus, syncOwnSni, removeOwnSni
+  listOwnSniDomains, syncOwnSni, removeOwnSni
 };

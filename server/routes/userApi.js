@@ -14,7 +14,7 @@ import {
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
   getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
-  getOwnSniStatus, syncOwnSni, removeOwnSni
+  listOwnSniDomains, syncOwnSni, removeOwnSni
 } from '../services/hostingUserMailboxes.js';
 import {
   listPythonVersions,
@@ -327,10 +327,9 @@ router.get('/mail/spf-dmarc', async (req, res) => {
   }
 });
 
-router.get('/mail/sni-status', async (req, res) => {
+router.get('/mail/sni-domains', async (req, res) => {
   try {
-    const domain = typeof req.query?.domain === 'string' ? req.query.domain.trim().toLowerCase() : '';
-    res.json(await getOwnSniStatus(req.hostingUser, domain));
+    res.json({ items: await listOwnSniDomains(req.hostingUser) });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

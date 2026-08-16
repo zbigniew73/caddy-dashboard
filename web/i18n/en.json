@@ -1020,6 +1020,8 @@
   "mail.sni_not_enabled": "Mail support isn't enabled for this site - enable it in the site's settings under the Sites tab.",
   "mail.sni_sync_button": "Sync SNI",
   "mail.sni_resync_button": "Resync SNI",
+  "mail.sni_col_domain": "Domain",
+  "mail.sni_col_status": "Status",
   "mail.sni_remove_button": "Remove",
   "mail.sni_confirm_remove": "Remove the SNI certificate for {domain}? It will fall back to the default certificate.",
   "mail.virtual_manage_button": "Manage",
