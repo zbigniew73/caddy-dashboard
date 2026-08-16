@@ -1603,16 +1603,18 @@ async function renderSystemTab(content, { silent = false } = {}) {
         ${countTile(t('system.all_users'), info.usersCount)}
         ${countTile(t('system.all_sites'), info.caddySiteCount)}
       </div>
-      <div class="system-info-card">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
-          <div style="display:flex;gap:40px;align-items:flex-start;">
-            <div class="info-grid" style="grid-template-columns:1fr;">${systemItems.map(infoItem).join('')}</div>
-            <div class="info-grid" style="grid-template-columns:1fr;">${versionItems.map(infoItem).join('')}</div>
-            <div class="info-grid" style="grid-template-columns:1fr;">${runtimeItems.map(infoItem).join('')}</div>
+      <div class="tile-row tile-row-1">
+        <div class="system-info-card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+            <div style="display:flex;gap:40px;align-items:flex-start;">
+              <div class="info-grid" style="grid-template-columns:1fr;">${systemItems.map(infoItem).join('')}</div>
+              <div class="info-grid" style="grid-template-columns:1fr;">${versionItems.map(infoItem).join('')}</div>
+              <div class="info-grid" style="grid-template-columns:1fr;">${runtimeItems.map(infoItem).join('')}</div>
+            </div>
+            <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
           </div>
-          <button type="button" class="danger" id="system-reboot-btn" style="flex-shrink:0;white-space:nowrap;">${t('system.reboot_button')}</button>
+          <div class="action-msg" id="system-reboot-msg"></div>
         </div>
-        <div class="action-msg" id="system-reboot-msg"></div>
       </div>
     `;
     applyTranslations();
@@ -2260,9 +2262,9 @@ async function renderRoundcubeInstallPageHtml(status) {
     renderRoundcubeGateSection(status)
   ]);
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${leftHtml}</div>
-      <div style="flex:1 1 0;min-width:320px;">${rightHtml}</div>
+    <div class="tile-row tile-row-2">
+      ${leftHtml}
+      ${rightHtml}
     </div>
   `;
 }
@@ -2901,21 +2903,21 @@ async function renderInstallDetailTab(key, content) {
   try {
     if (key === 'php-fpm') {
       const data = await api('GET', '/php/available');
-      content.innerHTML = phpInstallTileHtml(data);
+      content.innerHTML = `<div class="tile-row tile-row-1">${phpInstallTileHtml(data)}</div>`;
       applyTranslations();
       wirePhpInstallTile();
       return;
     }
     if (key === 'phpmyadmin') {
       const status = await api('GET', '/phpmyadmin');
-      content.innerHTML = phpmyadminInstallTileHtml(status);
+      content.innerHTML = `<div class="tile-row tile-row-1">${phpmyadminInstallTileHtml(status)}</div>`;
       applyTranslations();
       wirePhpmyadminInstallTile();
       return;
     }
     if (key === 'adminer') {
       const status = await api('GET', '/adminer');
-      content.innerHTML = adminerInstallTileHtml(status);
+      content.innerHTML = `<div class="tile-row tile-row-1">${adminerInstallTileHtml(status)}</div>`;
       applyTranslations();
       wireAdminerInstallTile();
       return;
@@ -2930,38 +2932,38 @@ async function renderInstallDetailTab(key, content) {
     }
     const svc = await api('GET', `/services/${key}`);
     if (key === 'mail') {
-      content.innerHTML = mailInstallTileHtml(svc);
+      content.innerHTML = `<div class="tile-row tile-row-1">${mailInstallTileHtml(svc)}</div>`;
       applyTranslations();
       wireMailInstallTile();
       return;
     }
     if (key === 'mariadb') {
-      content.innerHTML = mariadbInstallTileHtml(svc);
+      content.innerHTML = `<div class="tile-row tile-row-1">${mariadbInstallTileHtml(svc)}</div>`;
       applyTranslations();
       wireMariadbInstallTile();
       return;
     }
     if (key === 'postgresql') {
-      content.innerHTML = postgresqlInstallTileHtml(svc);
+      content.innerHTML = `<div class="tile-row tile-row-1">${postgresqlInstallTileHtml(svc)}</div>`;
       applyTranslations();
       wirePostgresqlInstallTile();
       return;
     }
     if (key === 'mongodb') {
       const authStatus = svc.found ? await api('GET', '/mongodb/auth-status') : null;
-      content.innerHTML = mongodbInstallTileHtml(svc, authStatus);
+      content.innerHTML = `<div class="tile-row tile-row-1">${mongodbInstallTileHtml(svc, authStatus)}</div>`;
       applyTranslations();
       wireMongodbInstallTile();
       return;
     }
     if (key === 'redis') {
       const authStatus = svc.found ? await api('GET', '/redis/auth-status') : null;
-      content.innerHTML = redisInstallTileHtml(svc, authStatus);
+      content.innerHTML = `<div class="tile-row tile-row-1">${redisInstallTileHtml(svc, authStatus)}</div>`;
       applyTranslations();
       wireRedisInstallTile();
       return;
     }
-    content.innerHTML = installTileHtml(key, svc);
+    content.innerHTML = `<div class="tile-row tile-row-1">${installTileHtml(key, svc)}</div>`;
     wireInstallTile(key);
   } catch (e) {
     content.innerHTML = `<div class="empty-state">${escapeHtml(e.message)}</div>`;
@@ -3476,10 +3478,11 @@ async function renderPackagesTab(content) {
     `).join('');
 
     content.innerHTML = `
+      <div class="tile-stack">
       <div class="system-info-card">
         ${renderSystemResourcesHtml(resources)}
       </div>
-      <div class="system-info-card" style="margin-top:16px;">
+      <div class="system-info-card">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:4px;">
           <h3 style="margin:0;font-size:15px;">${t('packages.title')}</h3>
           <button type="button" id="packages-add-btn">${t('packages.add_button')}</button>
@@ -3506,6 +3509,7 @@ async function renderPackagesTab(content) {
         ` : `<div class="empty-state">${t('packages.empty')}</div>`}
         <div class="action-msg" id="packages-msg"></div>
         <div id="packages-form-container"></div>
+      </div>
       </div>
     `;
 
@@ -3552,8 +3556,10 @@ async function renderAccountsTab(content) {
     ]);
 
     content.innerHTML = `
-      <div class="system-info-card">
-        ${renderAccountsHtml(accounts, packages, nextUsername)}
+      <div class="tile-row tile-row-1">
+        <div class="system-info-card">
+          ${renderAccountsHtml(accounts, packages, nextUsername)}
+        </div>
       </div>
     `;
 
@@ -4258,21 +4264,21 @@ async function wrapCaddyExtras(serviceHtml) {
   const perfHtml = await renderCaddyPerformanceSection();
   const caddyfileHtml = await renderCaddyfileViewerSection();
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}${renderCaddyLogsSection()}</div>
-      <div style="flex:1 1 0;min-width:320px;">${turnstileHtml}</div>
+    <div class="tile-row tile-row-2">
+      <div class="tile-stack">${serviceHtml}${renderCaddyLogsSection()}</div>
+      ${turnstileHtml}
     </div>
-    <div style="margin-top:16px;">${perfHtml}</div>
-    <div style="margin-top:16px;">${caddyfileHtml}</div>
+    <div class="tile-row tile-row-1">${perfHtml}</div>
+    <div class="tile-row tile-row-1">${caddyfileHtml}</div>
   `;
 }
 
 async function wrapSshExtras(serviceHtml) {
   const portHtml = await renderSshPortSection();
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
-      <div style="flex:1 1 0;min-width:320px;">${portHtml}</div>
+    <div class="tile-row tile-row-2">
+      ${serviceHtml}
+      ${portHtml}
     </div>
   `;
 }
@@ -4308,9 +4314,9 @@ async function renderCronJobsCountSection() {
 async function wrapCronExtras(serviceHtml) {
   const countHtml = await renderCronJobsCountSection();
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
-      <div style="flex:1 1 0;min-width:320px;">${countHtml}</div>
+    <div class="tile-row tile-row-2">
+      ${serviceHtml}
+      ${countHtml}
     </div>
   `;
 }
@@ -4466,12 +4472,12 @@ async function wrapMariadbExtras(serviceHtml) {
     renderMariadbTestDbSection()
   ]);
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+    <div class="tile-row tile-row-2">
+      <div class="tile-stack">
         ${serviceHtml}
         ${testDbHtml}
       </div>
-      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+      ${perfHtml}
     </div>
   `;
 }
@@ -4627,12 +4633,12 @@ async function wrapPostgresqlExtras(serviceHtml) {
     renderPostgresqlTestDbSection()
   ]);
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+    <div class="tile-row tile-row-2">
+      <div class="tile-stack">
         ${serviceHtml}
         ${testDbHtml}
       </div>
-      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+      ${perfHtml}
     </div>
   `;
 }
@@ -4787,12 +4793,12 @@ async function wrapMongodbExtras(serviceHtml) {
     renderMongodbTestDbSection()
   ]);
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+    <div class="tile-row tile-row-2">
+      <div class="tile-stack">
         ${serviceHtml}
         ${testDbHtml}
       </div>
-      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+      ${perfHtml}
     </div>
   `;
 }
@@ -4922,17 +4928,17 @@ async function renderRedisInstancesRow() {
   try {
     const instances = await api('GET', '/redis-instances');
     return `
-      <div id="redis-instances-row" style="display:grid;grid-template-columns:minmax(0, 1fr) minmax(0, 1fr);gap:16px;width:100%;margin-top:16px;">
-        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+      <div id="redis-instances-row" class="tile-row tile-row-2">
+        <div class="system-info-card">
           ${redisInstancesListCardHtml(instances)}
         </div>
-        <div class="system-info-card" style="max-width:none;width:100%;box-sizing:border-box;">
+        <div class="system-info-card">
           ${redisInstancesStatsCardHtml(instances)}
         </div>
       </div>
     `;
   } catch (e) {
-    return `<div id="redis-instances-row" class="system-info-card" style="margin-top:16px;"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
+    return `<div id="redis-instances-row" class="tile-row tile-row-1"><div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div></div>`;
   }
 }
 
@@ -4970,9 +4976,9 @@ async function wrapRedisExtras(serviceHtml) {
   const perfHtml = await renderRedisPerformanceSection();
   const instancesRowHtml = await renderRedisInstancesRow();
   return `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;">${serviceHtml}</div>
-      <div style="flex:1 1 0;min-width:320px;">${perfHtml}</div>
+    <div class="tile-row tile-row-2">
+      ${serviceHtml}
+      ${perfHtml}
     </div>
     ${instancesRowHtml}
   `;
@@ -5381,15 +5387,15 @@ async function wrapPhpExtras(serviceHtml, id) {
     renderPhpModulesSection(id)
   ]);
   const columns = `
-    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-      <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+    <div class="tile-row tile-row-2">
+      <div class="tile-stack">
         ${serviceHtml}
         ${opcacheHtml}
       </div>
-      <div style="flex:1 1 0;min-width:320px;">${settingsHtml}</div>
+      ${settingsHtml}
     </div>
   `;
-  const modulesRow = `<div style="margin-top:16px;">${modulesHtml}</div>`;
+  const modulesRow = `<div class="tile-row tile-row-1">${modulesHtml}</div>`;
   return columns + modulesRow;
 }
 
@@ -5441,16 +5447,18 @@ function wireServiceActions(key) {
       const applySuccess = async (svc) => {
         const phpMatch = /^php(\d{2})$/.exec(key);
         let html = serviceDetailHtml(svc, serviceTitleFor(svc));
-        if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
-        if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
-        if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
-        if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
-        if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
-        if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
-        if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
-        if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
-        if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
-        if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
+        let wrapped = false;
+        if (key === 'ssh' && svc.found) { html = await wrapSshExtras(html); wrapped = true; }
+        if (key === 'cron' && svc.found) { html = await wrapCronExtras(html); wrapped = true; }
+        if (key === 'firewall' && svc.found) { html = `<div class="tile-stack">${html}<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div></div>`; wrapped = true; }
+        if (key === 'fail2ban' && svc.found) { html = `<div class="tile-stack">${html}<div class="system-info-card">${await renderFail2banSection()}</div></div>`; wrapped = true; }
+        if (key === 'caddy' && svc.found) { html = await wrapCaddyExtras(html); wrapped = true; }
+        if (key === 'mariadb' && svc.found) { html = await wrapMariadbExtras(html); wrapped = true; }
+        if (key === 'postgresql' && svc.found) { html = await wrapPostgresqlExtras(html); wrapped = true; }
+        if (key === 'mongodb' && svc.found) { html = await wrapMongodbExtras(html); wrapped = true; }
+        if (key === 'redis' && svc.found) { html = await wrapRedisExtras(html); wrapped = true; }
+        if (phpMatch && svc.found) { html = await wrapPhpExtras(html, phpMatch[1]); wrapped = true; }
+        if (!wrapped) html = `<div class="tile-row tile-row-1">${html}</div>`;
         document.getElementById('content').innerHTML = html;
         applyTranslations();
         wireServiceActions(key);
@@ -5500,9 +5508,9 @@ async function renderServiceDetailTab(key, content) {
       const status = await api('GET', '/phpmyadmin');
       const gateHtml = await renderPhpmyadminGateSection(status);
       content.innerHTML = `
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="flex:1 1 0;min-width:320px;">${phpmyadminInfoCardHtml(status, true, false)}</div>
-          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
+        <div class="tile-row tile-row-2">
+          ${phpmyadminInfoCardHtml(status, true, false)}
+          ${gateHtml}
         </div>
       `;
       applyTranslations();
@@ -5514,9 +5522,9 @@ async function renderServiceDetailTab(key, content) {
       const status = await api('GET', '/adminer');
       const gateHtml = await renderAdminerGateSection(status);
       content.innerHTML = `
-        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-          <div style="flex:1 1 0;min-width:320px;">${adminerInfoCardHtml(status, true, false)}</div>
-          <div style="flex:1 1 0;min-width:320px;">${gateHtml}</div>
+        <div class="tile-row tile-row-2">
+          ${adminerInfoCardHtml(status, true, false)}
+          ${gateHtml}
         </div>
       `;
       applyTranslations();
@@ -5535,16 +5543,22 @@ async function renderServiceDetailTab(key, content) {
     const svc = await api('GET', `/services/${key}`);
     const phpMatch = /^php(\d{2})$/.exec(key);
     let html = serviceDetailHtml(svc, serviceTitleFor(svc));
-    if (key === 'ssh' && svc.found) html = await wrapSshExtras(html);
-    if (key === 'cron' && svc.found) html = await wrapCronExtras(html);
-    if (key === 'firewall' && svc.found) html += `<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div>`;
-    if (key === 'fail2ban' && svc.found) html += `<div class="system-info-card">${await renderFail2banSection()}</div>`;
-    if (key === 'caddy' && svc.found) html = await wrapCaddyExtras(html);
-    if (key === 'mariadb' && svc.found) html = await wrapMariadbExtras(html);
-    if (key === 'postgresql' && svc.found) html = await wrapPostgresqlExtras(html);
-    if (key === 'mongodb' && svc.found) html = await wrapMongodbExtras(html);
-    if (key === 'redis' && svc.found) html = await wrapRedisExtras(html);
-    if (phpMatch && svc.found) html = await wrapPhpExtras(html, phpMatch[1]);
+    let wrapped = false;
+    if (key === 'ssh' && svc.found) { html = await wrapSshExtras(html); wrapped = true; }
+    if (key === 'cron' && svc.found) { html = await wrapCronExtras(html); wrapped = true; }
+    if (key === 'firewall' && svc.found) { html = `<div class="tile-stack">${html}<div class="system-info-card" id="fw-section-container">${await renderFirewallSection()}</div></div>`; wrapped = true; }
+    if (key === 'fail2ban' && svc.found) { html = `<div class="tile-stack">${html}<div class="system-info-card">${await renderFail2banSection()}</div></div>`; wrapped = true; }
+    if (key === 'caddy' && svc.found) { html = await wrapCaddyExtras(html); wrapped = true; }
+    if (key === 'mariadb' && svc.found) { html = await wrapMariadbExtras(html); wrapped = true; }
+    if (key === 'postgresql' && svc.found) { html = await wrapPostgresqlExtras(html); wrapped = true; }
+    if (key === 'mongodb' && svc.found) { html = await wrapMongodbExtras(html); wrapped = true; }
+    if (key === 'redis' && svc.found) { html = await wrapRedisExtras(html); wrapped = true; }
+    if (phpMatch && svc.found) { html = await wrapPhpExtras(html, phpMatch[1]); wrapped = true; }
+    // Fallback: usluga bez wlasnego "wrap*Extras" (np. Dovecot, prosty
+    // kafelek statusu bez sekcji dodatkowych) - wciaz "1 kafelek pelna
+    // szerokosc" per szablon (patrz komentarz przy .tile-row w
+    // web/style.css), nie goly .system-info-card bez marginesow.
+    if (!wrapped) html = `<div class="tile-row tile-row-1">${html}</div>`;
     content.innerHTML = html;
     applyTranslations();
     wireServiceActions(key);
