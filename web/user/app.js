@@ -122,28 +122,19 @@ function usageTile(label, used, limit, unit, id) {
   return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${usageTileContent(label, used, limit, unit)}</div>`;
 }
 
-// Kafelek CPU ma dodatkowa linie z nazwa procesora serwera - patrz
-// cpuModel w hostingUserSelf.js. Ta linia sie nie zmienia miedzy
-// odswieżeniami, ale i tak przychodzi w kazdej odpowiedzi /me (tani
-// odczyt, bez sudo), wiec prosciej jest zawsze ja renderowac tu, zamiast
-// osobno cache'owac.
-function cpuTileContent(used, limit, model) {
-  const detailHtml = model
-    ? `<div style="font-size:11px;color:var(--muted);margin:-4px 0 6px;">${escapeHtml(model)}</div>`
-    : '';
+function cpuTileContent(used, limit) {
   const hasLimit = typeof limit === 'number' && limit > 0;
   const percent = hasLimit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   const valueText = hasLimit ? `${used}% / ${limit}%` : `${used}%`;
   return `
     <div class="stat-label">${escapeHtml(t('dashboard.tile_cpu'))}</div>
     <div class="stat-value">${valueText}</div>
-    ${detailHtml}
     <div class="meter-track"><div class="meter-fill ${severity(percent)}" style="width:${percent}%"></div></div>
   `;
 }
 
-function cpuTile(used, limit, model, id) {
-  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${cpuTileContent(used, limit, model)}</div>`;
+function cpuTile(used, limit, id) {
+  return `<div class="stat-tile"${id ? ` id="${id}"` : ''}>${cpuTileContent(used, limit)}</div>`;
 }
 
 // Kafelek bez paska postepu - dla wartosci, ktore nie sa "wykorzystano /
@@ -192,7 +183,7 @@ function startUsageRefresh() {
       const cpuTileEl = document.getElementById('tile-cpu');
       const ramTile = document.getElementById('tile-ram');
       if (uptimeTile) uptimeTile.innerHTML = plainTileContent(t('dashboard.tile_uptime'), formatUptime(me.serverUptimeSeconds ?? 0));
-      if (cpuTileEl) cpuTileEl.innerHTML = cpuTileContent(me.cpuUsedPercent ?? 0, me.cpuPercentLimit, me.cpuModel);
+      if (cpuTileEl) cpuTileEl.innerHTML = cpuTileContent(me.cpuUsedPercent ?? 0, me.cpuPercentLimit);
       if (ramTile) ramTile.innerHTML = usageTileContent(t('dashboard.tile_ram'), me.ramUsedMb ?? 0, me.ramLimitMb, ' MB');
 
       usageRefreshTickCount += 1;
@@ -222,7 +213,7 @@ function renderDashboard(content) {
   content.innerHTML = `
     <div class="tile-row tile-row-6">
       ${plainTile(t('dashboard.tile_uptime'), formatUptime(a.serverUptimeSeconds ?? 0), 'tile-uptime')}
-      ${cpuTile(a.cpuUsedPercent ?? 0, a.cpuPercentLimit, a.cpuModel, 'tile-cpu')}
+      ${cpuTile(a.cpuUsedPercent ?? 0, a.cpuPercentLimit, 'tile-cpu')}
       ${usageTile(t('dashboard.tile_ram'), a.ramUsedMb ?? 0, a.ramLimitMb, ' MB', 'tile-ram')}
       ${usageTile(t('dashboard.tile_disk'), a.diskUsedMb ?? 0, a.diskQuotaMb, ' MB', 'tile-disk')}
       ${usageTile(t('dashboard.tile_sites'), a.sitesUsed ?? 0, a.maxDomains, '', 'tile-sites')}
