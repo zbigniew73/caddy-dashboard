@@ -456,18 +456,38 @@ async function installDkim(domain) {
 // zadnej skrzynki. "dmarc@<domena>" to tez standardowa, powszechnie
 // przyjeta konwencja dla adresu zbiorczych raportow DMARC - user
 // potwierdzil 2026-08-15 po zobaczeniu realnej wartosci w panelu.
+// Ta sama zasada co RECORD_VALUE_RAW dla DKIM (dkim-install.sh) - format
+// prawdziwego rekordu BIND: kazdy <=255-znakowy kawalek WE WLASNYCH
+// cudzyslowach, oddzielone spacja. SPF/DMARC ponizej praktycznie NIGDY
+// nie przekraczaja 255 znakow (krotkie, staticzne wartosci) - w
+// odroznieniu od klucza DKIM to tu i tak WYSTARCZYLBY pojedynczy
+// cudzyslow bez dzielenia - ale liczymy to defensywnie/jednolicie tym
+// samym mechanizmem (fold co 255 znakow), zeby dzialalo bez zmian, gdyby
+// DMARC kiedys mial dluzszy "rua=" z wieloma adresami raportow.
+function formatDnsTxtRaw(value) {
+  const chunks = [];
+  for (let i = 0; i < value.length; i += 255) {
+    chunks.push(value.slice(i, i + 255));
+  }
+  return chunks.map((c) => `"${c}"`).join(' ');
+}
+
 async function getSpfDmarcInfo(domain) {
   if (!DOMAIN_RE.test(domain)) {
     throw Object.assign(new Error('Nieprawidlowa domena.'), { status: 400 });
   }
   const publicIp = await getPublicIp();
   const dmarcEmail = `dmarc@${domain}`;
+  const spfRecordValue = `v=spf1 ip4:${publicIp} ~all`;
+  const dmarcRecordValue = `v=DMARC1; p=none; rua=mailto:${dmarcEmail}`;
   return {
     publicIp,
     spfRecordName: domain,
-    spfRecordValue: `v=spf1 ip4:${publicIp} ~all`,
+    spfRecordValue,
+    spfRecordValueRaw: formatDnsTxtRaw(spfRecordValue),
     dmarcRecordName: `_dmarc.${domain}`,
-    dmarcRecordValue: `v=DMARC1; p=none; rua=mailto:${dmarcEmail}`
+    dmarcRecordValue,
+    dmarcRecordValueRaw: formatDnsTxtRaw(dmarcRecordValue)
   };
 }
 

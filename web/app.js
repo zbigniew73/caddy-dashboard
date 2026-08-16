@@ -1041,7 +1041,7 @@ async function mailAdminAddressSectionHtml(status) {
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
-      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValueRaw)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
@@ -1051,7 +1051,7 @@ async function mailAdminAddressSectionHtml(status) {
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
-      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValueRaw)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
     </div>
   ` : '';
   return `
@@ -1133,7 +1133,7 @@ async function mailVirtualDkimSectionHtml(domain) {
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
-      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.spfRecordValueRaw)}</span><button type="button" class="secondary copy-value-btn">${t('mail.spf_copy_button')}</button>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h3 style="margin-bottom:8px;">${t('mail.dmarc_title')}</h3>
@@ -1143,7 +1143,7 @@ async function mailVirtualDkimSectionHtml(domain) {
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
-      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValue)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
+      <span class="copy-src" style="display:none;">${escapeHtml(spfDmarc.dmarcRecordValueRaw)}</span><button type="button" class="secondary copy-value-btn">${t('mail.dmarc_copy_button')}</button>
     </div>
   ` : '';
   return `
