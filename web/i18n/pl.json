@@ -680,6 +680,7 @@
   "roundcube.gate_enabled": "Włączona",
   "roundcube.gate_disabled": "Wyłączona",
   "roundcube.gate_description": "Stawia weryfikację bota Cloudflare Turnstile przed formularzem logowania Roundcube, używając tych samych kluczy co logowanie do panelu (Usługi -> Caddy). W odróżnieniu od phpMyAdmin/Adminera nie trzeba nic wklejać ręcznie - przełącznik od razu podmienia blok w Caddyfile.",
+  "roundcube.gate_caddy_hint": "Aktualny blok w Caddyfile (zarządzany automatycznie przez panel - nic tu nie trzeba wklejać ręcznie):",
   "roundcube.gate_requires_domain": "Najpierw skonfiguruj domenę (sekcja powyżej), zanim włączysz bramkę.",
   "roundcube.gate_requires_turnstile": "Turnstile nie jest jeszcze skonfigurowany/włączony w panelu - skonfiguruj go najpierw w Usługi -> Caddy, zanim włączysz tę bramkę.",
   "roundcube.gate_enable_button": "Włącz",

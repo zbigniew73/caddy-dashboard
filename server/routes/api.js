@@ -1039,15 +1039,15 @@ router.get('/roundcube', async (req, res) => {
   try {
     const status = await getRoundcubeStatus();
     const config = getRoundcubeConfig();
-    let caddy = { present: false, domain: null, gate: false };
+    let caddy = { present: false, domain: null, gate: false, rawBlock: null };
     if (status.installed) {
       try {
         caddy = await getCaddyConfigStatus();
       } catch {
-        caddy = { present: false, domain: null, gate: false };
+        caddy = { present: false, domain: null, gate: false, rawBlock: null };
       }
     }
-    res.json({ ...status, domain: config.domain, gateEnabled: config.gateEnabled, caddyConfigured: caddy.present, caddyDomain: caddy.domain });
+    res.json({ ...status, domain: config.domain, gateEnabled: config.gateEnabled, caddyConfigured: caddy.present, caddyDomain: caddy.domain, caddyRawBlock: caddy.rawBlock });
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

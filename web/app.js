@@ -2167,6 +2167,10 @@ async function renderRoundcubeGateSection(rcStatus) {
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.5;">${t('roundcube.gate_description')}</p>
       ${!canToggle ? `<div class="empty-state" style="margin-bottom:16px;">${t('roundcube.gate_requires_domain')}</div>` : ''}
       ${canToggle && !gate.turnstileConfigured ? `<div class="empty-state" style="margin-bottom:16px;">${t('roundcube.gate_requires_turnstile')}</div>` : ''}
+      ${rcStatus.caddyConfigured && rcStatus.caddyRawBlock ? `
+        <p style="margin:0 0 8px;color:var(--muted);font-size:13px;">${t('roundcube.gate_caddy_hint')}</p>
+        <pre style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">${escapeHtml(rcStatus.caddyRawBlock)}</pre>
+      ` : ''}
       <button type="button" id="roundcube-gate-enable-btn" ${!canToggle || gate.enabled || !gate.turnstileConfigured ? 'disabled' : ''}>${t('roundcube.gate_enable_button')}</button>
       <button type="button" class="danger" id="roundcube-gate-disable-btn" ${!canToggle || !gate.enabled ? 'disabled' : ''}>${t('roundcube.gate_disable_button')}</button>
       <div class="action-msg" id="roundcube-gate-msg"></div>
@@ -2183,9 +2187,15 @@ function wireRoundcubeGateSection(rcStatus) {
   async function refresh() {
     const container = enableBtn.closest('.system-info-card');
     if (container) {
-      container.outerHTML = await renderRoundcubeGateSection(rcStatus);
+      // Nie ponownego uzycia stalego rcStatus z zamkniecia - po
+      // (od)wlaczeniu bramki applyCaddyConfig() od razu przepisuje zywy
+      // blok Caddy (forward_auth albo nie), wiec caddyRawBlock ponizej
+      // faktycznie sie zmienia przy kazdym przelaczeniu, w odroznieniu od
+      // phpMyAdmin/Adminer gdzie przyklad jest staly.
+      const freshStatus = await api('GET', '/roundcube');
+      container.outerHTML = await renderRoundcubeGateSection(freshStatus);
       applyTranslations();
-      wireRoundcubeGateSection(rcStatus);
+      wireRoundcubeGateSection(freshStatus);
     }
   }
 

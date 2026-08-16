@@ -171,12 +171,13 @@ async function getCaddyConfigStatus() {
     throw Object.assign(new Error(stderr || e.message), { status: 500 });
   }
   const block = stdout.trim();
-  if (!block) return { present: false, domain: null, gate: false };
+  if (!block) return { present: false, domain: null, gate: false, rawBlock: null };
   const webmailMatch = /^webmail\.([^\s{]+)\s*\{/m.exec(block);
   return {
     present: true,
     domain: webmailMatch ? webmailMatch[1] : null,
-    gate: block.includes('forward_auth')
+    gate: block.includes('forward_auth'),
+    rawBlock: block
   };
 }
 

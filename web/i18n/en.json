@@ -680,6 +680,7 @@
   "roundcube.gate_enabled": "Enabled",
   "roundcube.gate_disabled": "Disabled",
   "roundcube.gate_description": "Puts a Cloudflare Turnstile bot-check in front of the Roundcube login form, using the same keys as panel login (Services -> Caddy). Unlike phpMyAdmin/Adminer, nothing needs to be pasted manually - the toggle immediately rewrites the Caddyfile block.",
+  "roundcube.gate_caddy_hint": "Current block in the Caddyfile (managed automatically by the panel - nothing to paste manually here):",
   "roundcube.gate_requires_domain": "Configure the domain first (section above) before enabling the gate.",
   "roundcube.gate_requires_turnstile": "Turnstile isn't configured/enabled in the panel yet - set it up first under Services -> Caddy before enabling this gate.",
   "roundcube.gate_enable_button": "Enable",
