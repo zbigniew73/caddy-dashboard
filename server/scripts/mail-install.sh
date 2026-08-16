@@ -448,26 +448,34 @@ user_query = SELECT CONCAT('/var/mail/vhosts/',domains.domain,'/',mailboxes.loca
 EOF
 chmod 600 /etc/dovecot/dovecot-sql-virtual.conf.ext
 
-# WSPOLISTNIEJE z PAM (90-caddy-dashboard.conf, wlaczony przez pakietowy
-# auth-system.conf.ext) - Dovecot probuje kazdy passdb/userdb po kolei,
-# brak dopasowania (0 wierszy z SQL) po prostu przechodzi do nastepnego,
-# zero konfliktu.
-# first_valid_uid domyslnie 1000 (pakietowe ustawienie Dovecota,
-# 10-mail.conf, ladowane WCZESNIEJ alfabetycznie niz ten plik "91-...") -
-# blokuje dostep dla KAZDEGO UID ponizej 1000, w tym samego "vmail"
-# ("useradd --system" wyzej przydziela UID z puli systemowej, ponizej
-# 1000 - potwierdzone na zywym serwerze 2026-08-15: UID 987). Efekt:
-# Dovecot odmawial dostepu do KAZDEJ wirtualnej skrzynki ("Mail access for
-# users with UID ... not permitted"), mimo poprawnej reszty configu -
-# konta systemowe (PAM, userdb=passwd, UID >= 1000 ze standardowego
-# useradd w hosting-account-create.sh) nigdy na to nie trafialy, wiec bylo
-# to niewidoczne az do pierwszego realnego logowania na wirtualna
-# skrzynke. Dopuszczamy WYLACZNIE ten jeden, znany, bezpieczny UID (NIE
-# obnizamy globalnej bariery dla wszystkiego innego ponizej 1000, np.
-# roota) - stad zmienna VMAIL_UID w tym pliku, nie sztywna liczba.
-cat > /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf <<EOF
+# passdb/userdb SQL w OSOBNYM, WCZESNIE ladowanym pliku ("05-..." - przed
+# "10-auth.conf", ktory wlacza PAM przez pakietowy auth-system.conf.ext) -
+# NIE w tym samym pliku co first_valid_uid nizej (patrz komentarz tam,
+# dlaczego first_valid_uid musi zostac PO "10-mail.conf"). Dovecot probuje
+# kazdy passdb/userdb PO KOLEI w kolejnosci deklaracji (czyli kolejnosci
+# ladowania plikow conf.d/*.conf) - trzymajac SQL na "91-..." (jak
+# pierwotnie), PAM zawsze byl probowany PIERWSZY. Dla wirtualnych
+# skrzynek (login zawsze "localpart@domena") PAM/pam_unix ZAWSZE musi
+# zawiesc (to nie jest konto systemowe) - ale pam_unix ma wbudowane ~2s
+# opoznienie PO kazdej nieudanej probie (ochrona antybruteforce/
+# username-enumeration), wiec KAZDE logowanie wirtualnej skrzynki traciilo
+# ~2s zanim w ogole doszlo do szybkiego (SQL, ~0ms) passdb. Roundcube
+# laczy sie kilka razy na jedna akcje (nowe polaczenie IMAP zamiast
+# trzymac jedno), wiec te 2s mnozyly sie do kilkunastu sekund odczuwalnego
+# opoznienia - zdiagnozowane 2026-08-16 (user: "kontakt@autoai.qd.je
+# dziala bardzo wolno, srv_1001 bardzo szybko") przez slowlog PHP-FPM +
+# auth_debug Dovecota. Proba naprawy na poziomie PAM (pam_succeed_if,
+# "user != *@*") zostala ODRZUCONA i cofnieta - nieskuteczna na zywo
+# (pam_succeed_if traktuje "!=" jako scisle porownanie stringow, NIE
+# fnmatch, wiec warunek byl zawsze prawdziwy = no-op), a poprawianie
+# skladni skokow PAM ([success=...]) uznane za zbyt ryzykowne (bledna
+# skladnia moze zablokowac logowanie WSZYSTKIM). Ta zmiana kolejnosci
+# plikow jest bezpieczniejsza: dla kont lokalnych (bez "@") SQL i tak
+# zwraca 0 wierszy blyskawicznie (potwierdzone na zywo: "in 0 msecs"),
+# wiec PAM nadal dziala normalnie, tylko chwile pozniej - zero dodatkowego
+# opoznienia w praktyce.
+cat > /etc/dovecot/conf.d/05-caddy-dashboard-virtual-passdb.conf <<EOF
 # Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
-first_valid_uid = ${VMAIL_UID}
 passdb {
   driver = sql
   args = /etc/dovecot/dovecot-sql-virtual.conf.ext
@@ -476,6 +484,29 @@ userdb {
   driver = sql
   args = /etc/dovecot/dovecot-sql-virtual.conf.ext
 }
+EOF
+chmod 644 /etc/dovecot/conf.d/05-caddy-dashboard-virtual-passdb.conf
+
+dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (05-caddy-dashboard-virtual-passdb.conf) nie przeszla walidacji (dovecot -n)."
+
+# first_valid_uid MUSI zostac w PLIKU LADOWANYM PO "10-mail.conf"
+# (pakietowe ustawienie Dovecota tam ustawia domyslnie 1000, blokujac
+# dostep dla KAZDEGO UID ponizej 1000, w tym samego "vmail" - "useradd
+# --system" wyzej przydziela UID z puli systemowej, ponizej 1000,
+# potwierdzone na zywym serwerze 2026-08-15: UID 987). Gdyby ten plik
+# zaladowal sie WCZESNIEJ niz "10-mail.conf" (np. razem z passdb/userdb w
+# pliku "05-..." powyzej), pozniejszy pakietowy default nadpisalby nasze
+# 987 z powrotem na 1000 - Dovecot znow odmawialby dostepu do KAZDEJ
+# wirtualnej skrzynki ("Mail access for users with UID ... not
+# permitted"), dokladnie jak przy pierwszym odkryciu tego bledu. Stad
+# osobny plik "91-..." (zostaje PO "10-mail.conf"), NIE ten sam co
+# wczesnie-ladowany plik passdb/userdb wyzej. Dopuszczamy WYLACZNIE ten
+# jeden, znany, bezpieczny UID (NIE obnizamy globalnej bariery dla
+# wszystkiego innego ponizej 1000, np. roota) - stad zmienna VMAIL_UID w
+# tym pliku, nie sztywna liczba.
+cat > /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf <<EOF
+# Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
+first_valid_uid = ${VMAIL_UID}
 EOF
 chmod 644 /etc/dovecot/conf.d/91-caddy-dashboard-virtual.conf
 
