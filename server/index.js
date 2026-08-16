@@ -159,7 +159,20 @@ app.use('/pma-gate', pmaGateRoutes);
 app.use('/adm-gate', admGateRoutes);
 app.use('/rc-gate', rcGateRoutes);
 
-app.use(express.static(path.join(__dirname, '../web')));
+// Cache-Control: no-cache (NIE "no-store") - przegladarka nadal moze
+// trzymac plik lokalnie, ale MUSI za kazdym razem zweryfikowac go z
+// serwerem (ETag/If-None-Match) przed uzyciem, zamiast ufac wlasnej
+// heurystyce swiezosci. Bez tego (domyslne express.static) niektore
+// przegladarki potrafily serwowac STARA wersje web/app.js/web/user/app.js
+// z lokalnego cache'u nawet po `git pull` + restarcie uslugi na serwerze -
+// user zglosil realny przypadek 2026-08-16 (nowe przyciski "Kopiuj" w
+// panelu usera niewidoczne mimo poprawnego kodu, zweryfikowanego lokalna
+// symulacja renderowania).
+app.use(express.static(path.join(__dirname, '../web'), {
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
 // SPA fallback dla panelu klienta (/user/*) - MUSI byc przed catch-allem
 // panelu admina ponizej, inaczej kazda podstrona /user/... (np. po
 // odswiezeniu) dostalaby index.html admina zamiast web/user/index.html.
