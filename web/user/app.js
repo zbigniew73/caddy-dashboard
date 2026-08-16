@@ -337,6 +337,140 @@ function renderSettings(content) {
   };
 }
 
+// Narzedzia - DNS/SSL checker (server/services/hostingUserTools.js) -
+// CELOWO dzialaja na DOWOLNEJ domenie, nie tylko wlasnych stronach
+// konta (patrz komentarz przy assertValidDomain w tamtym pliku) - to
+// czysto-odczytowe, publiczne dane (DNS/certyfikat serwowany publicznie),
+// wiec bez sprawdzania wlasnosci, tak jak dowolny zewnetrzny "dns
+// checker". Zero preloadu z backendu - render synchroniczny, wynik
+// dopiero po kliknieciu "Sprawdz".
+function renderTools(content) {
+  content.innerHTML = `
+    <div class="tile-row tile-row-2">
+      <div class="system-info-card">
+        <h3 style="margin:0 0 4px;font-size:15px;">${t('tools.dns_title')}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('tools.dns_description')}</p>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('tools.dns_domain_label')}</label>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="dns-check-domain" placeholder="${t('tools.dns_domain_placeholder')}" style="flex:1;">
+          <button type="button" id="dns-check-btn">${t('tools.dns_check_button')}</button>
+        </div>
+        <div id="dns-check-result"><div class="empty-state">${t('tools.dns_no_result')}</div></div>
+        <div class="action-msg" id="dns-check-msg"></div>
+      </div>
+      <div class="system-info-card">
+        <h3 style="margin:0 0 4px;font-size:15px;">${t('tools.ssl_title')}</h3>
+        <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('tools.ssl_description')}</p>
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('tools.ssl_domain_label')}</label>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input type="text" id="ssl-check-domain" placeholder="${t('tools.ssl_domain_placeholder')}" style="flex:1;">
+          <button type="button" id="ssl-check-btn">${t('tools.ssl_check_button')}</button>
+        </div>
+        <div id="ssl-check-result"><div class="empty-state">${t('tools.ssl_no_result')}</div></div>
+        <div class="action-msg" id="ssl-check-msg"></div>
+      </div>
+    </div>
+  `;
+  wireToolsSection(content);
+}
+
+function dnsResultHtml(result) {
+  const rows = [
+    ['A', result.a],
+    ['AAAA', result.aaaa],
+    ['CNAME', result.cname],
+    ['MX', result.mx],
+    ['TXT', result.txt],
+    ['NS', result.ns]
+  ];
+  const trs = rows.map(([type, values]) => `
+    <tr>
+      <td style="font-family:var(--mono);">${type}</td>
+      <td style="font-family:var(--mono);word-break:break-all;">${values.length ? values.map(escapeHtml).join('<br>') : `<span style="color:var(--muted);">${t('tools.dns_empty')}</span>`}</td>
+    </tr>
+  `).join('');
+  return `
+    <table class="firewall-table">
+      <thead><tr><th>${t('tools.dns_col_type')}</th><th>${t('tools.dns_col_value')}</th></tr></thead>
+      <tbody>${trs}</tbody>
+    </table>
+  `;
+}
+
+function sslResultHtml(result) {
+  if (!result.ok) {
+    return `<div class="empty-state">${escapeHtml(result.error)}</div>`;
+  }
+  const days = result.daysRemaining;
+  const daysHtml = Number.isFinite(days)
+    ? `<span style="color:${sniCertColor(days)};">${days >= 0 ? days : t('tools.ssl_days_expired', { days: Math.abs(days) })}</span>`
+    : '-';
+  return `
+    <div class="info-grid">
+      <div class="info-label">${t('mail.sni_col_status')}</div>
+      <div class="info-value">${result.authorized
+        ? `<span class="status-badge active">${t('tools.ssl_status_valid')}</span>`
+        : `<span class="status-badge inactive">${t('tools.ssl_status_invalid')}</span>`}</div>
+      <div class="info-label">${t('tools.ssl_issuer_label')}</div><div class="info-value">${escapeHtml(result.issuer || '-')}</div>
+      <div class="info-label">${t('tools.ssl_subject_label')}</div><div class="info-value">${escapeHtml(result.subject || '-')}</div>
+      <div class="info-label">${t('tools.ssl_valid_to_label')}</div><div class="info-value">${result.validTo ? escapeHtml(new Date(result.validTo).toLocaleDateString()) : '-'}</div>
+      <div class="info-label">${t('tools.ssl_days_label')}</div><div class="info-value">${daysHtml}</div>
+    </div>
+  `;
+}
+
+function wireToolsSection(content) {
+  const dnsBtn = document.getElementById('dns-check-btn');
+  const dnsInput = document.getElementById('dns-check-domain');
+  const dnsResult = document.getElementById('dns-check-result');
+  const dnsMsg = document.getElementById('dns-check-msg');
+  const runDnsCheck = async () => {
+    const domain = dnsInput.value.trim();
+    if (!domain) return;
+    dnsBtn.disabled = true;
+    dnsMsg.textContent = t('tools.dns_checking');
+    dnsMsg.className = 'action-msg';
+    try {
+      const result = await api('GET', `/tools/dns-check?domain=${encodeURIComponent(domain)}`);
+      dnsResult.innerHTML = dnsResultHtml(result);
+      dnsMsg.textContent = '';
+      dnsMsg.className = 'action-msg';
+    } catch (e) {
+      dnsMsg.textContent = e.message;
+      dnsMsg.className = 'action-msg error';
+    } finally {
+      dnsBtn.disabled = false;
+    }
+  };
+  dnsBtn.onclick = runDnsCheck;
+  dnsInput.onkeydown = (e) => { if (e.key === 'Enter') runDnsCheck(); };
+
+  const sslBtn = document.getElementById('ssl-check-btn');
+  const sslInput = document.getElementById('ssl-check-domain');
+  const sslResult = document.getElementById('ssl-check-result');
+  const sslMsg = document.getElementById('ssl-check-msg');
+  const runSslCheck = async () => {
+    const domain = sslInput.value.trim();
+    if (!domain) return;
+    sslBtn.disabled = true;
+    sslMsg.textContent = t('tools.ssl_checking');
+    sslMsg.className = 'action-msg';
+    try {
+      const result = await api('GET', `/tools/ssl-check?domain=${encodeURIComponent(domain)}`);
+      sslResult.innerHTML = sslResultHtml(result);
+      sslMsg.textContent = '';
+      sslMsg.className = 'action-msg';
+    } catch (e) {
+      sslMsg.textContent = e.message;
+      sslMsg.className = 'action-msg error';
+    } finally {
+      sslBtn.disabled = false;
+    }
+  };
+  sslBtn.onclick = runSslCheck;
+  sslInput.onkeydown = (e) => { if (e.key === 'Enter') runSslCheck(); };
+}
+
 // Cron - CRUD na prawdziwym crontabie konta (server/services/hostingUserCron.js).
 // Kazde zadanie to 2 linie w crontabie (komentarz-znacznik + linia
 // harmonogram+polecenie) - zobacz komentarz w hostingUserCron.js. Karta
@@ -3288,6 +3422,8 @@ function renderTab() {
     refreshPythonTab(content);
   } else if (currentTab === 'node') {
     refreshNodeTab(content);
+  } else if (currentTab === 'tools') {
+    renderTools(content);
   } else if (PLACEHOLDER_TABS[currentTab]) {
     renderPlaceholderTab(content, PLACEHOLDER_TABS[currentTab]);
   }

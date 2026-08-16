@@ -32,6 +32,7 @@ import {
   getRepoSettings, saveRepoSettings, listJobs, createJob, updateJob, deleteJob, runJobNow,
   listSnapshots, restoreSnapshot
 } from '../services/hostingUserBackup.js';
+import { checkDns, checkSsl } from '../services/hostingUserTools.js';
 
 const router = Router();
 
@@ -621,6 +622,22 @@ router.post('/backup/restore', async (req, res) => {
   try {
     const { snapshotId } = req.body || {};
     res.json(await restoreSnapshot(req.hostingUser, snapshotId));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/tools/dns-check', async (req, res) => {
+  try {
+    res.json(await checkDns(req.query.domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.get('/tools/ssl-check', async (req, res) => {
+  try {
+    res.json(await checkSsl(req.query.domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }
