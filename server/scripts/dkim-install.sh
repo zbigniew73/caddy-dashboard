@@ -47,21 +47,34 @@ KEY_TABLE="/etc/opendkim/KeyTable"
 SIGNING_TABLE="/etc/opendkim/SigningTable"
 
 print_record() {
-  local record_value record_value_raw
-  # `tr '\n' ' '` (NIE `tr -d '\n'`) - fragmenty musza byc oddzielone
-  # spacja, inaczej dwa base64 kawalki zlepiaja sie w jeden ciag bez
-  # zadnej przerwy na granicy (np. "...wiOl" + "jIEz1x0T..." ->
-  # "...wiOljIEz1x0T..."), co user zglosil 2026-08-16 jako nieczytelne w
-  # polu "Wartosc". `tr -s ' '` scala ewentualne wielokrotne spacje w
-  # jedna, koncowy `sed` usuwa spacje na samym koncu (po ostatnim
-  # fragmencie, przed zamknieciem cudzyslowu, ktory i tak jest tu juz
-  # usuniety przez `sed 's/^"//;s/"$//'` na kazdym fragmencie z osobna).
-  record_value="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | sed 's/^"//;s/"$//' | tr '\n' ' ' | tr -s ' ' | sed 's/[[:space:]]*$//')"
-  [ -n "$record_value" ] || err "nie udalo sie odczytac rekordu DKIM z ${KEY_DIR}/${SELECTOR}.txt."
-  # Jak wyzej, ALE cudzyslowy ZOSTAJA - tylko newline miedzy fragmentami
-  # zamieniony na spacje (oryginalny plik opendkim-genkey ma kazdy
-  # fragment w cudzyslowach na wlasnej linii).
-  record_value_raw="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  local flat record_value record_value_raw
+  # Zrodlo prawdy: PELNA, DOKLADNA konkatenacja bez zadnego separatora
+  # (dokladnie tak jak DNS TXT semantycznie sklada wiele wewnetrznych
+  # character-stringow w jedna wartosc - konkatenacja bajt-w-bajt, bez
+  # wstawionego znaku). Podzial na fragmenty w PLIKU opendkim-genkey (ile
+  # ich jest i gdzie dokladnie przebiega granica) to WYLACZNIE decyzja tego
+  # konkretnego narzedzia/wersji przy zapisie - RÓŻNE klucze/wersje daja
+  # RÓŻNY podzial tego samego, poprawnego rekordu (potwierdzone na zywym
+  # serwerze 2026-08-16: user dostal 3 fragmenty z osobnym
+  # '"v=DKIM1; k=rsa; "', a oczekiwal 2 fragmentow ze zlaczonym tagiem+
+  # poczatkiem klucza - OBA byly poprawnymi rekordami TXT, ale niespojnymi
+  # miedzy soba). Dlatego NIE powielamy podzialu z pliku - liczymy WLASNY,
+  # deterministyczny podzial od zera (patrz record_value_raw nizej), zeby
+  # kazde wywolanie dawalo ta sama, przewidywalna strukture niezaleznie od
+  # tego jak akurat opendkim-genkey zapisal plik.
+  flat="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | sed 's/^"//;s/"$//' | tr -d '\n')"
+  [ -n "$flat" ] || err "nie udalo sie odczytac rekordu DKIM z ${KEY_DIR}/${SELECTOR}.txt."
+  # Do WYSWIETLENIA (pole "Wartosc") - czytelnosc, spacja na kazdej
+  # granicy 255-znakowego kawalka (fold -w255, jak przy RAW ponizej, tylko
+  # bez cudzyslowow) - user zglosil 2026-08-16, ze zlepione bez separatora
+  # bylo nieczytelne.
+  record_value="$(printf '%s' "$flat" | fold -w255 | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  # Do KOPIOWANIA (przycisk "Kopiuj DKIM") - prawdziwy format BIND: kazdy
+  # <=255-znakowy kawalek WLASNYCH cudzyslowach, oddzielone spacja. `fold
+  # -w255` (NIE -s, ktore dzielilo by na granicach slow) - baza64 nie ma
+  # "slow", dokladnie tak samo tnie to realny DNS przy budowaniu wielu
+  # character-stringow w jednym rekordzie TXT.
+  record_value_raw="$(printf '%s' "$flat" | fold -w255 | sed 's/^/"/;s/$/"/' | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
   echo "RECORD_NAME=${SELECTOR}._domainkey.${DOMAIN}"
   echo "RECORD_VALUE=${record_value}"
   echo "RECORD_VALUE_RAW=${record_value_raw}"
