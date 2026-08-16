@@ -34,6 +34,32 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// Rekordy DNS (SPF/DMARC/DKIM) sa dlugie i lamia sie wizualnie
+// (word-break:break-all) - reczne zaznaczanie myszka (triple-click) latwo
+// lapie fragment sasiedniego elementu albo pomija znak na zlamaniu linii,
+// user zglosil realny problem z kopiowaniem wartosci DKIM 2026-08-16.
+// Przycisk czyta dokladnie ten sam tekst co jest wyswietlony (textContent
+// poprzedniego elementu, NIE osobno przekazywana wartosc) - zero ryzyka
+// rozjazdu miedzy tym co widac a tym co sie kopiuje.
+function copyableValueHtml(value) {
+  return `<span class="copy-value-text">${escapeHtml(value)}</span> <button type="button" class="copy-value-btn" title="${escapeHtml(t('mail.copy_value_button'))}">📋</button>`;
+}
+function wireCopyButtons(container) {
+  container.querySelectorAll('.copy-value-btn').forEach((btn) => {
+    if (btn.dataset.copyWired) return;
+    btn.dataset.copyWired = '1';
+    btn.onclick = () => {
+      const span = btn.previousElementSibling;
+      if (!span) return;
+      navigator.clipboard.writeText(span.textContent).then(() => {
+        const original = btn.textContent;
+        btn.textContent = '✓ ' + t('mail.copy_value_done');
+        setTimeout(() => { btn.textContent = original; }, 1200);
+      }).catch(() => {});
+    };
+  });
+}
+
 const THEME_ORDER = ['light', 'dark', 'system'];
 const THEME_ICONS = {
   light: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
@@ -944,7 +970,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
@@ -953,7 +979,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
     </div>
   ` : '';
@@ -969,7 +995,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(dkim.recordValue)}</dd>
       </dl>
     ` : `<p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
     <button type="button" id="dkim-install-btn">${dkim && dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
@@ -1003,6 +1029,7 @@ function renderMailSection(status, domains, selectedDomain, mailboxes, aliases, 
 }
 
 function wireMailManageSection(content) {
+  wireCopyButtons(content);
   const mailboxDomainSelect = document.getElementById('mailbox-domain-select');
   if (mailboxDomainSelect) {
     mailboxDomainSelect.onchange = async () => {

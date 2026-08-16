@@ -112,6 +112,7 @@
   }
   button:hover { background: var(--accent-hover); }
   button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.copy-value-btn { padding: 2px 8px; font-size: 12px; font-weight: 400; border-radius: 6px; vertical-align: middle; }
   .error-msg { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 16px; }
 
   #app { display: none; min-height: 100vh; flex-direction: column; }

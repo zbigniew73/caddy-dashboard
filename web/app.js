@@ -1039,7 +1039,7 @@ async function mailAdminAddressSectionHtml(status) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
@@ -1048,7 +1048,7 @@ async function mailAdminAddressSectionHtml(status) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
     </div>
   ` : '';
@@ -1068,7 +1068,7 @@ async function mailAdminAddressSectionHtml(status) {
             <dl style="margin:0 0 16px;">
               <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
               <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
-              <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+              <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(dkim.recordValue)}</dd>
             </dl>
           ` : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
           <button type="button" id="mail-dkim-install-btn">${dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
@@ -1081,6 +1081,7 @@ async function mailAdminAddressSectionHtml(status) {
 }
 
 function wireMailAdminAddressSection(content, status) {
+  wireCopyButtons(content);
   const btn = document.getElementById('mail-dkim-install-btn');
   if (!btn) return;
   const msgEl = document.getElementById('mail-dkim-msg');
@@ -1127,7 +1128,7 @@ async function mailVirtualDkimSectionHtml(domain) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.spfRecordValue)}</dd>
       </dl>
     </div>
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
@@ -1136,7 +1137,7 @@ async function mailVirtualDkimSectionHtml(domain) {
       <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(spfDmarc.dmarcRecordValue)}</dd>
       </dl>
     </div>
   ` : '';
@@ -1149,7 +1150,7 @@ async function mailVirtualDkimSectionHtml(domain) {
         <dl style="margin:0 0 16px;">
           <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:monospace;">TXT</dd>
           <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
-          <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
+          <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:monospace;word-break:break-all;">${copyableValueHtml(dkim.recordValue)}</dd>
         </dl>
       ` : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
       <button type="button" class="secondary" data-mail-virtual-dkim-domain="${escapeHtml(domain)}">${dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
@@ -1410,6 +1411,7 @@ function wireMailVirtualSection(content) {
       };
     }
 
+    wireCopyButtons(content);
     content.querySelectorAll('[data-mail-virtual-dkim-domain]').forEach((btn) => {
       btn.onclick = async () => {
         if (!window.confirm(t('mail.dkim_confirm_install', { domain }))) return;
@@ -5611,6 +5613,32 @@ async function renderServiceDetailTab(key, content) {
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Rekordy DNS (SPF/DMARC/DKIM) sa dlugie i lamia sie wizualnie
+// (word-break:break-all) - reczne zaznaczanie myszka (triple-click) latwo
+// lapie fragment sasiedniego elementu albo pomija znak na zlamaniu linii,
+// user zglosil realny problem z kopiowaniem wartosci DKIM 2026-08-16.
+// Przycisk czyta dokladnie ten sam tekst co jest wyswietlony (textContent
+// poprzedniego elementu, NIE osobno przekazywana wartosc) - zero ryzyka
+// rozjazdu miedzy tym co widac a tym co sie kopiuje.
+function copyableValueHtml(value) {
+  return `<span class="copy-value-text">${escapeHtml(value)}</span> <button type="button" class="copy-value-btn" title="${escapeHtml(t('mail.copy_value_button'))}">📋</button>`;
+}
+function wireCopyButtons(container) {
+  container.querySelectorAll('.copy-value-btn').forEach((btn) => {
+    if (btn.dataset.copyWired) return;
+    btn.dataset.copyWired = '1';
+    btn.onclick = () => {
+      const span = btn.previousElementSibling;
+      if (!span) return;
+      navigator.clipboard.writeText(span.textContent).then(() => {
+        const original = btn.textContent;
+        btn.textContent = '✓ ' + t('mail.copy_value_done');
+        setTimeout(() => { btn.textContent = original; }, 1200);
+      }).catch(() => {});
+    };
+  });
 }
 
 (async function init() {
