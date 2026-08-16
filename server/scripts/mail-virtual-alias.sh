@@ -77,7 +77,10 @@ case "$ACTION" in
     CURRENT_COUNT="$(sql "SELECT COUNT(*) FROM aliases WHERE domain_id = ${DOMAIN_ID};")"
     [ "${CURRENT_COUNT:-0}" -lt "$MAX_ALIASES" ] || err "Osiagnieto limit aliasow dla domeny '${DOMAIN}' (${CURRENT_COUNT}/${MAX_ALIASES})."
 
-    CREATED_AT="$(date -Iseconds)"
+    # Format "YYYY-MM-DD HH:MM:SS" (NIE -Iseconds) - patrz komentarz w
+    # mail-virtual-domain.sh, ten sam powod (MariaDB DATETIME + strict mode
+    # odrzuca ISO8601 z offsetem strefy).
+    CREATED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     sql "INSERT INTO aliases (domain_id, source, destination, created_at) VALUES (${DOMAIN_ID}, '$(esc "$SOURCE")', '$(esc "$DESTINATION")', '${CREATED_AT}');" \
       || err "Zapis aliasu do bazy nie powiodl sie."
 

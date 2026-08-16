@@ -89,7 +89,10 @@ case "$ACTION" in
     chown -R vmail:vmail "/var/mail/vhosts/${DOMAIN}/${LOCALPART}"
     chmod -R 700 "/var/mail/vhosts/${DOMAIN}/${LOCALPART}"
 
-    CREATED_AT="$(date -Iseconds)"
+    # Format "YYYY-MM-DD HH:MM:SS" (NIE -Iseconds) - patrz komentarz w
+    # mail-virtual-domain.sh, ten sam powod (MariaDB DATETIME + strict mode
+    # odrzuca ISO8601 z offsetem strefy).
+    CREATED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     sql "INSERT INTO mailboxes (domain_id, localpart, password_hash, enabled, maildir, created_at) VALUES (${DOMAIN_ID}, '$(esc "$LOCALPART")', '$(esc "$HASH")', 1, '${DOMAIN}/${LOCALPART}/Maildir/', '${CREATED_AT}');" \
       || err "Zapis skrzynki do bazy nie powiodl sie."
 

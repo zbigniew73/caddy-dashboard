@@ -55,7 +55,13 @@ case "$ACTION" in
     EXISTING="$(sql "SELECT 1 FROM domains WHERE domain = '${DOMAIN//\'/\'\'}';")"
     [ -z "$EXISTING" ] || err "Domena '${DOMAIN}' jest juz dodana jako wirtualna."
 
-    CREATED_AT="$(date -Iseconds)"
+    # Format "YYYY-MM-DD HH:MM:SS" (NIE -Iseconds/ISO8601 z "T" i offsetem
+    # strefy) - kolumna created_at to MariaDB DATETIME, ktora w domyslnym
+    # trybie STRICT_TRANS_TABLES ODRZUCA string z offsetem strefy zamiast
+    # go po cichu obciac (bledne zalozenie z planu migracji - potwierdzone
+    # na zywym serwerze 2026-08-16, "Zapis domeny do bazy nie powiodl sie"
+    # przy kazdej probie dodania domeny).
+    CREATED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
     sql "INSERT INTO domains (domain, owner_account, created_at) VALUES ('${DOMAIN//\'/\'\'}', '${OWNER_ACCOUNT//\'/\'\'}', '${CREATED_AT}');" \
       || err "Zapis domeny do bazy nie powiodl sie."
 
