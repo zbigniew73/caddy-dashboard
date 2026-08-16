@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { pamAuthenticate } from './auth.js';
 import { listAccounts } from './hostingAccounts.js';
 import { countOwnDatabases } from './hostingUserDatabases.js';
+import { getServerLocation } from './hostingUserSsh.js';
 
 const execFileAsync = promisify(execFile);
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url)) + '/../scripts';
@@ -231,10 +232,11 @@ function getDiskUsageMb(username) {
 // bo mechanizm wiazania bazy z kontem nie istnial - teraz istnieje).
 async function getOwnAccount(username) {
   const account = listAccounts().find((a) => a.username === username);
-  const [usage, sitesUsed, diskUsedMb] = await Promise.all([
+  const [usage, sitesUsed, diskUsedMb, serverLocation] = await Promise.all([
     getProcessUsage(username),
     account ? countSites(username).catch(() => 0) : Promise.resolve(0),
-    getDiskUsageMb(username).catch(() => 0)
+    getDiskUsageMb(username).catch(() => 0),
+    getServerLocation().catch(() => null)
   ]);
   const databasesUsed = countOwnDatabases(username);
   return {
@@ -246,6 +248,7 @@ async function getOwnAccount(username) {
     diskQuotaMb: account?.diskQuotaMb ?? null,
     diskUsedMb,
     serverUptimeSeconds: Math.floor(os.uptime()),
+    serverLocation,
     ramLimitMb: account?.ramLimitMb ?? null,
     maxDomains: account?.maxDomains ?? null,
     maxDatabases: account?.maxDatabases ?? null,

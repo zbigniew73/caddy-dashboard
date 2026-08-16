@@ -1,4 +1,4 @@
-# Caddy Dashboard v1.40.0
+# Caddy Dashboard v1.40.1
 
 ![Caddy Dashboard](caddy-dashboard.png)
 

@@ -146,4 +146,32 @@ async function deleteSshKey(username, keyData) {
   return filtered;
 }
 
-export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp };
+// Lokalizacja serwera (miasto/kraj) do kafelka Uptime na Dashboardzie
+// usera - geo-IP publicznego adresu (ipapi.co, bez klucza API). Cache w
+// module (bez TTL, tak samo jak cachedPublicIp powyzej) - lokalizacja
+// serwera sie nie zmienia, a Dashboard odpytuje /me co 5s (patrz
+// startUsageRefresh w web/user/app.js), wiec bez tego cache'a kazde
+// odswiezenie bilaby to zewnetrzne zapytanie sieciowe. Cichy null przy
+// niepowodzeniu (brak internetu/egress/limit API) - to czysto
+// kosmetyczna dodatkowa linia, nie moze zablokowac reszty kafelka.
+let cachedServerLocation;
+
+async function getServerLocation() {
+  if (cachedServerLocation !== undefined) return cachedServerLocation;
+  try {
+    const ip = await getPublicIp();
+    const res = await fetch(`https://ipapi.co/${ip}/json/`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      const data = await res.json();
+      const parts = [data.city, data.country_name].filter(Boolean);
+      cachedServerLocation = parts.length ? parts.join(', ') : null;
+      return cachedServerLocation;
+    }
+  } catch {
+    // brak internetu / limit API / IP niepubliczne - honest null ponizej
+  }
+  cachedServerLocation = null;
+  return cachedServerLocation;
+}
+
+export { getConnectionInfo, listSshKeys, addSshKey, deleteSshKey, getPublicIp, getServerLocation };
