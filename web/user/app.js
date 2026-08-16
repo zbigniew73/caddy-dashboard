@@ -925,7 +925,7 @@ function aliasManageCardHtml(domains, selectedDomain, aliases) {
   const domainOptionsHtml = domains.map((d) => `<option value="${escapeHtml(d)}" ${d === selectedDomain ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('');
   const rows = aliases.map((a) => `
     <tr>
-      <td>${escapeHtml(a.source)}@${escapeHtml(selectedDomain)}</td>
+      <td>${escapeHtml(a.source)}</td>
       <td>${escapeHtml(a.destination)}</td>
       <td><button type="button" class="danger" data-alias-remove="${escapeHtml(a.source)}" data-alias-dest="${escapeHtml(a.destination)}">${t('mail.mailbox_delete_button')}</button></td>
     </tr>
@@ -1245,7 +1245,13 @@ function wireMailManageSection(content) {
       if (!window.confirm(t('mail.alias_confirm_remove', { source, destination }))) return;
       btn.disabled = true;
       try {
-        await api('DELETE', `/mail/aliases/${encodeURIComponent(mailSelectedDomain)}/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`);
+        // "source" tutaj to PELNY adres (login@domena, tak jest
+        // przechowywany w bazie - patrz mail-virtual-alias.sh) - backend
+        // (LOCALPART_RE) oczekuje w tym miejscu SAMEGO loginu, wiec domena
+        // musi zostac odciecia przed wyslaniem, inaczej usuwanie zawsze
+        // konczylo sie bledem walidacji ("nieprawidlowy login zrodlowy").
+        const sourceLocalpart = source.split('@')[0];
+        await api('DELETE', `/mail/aliases/${encodeURIComponent(mailSelectedDomain)}/${encodeURIComponent(sourceLocalpart)}/${encodeURIComponent(destination)}`);
         await refreshMailTab(content);
       } catch (e) {
         window.alert(e.message);

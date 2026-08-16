@@ -1429,7 +1429,14 @@ function wireMailVirtualSection(content) {
         msgEl().textContent = t('mail.virtual_working');
         msgEl().className = 'action-msg';
         try {
-          await api('DELETE', `/mail/virtual/aliases/${encodeURIComponent(domain)}/${encodeURIComponent(source)}/${encodeURIComponent(destination)}`);
+          // "source" tutaj to PELNY adres (login@domena, tak jest
+          // przechowywany w bazie - patrz mail-virtual-alias.sh) - backend
+          // (LOCALPART_RE) oczekuje w tym miejscu SAMEGO loginu, wiec
+          // domena musi zostac odcieta przed wyslaniem, inaczej usuwanie
+          // zawsze konczylo sie bledem walidacji ("nieprawidlowy login
+          // zrodlowy").
+          const sourceLocalpart = source.split('@')[0];
+          await api('DELETE', `/mail/virtual/aliases/${encodeURIComponent(domain)}/${encodeURIComponent(sourceLocalpart)}/${encodeURIComponent(destination)}`);
           await renderMailTab(content);
         } catch (e) {
           msgEl().textContent = e.message;
