@@ -167,9 +167,31 @@
   .system-info-card dt { color: var(--muted); font-size: 14px; }
   .system-info-card dd { margin: 0; font-family: var(--mono); font-size: 16px; }
   .system-info-card h3 { margin: 0 0 12px; font-size: 15px; }
-  .card-row-50 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-  .card-row-50 > .system-info-card { margin-bottom: 0; }
-  @media (max-width: 760px) { .card-row-50 { grid-template-columns: 1fr; } }
+  /* Szablon ukladu kafelkow w srodkowym oknie (glowna kolumna tresci
+     zakladki) - ustalony 2026-08-16, obowiazuje na stale dla WSZYSTKICH
+     zakladek, nie tylko Poczty. Zasada: 1 kafelek = 100% szerokosci,
+     N kafelkow w rzedzie = 100%/N kazdy (grid, nie flex - flex-wrap+
+     min-width dawal nierowne szerokosci przy zawijaniu). Jeden wspolny
+     odstep (--tile-gap) uzywany JEDNOCZESNIE jako gap miedzy kafelkami
+     w rzedzie (lewo/prawo) i jako odstep miedzy rzedami (gora/dol) -
+     stąd rowne odstepy z kazdej strony. .tile-row-N wybiera liczbe
+     kolumn, .tile-stack pionowo sklada kilka sekcji WEWNATRZ jednego
+     miejsca w rzedzie (np. 2 kafelki obok siebie, w lewym kilka sekcji
+     jedna pod druga - to wciaz "2 kafelki" na poziomie rzedu).
+     Uzycie: <div class="tile-row tile-row-2"><div class="system-info-card">...</div>...</div> */
+  :root { --tile-gap: 16px; }
+  .tile-row { display: grid; gap: var(--tile-gap); margin-top: var(--tile-gap); align-items: start; }
+  .tile-row:first-child { margin-top: 0; }
+  .tile-row > .system-info-card,
+  .tile-stack > .system-info-card { margin-bottom: 0; max-width: 100%; }
+  .tile-row-1 { grid-template-columns: 1fr; }
+  .tile-row-2 { grid-template-columns: repeat(2, 1fr); }
+  .tile-row-3 { grid-template-columns: repeat(3, 1fr); }
+  .tile-row-4 { grid-template-columns: repeat(4, 1fr); }
+  .tile-stack { display: flex; flex-direction: column; gap: var(--tile-gap); min-width: 0; }
+  @media (max-width: 760px) {
+    .tile-row-2, .tile-row-3, .tile-row-4 { grid-template-columns: 1fr; }
+  }
 
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
   .info-grid .info-label { color: var(--muted); font-size: 14px; }

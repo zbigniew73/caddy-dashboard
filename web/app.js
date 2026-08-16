@@ -1469,28 +1469,28 @@ async function renderMailTab(content) {
     const antispamHtml = await renderAntispamSection();
     const spamassassinHtml = await renderSpamassassinSection();
     content.innerHTML = `
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;">
-        <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.postfix_title'), postfix)}</div>
-        <div style="flex:1 1 0;min-width:320px;">${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}</div>
+      <div class="tile-row tile-row-2">
+        ${mailServiceCardHtml(t('mail.postfix_title'), postfix)}
+        ${mailServiceCardHtml(t('mail.dovecot_title'), dovecot)}
       </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
-        <div style="flex:1 1 0;min-width:320px;">${postfixLimitsHtml}</div>
-        <div style="flex:1 1 0;min-width:320px;">${dovecotLimitsHtml}</div>
+      <div class="tile-row tile-row-2">
+        ${postfixLimitsHtml}
+        ${dovecotLimitsHtml}
       </div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
-        <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
+      <div class="tile-row tile-row-2">
+        <div class="tile-stack">
           ${mailDomainSectionHtml(domainStatus)}
           ${statsHtml}
           ${antispamHtml}
         </div>
-        <div style="flex:1 1 0;min-width:320px;">${adminAddressHtml}</div>
+        ${adminAddressHtml}
       </div>
-      <div style="margin-top:16px;">${accessHtml}</div>
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
-        <div style="flex:1 1 0;min-width:320px;">${postfwdHtml}</div>
-        <div style="flex:1 1 0;min-width:320px;">${spamassassinHtml}</div>
+      <div class="tile-row tile-row-1">${accessHtml}</div>
+      <div class="tile-row tile-row-2">
+        ${postfwdHtml}
+        ${spamassassinHtml}
       </div>
-      <div style="margin-top:16px;">${virtualHtml}</div>
+      <div class="tile-row tile-row-1">${virtualHtml}</div>
     `;
     applyTranslations();
     wireMailServiceCards(content);
