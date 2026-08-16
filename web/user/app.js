@@ -969,7 +969,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h4 style="margin:0 0 8px;font-size:14px;">${t('mail.spf_title')}</h4>
       <p style="margin:0 0 12px;color:var(--muted);font-size:12px;">${t('mail.spf_dns_hint')}</p>
-      <dl>
+      <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.spfRecordValue)}</dd>
@@ -979,7 +979,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
     <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
       <h4 style="margin:0 0 8px;font-size:14px;">${t('mail.dmarc_title')}</h4>
       <p style="margin:0 0 12px;color:var(--muted);font-size:12px;">${t('mail.dmarc_dns_hint')}</p>
-      <dl>
+      <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(spfDmarc.dmarcRecordValue)}</dd>
@@ -996,7 +996,7 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
     ${dkim && dkim.installed ? `
       <p style="margin:0 0 12px;color:var(--accent);font-size:13px;">${t('mail.dkim_installed_hint')}</p>
       <p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.dkim_dns_hint')}</p>
-      <dl>
+      <dl style="margin:0 0 16px;">
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
         <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
