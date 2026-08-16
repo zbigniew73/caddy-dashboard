@@ -1065,10 +1065,14 @@ function mailSniSectionHtml(domains, selectedDomain, sni) {
   return `
     <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
-    ${sni.synced
-      ? `<p style="margin:0 0 16px;"><span class="status-badge active">${t('mail.sni_status_synced')}</span></p>`
-      : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</p>`}
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      <span style="font-family:var(--mono);font-size:14px;">${escapeHtml(sni.domain)}</span>
+      ${sni.synced
+        ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span>`
+        : `<span style="color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</span>`}
+    </div>
     <button type="button" id="sni-sync-btn">${sni.synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
+    ${sni.synced ? `<button type="button" class="danger" id="sni-remove-btn">${t('mail.sni_remove_button')}</button>` : ''}
     <div class="action-msg" id="sni-msg"></div>
   `;
 }
@@ -1129,6 +1133,25 @@ function wireMailManageSection(content) {
         msgEl.textContent = e.message;
         msgEl.className = 'action-msg error';
         sniSyncBtn.disabled = false;
+      }
+    };
+  }
+
+  const sniRemoveBtn = document.getElementById('sni-remove-btn');
+  if (sniRemoveBtn) {
+    sniRemoveBtn.onclick = async () => {
+      if (!window.confirm(t('mail.sni_confirm_remove', { domain: `mail.${mailSelectedDomain}` }))) return;
+      const msgEl = document.getElementById('sni-msg');
+      msgEl.textContent = '';
+      msgEl.className = 'action-msg';
+      sniRemoveBtn.disabled = true;
+      try {
+        await api('DELETE', `/mail/sni-sync/${encodeURIComponent(mailSelectedDomain)}`);
+        await refreshMailTab(content);
+      } catch (e) {
+        msgEl.textContent = e.message;
+        msgEl.className = 'action-msg error';
+        sniRemoveBtn.disabled = false;
       }
     };
   }

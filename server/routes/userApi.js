@@ -14,7 +14,7 @@ import {
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
   getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
-  getOwnSniStatus, syncOwnSni
+  getOwnSniStatus, syncOwnSni, removeOwnSni
 } from '../services/hostingUserMailboxes.js';
 import {
   listPythonVersions,
@@ -340,6 +340,15 @@ router.post('/mail/sni-sync', async (req, res) => {
   try {
     const domain = typeof req.body?.domain === 'string' ? req.body.domain.trim().toLowerCase() : '';
     res.json(await syncOwnSni(req.hostingUser, domain));
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message });
+  }
+});
+
+router.delete('/mail/sni-sync/:domain', async (req, res) => {
+  try {
+    const domain = String(req.params.domain || '').trim().toLowerCase();
+    res.json(await removeOwnSni(req.hostingUser, domain));
   } catch (e) {
     res.status(e.status || 500).json({ error: e.message });
   }

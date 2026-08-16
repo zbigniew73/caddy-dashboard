@@ -1020,6 +1020,8 @@
   "mail.sni_not_enabled": "Obsługa poczty nie jest włączona dla tej strony - włącz ją w ustawieniach strony w zakładce Strony.",
   "mail.sni_sync_button": "Synchronizuj SNI",
   "mail.sni_resync_button": "Odśwież SNI",
+  "mail.sni_remove_button": "Usuń",
+  "mail.sni_confirm_remove": "Usunąć certyfikat SNI dla {domain}? Wpadnie z powrotem na domyślny certyfikat.",
   "mail.virtual_manage_button": "Zarządzaj",
   "mail.virtual_remove_button": "Usuń",
   "mail.virtual_confirm_remove": "Usunąć domenę wirtualną {domain}? Wymaga wcześniejszego usunięcia wszystkich jej skrzynek i aliasów.",

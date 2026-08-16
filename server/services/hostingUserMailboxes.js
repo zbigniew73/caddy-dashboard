@@ -3,7 +3,7 @@ import {
   listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
   listVirtualAliases, addVirtualAlias, removeVirtualAlias
 } from './mailVirtual.js';
-import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, listMailSni } from './mail.js';
+import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, removeMailSni, listMailSni } from './mail.js';
 
 // Self-service warstwa dla panelu /user/ nad mailVirtual.js (do tej pory
 // wywolywanym WYLACZNIE z panelu admina) - Poczta -> "Dodaj konto e-mail"/
@@ -122,10 +122,16 @@ async function syncOwnSni(username, domain) {
   return syncMailSni(mailDomain);
 }
 
+async function removeOwnSni(username, domain) {
+  const mailDomain = `mail.${domain}`;
+  await assertOwnDomain(username, mailDomain);
+  return removeMailSni(mailDomain);
+}
+
 export {
   listOwnMailDomains,
   listOwnMailboxes, createOwnMailbox, setOwnMailboxPassword, removeOwnMailbox,
   listOwnAliases, createOwnAlias, removeOwnAlias,
   getOwnDkimStatus, installOwnDkim, getOwnSpfDmarcInfo,
-  getOwnSniStatus, syncOwnSni
+  getOwnSniStatus, syncOwnSni, removeOwnSni
 };
