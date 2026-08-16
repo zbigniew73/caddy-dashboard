@@ -1203,51 +1203,40 @@ async function mailVirtualSniSectionHtml(domain) {
 }
 
 async function renderMailVirtualListHtml() {
-  let domains, sniDomains;
+  let domains;
   try {
-    [{ items: domains }, { items: sniDomains }] = await Promise.all([
-      api('GET', '/mail/virtual/domains'),
-      api('GET', '/mail/sni-domains').catch(() => ({ items: [] }))
-    ]);
+    ({ items: domains } = await api('GET', '/mail/virtual/domains'));
   } catch (e) {
     return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
   }
-  const sniSyncedSet = new Set(sniDomains);
 
-  // Kolumna SNI ma sens TYLKO dla "mail.<domena>" - to jedyne hostname'y,
-  // dla ktorych klienci pocztowi faktycznie robia TLS handshake (patrz
-  // buildMailStubBlock w hostingUserSites.js + mail-sni-sync.sh) - baza
-  // (np. "nowa.domena.pl") nigdy nie jest adresem serwera IMAP/SMTP, wiec
-  // przycisk tam byłby myslacy.
-  const rows = domains.map((d) => {
-    const isMailHost = d.domain.startsWith('mail.');
-    const sniCellHtml = !isMailHost ? '-' : sniSyncedSet.has(d.domain)
-      ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span> <button type="button" class="secondary" data-mail-sni-sync="${escapeHtml(d.domain)}">${t('mail.sni_resync_button')}</button>`
-      : `<button type="button" class="secondary" data-mail-sni-sync="${escapeHtml(d.domain)}">${t('mail.sni_sync_button')}</button>`;
-    return `
+  // "mail.<domena>" to WYLACZNIE hostname serwera Postfix/Dovecot (SNI) -
+  // certyfikat SNI kontroluje sam klient w panelu /user/ (Poczta ->
+  // Certyfikat SNI), admin nie ma tu nic do zarzadzania, wiec te wpisy
+  // sie tutaj nie licza (2026-08-16, user).
+  const siteDomains = domains.filter((d) => !d.domain.startsWith('mail.'));
+
+  const rows = siteDomains.map((d) => `
     <tr>
       <td>${escapeHtml(d.domain)}</td>
       <td>${escapeHtml(d.ownerAccount)}</td>
-      <td>${sniCellHtml}</td>
       <td>
         <button type="button" class="secondary" data-mail-virtual-manage="${escapeHtml(d.domain)}">${t('mail.virtual_manage_button')}</button>
         <button type="button" class="danger" data-mail-virtual-remove="${escapeHtml(d.domain)}">${t('mail.virtual_remove_button')}</button>
       </td>
     </tr>
-  `;
-  }).join('');
+  `).join('');
 
   return `
     <div class="system-info-card">
       <h3>${t('mail.virtual_title')}</h3>
       <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.virtual_description')}</p>
-      ${domains.length ? `
+      ${siteDomains.length ? `
         <table class="firewall-table">
           <thead>
             <tr>
               <th>${t('mail.virtual_column_domain')}</th>
               <th>${t('mail.virtual_column_owner')}</th>
-              <th>${t('mail.sni_column')}</th>
               <th></th>
             </tr>
           </thead>
