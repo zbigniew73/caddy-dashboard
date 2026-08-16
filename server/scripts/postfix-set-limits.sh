@@ -93,11 +93,17 @@ postconf -e "virtual_mailbox_limit=${MAILBOX_LIMIT}"
 if [ "$OLD_HOME_MAILBOX" != "Maildir/" ]; then
   postconf -e "home_mailbox=Maildir/"
 fi
+# Podmiana WYLACZNIE substringu "localhost" -> "127.0.0.1" WEWNATRZ
+# istniejacej wartosci (NIE nadpisanie calej listy na sztywno) - jesli
+# spamassassin-install.sh juz dopisal tu WLASNY milter (inet:127.0.0.1:8893)
+# obok OpenDKIM, bezwarunkowe "smtpd_milters=inet:127.0.0.1:8891" cicho by
+# go usunelo z lancucha (ten sam blad, ktory 2026-08-16 realnie wylaczyl
+# SpamAssassin - naprawiony analogicznie w mail-install.sh).
 if [[ "$OLD_SMTPD_MILTERS" == *localhost* ]]; then
-  postconf -e "smtpd_milters=inet:127.0.0.1:8891"
+  postconf -e "smtpd_milters=${OLD_SMTPD_MILTERS//localhost/127.0.0.1}"
 fi
 if [[ "$OLD_NON_SMTPD_MILTERS" == *localhost* ]]; then
-  postconf -e "non_smtpd_milters=inet:127.0.0.1:8891"
+  postconf -e "non_smtpd_milters=${OLD_NON_SMTPD_MILTERS//localhost/127.0.0.1}"
 fi
 NEED_RESTART=""
 if [ "$OLD_INET_INTERFACES" != "all" ]; then

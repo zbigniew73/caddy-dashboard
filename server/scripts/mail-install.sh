@@ -246,8 +246,32 @@ postconf -e 'milter_protocol = 6'
 # = accept po cichu przepuszcza wiadomosc BEZ PODPISU, bez glosnego bledu
 # w logach. Literal IP nie wymaga zadnego resolvowania nazw, wiec dziala
 # tez w chroocie. Potwierdzone na zywym serwerze 2026-08-14.
-postconf -e 'smtpd_milters = inet:127.0.0.1:8891'
-postconf -e 'non_smtpd_milters = inet:127.0.0.1:8891'
+#
+# DOPISZ do istniejacej listy, NIE nadpisuj calej wartosci - ten skrypt
+# (mail-install.sh) jest idempotentny/re-runowalny (np. przycisk "Sprawdz/
+# zaktualizuj konfiguracje" w Poczta), a spamassassin-install.sh (jesli
+# admin go wczesniej uruchomil) DOPISUJE tu WLASNY milter
+# (inet:127.0.0.1:8893) OBOK tego OpenDKIM. Bezwarunkowe "postconf -e
+# smtpd_milters=inet:127.0.0.1:8891" nadpisywalo CALA liste za kazdym
+# re-runem tego skryptu, cicho usuwajac spamass-milter z lancucha (bez
+# zadnego bledu - postfix check nadal przechodzi czysto, bo brakujacy
+# milter to nie blad skladni) - user zglosil 2026-08-16 realny przypadek:
+# SpamAssassin przestal skanowac poczte po tym, jak mail-install.sh zostal
+# ponownie uruchomiony (przy okazji niepowiazanej migracji MariaDB) i po
+# cichu wyrzucil spamass-milter, ktory wczesniej byl juz poprawnie
+# dopiety. Ten sam wzorzec "dopisz-jesli-brak" co juz uzywany w
+# spamassassin-install.sh dla tej samej pary parametrow.
+DKIM_MILTER_ADDR="inet:127.0.0.1:8891"
+for PARAM in smtpd_milters non_smtpd_milters; do
+  CURRENT="$(postconf -h "$PARAM" 2>/dev/null || true)"
+  if [[ "$CURRENT" != *"${DKIM_MILTER_ADDR}"* ]]; then
+    if [ -n "$CURRENT" ]; then
+      postconf -e "${PARAM}=${CURRENT}, ${DKIM_MILTER_ADDR}"
+    else
+      postconf -e "${PARAM}=${DKIM_MILTER_ADDR}"
+    fi
+  fi
+done
 
 # master.cf: dopisujemy WLASNE, kompletne stanze submission(587)/smtps(465)
 # zamiast probowac odkomentowac szablon dostarczony z pakietem (rozny
