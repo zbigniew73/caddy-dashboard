@@ -3,7 +3,7 @@ import {
   listVirtualMailboxes, addVirtualMailbox, setVirtualMailboxPassword, removeVirtualMailbox,
   listVirtualAliases, addVirtualAlias, removeVirtualAlias
 } from './mailVirtual.js';
-import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, removeMailSni, listMailSni } from './mail.js';
+import { getDkimStatus, installDkim, getSpfDmarcInfo, syncMailSni, removeMailSni, listMailSni, getMailSniCertInfo } from './mail.js';
 
 // Self-service warstwa dla panelu /user/ nad mailVirtual.js (do tej pory
 // wywolywanym WYLACZNIE z panelu admina) - Poczta -> "Dodaj konto e-mail"/
@@ -115,7 +115,14 @@ async function listOwnSniDomains(username) {
     .sort();
   if (!mailDomains.length) return [];
   const syncedSet = new Set(await listMailSni());
-  return mailDomains.map((domain) => ({ domain, synced: syncedSet.has(domain) }));
+  return mailDomains.map((domain) => {
+    const synced = syncedSet.has(domain);
+    // getMailSniCertInfo czyta plik bezposrednio (bez sudo) - tylko dla
+    // juz zsynchronizowanych domen ma sens probowac (patrz komentarz
+    // przy getMailSniCertInfo w mail.js).
+    const cert = synced ? getMailSniCertInfo(domain) : null;
+    return { domain, synced, certIssuer: cert?.issuer ?? null, certDaysRemaining: cert?.daysRemaining ?? null };
+  });
 }
 
 // sync/remove przyjmuja TERAZ pelna domene "mail.<domena>" wprost (NIE

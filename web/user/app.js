@@ -1055,12 +1055,15 @@ function mailSniSectionHtml(sniDomains) {
       <div class="empty-state">${t('mail.sni_not_enabled')}</div>
     `;
   }
-  const rows = sniDomains.map(({ domain, synced }) => `
+  const rows = sniDomains.map(({ domain, synced, certIssuer, certDaysRemaining }) => `
     <tr>
       <td style="font-family:var(--mono);">${escapeHtml(domain)}</td>
       <td>${synced
         ? `<span class="status-badge active">${t('mail.sni_status_synced')}</span>`
         : `<span style="color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</span>`}</td>
+      <td>${certIssuer && Number.isFinite(certDaysRemaining)
+        ? escapeHtml(t(certDaysRemaining >= 0 ? 'mail.sni_cert_valid' : 'mail.sni_cert_expired', { issuer: certIssuer, days: Math.abs(certDaysRemaining) }))
+        : `<span style="color:var(--muted);">${t('mail.sni_cert_unknown')}</span>`}</td>
       <td>
         <button type="button" class="secondary" data-sni-sync="${escapeHtml(domain)}">${synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
         ${synced ? `<button type="button" class="danger" data-sni-remove="${escapeHtml(domain)}">${t('mail.sni_remove_button')}</button>` : ''}
@@ -1071,7 +1074,7 @@ function mailSniSectionHtml(sniDomains) {
     <h3 style="margin:0 0 4px;font-size:15px;">${t('mail.sni_title')}</h3>
     <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
     <table class="firewall-table">
-      <thead><tr><th>${t('mail.sni_col_domain')}</th><th>${t('mail.sni_col_status')}</th><th></th></tr></thead>
+      <thead><tr><th>${t('mail.sni_col_domain')}</th><th>${t('mail.sni_col_status')}</th><th>${t('mail.sni_col_cert')}</th><th></th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <div class="action-msg" id="sni-msg"></div>

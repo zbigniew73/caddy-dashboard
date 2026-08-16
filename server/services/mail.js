@@ -256,6 +256,31 @@ async function listMailSni() {
   }
 }
 
+const SNI_CERT_DIR = '/etc/pki/tls/mail-sni';
+
+// Info (wystawca + dni do wygasniecia) o certyfikacie SNI danej domeny -
+// odczyt BEZPOSREDNI z pliku (bez sudo, bez zadnych zmian w
+// mail-sni-sync.sh) - dovecot-cert.pem jest world-readable i zawiera
+// WYLACZNIE cert (bez klucza), patrz mail-sni-sync.sh:137. Celowo
+// odrebne od listMailSni/syncMailSni/removeMailSni powyzej (te dzialaja
+// przez sudo+skrypt i juz raz sie zepsuly przy proba rozbudowy o
+// podobna informacje - v1.39.6/[[project caddy-dashboard mail sni]] -
+// wiec tym razem ZERO zmian w tamtej sciezce). Failuje po cichu (null) -
+// to czysto dodatkowa informacja w UI, list/sync/remove maja dzialac
+// niezaleznie od tego, czy sie uda.
+function getMailSniCertInfo(domain) {
+  try {
+    const certPath = path.join(SNI_CERT_DIR, domain, 'dovecot-cert.pem');
+    const cert = new X509Certificate(readFileSync(certPath));
+    const daysRemaining = Math.floor((new Date(cert.validTo).getTime() - Date.now()) / 86400000);
+    const orgMatch = /(?:^|\n)O=([^\n]+)/.exec(cert.issuer || '');
+    const issuer = orgMatch ? orgMatch[1] : (cert.issuer || '').split('\n')[0] || null;
+    return { issuer, daysRemaining };
+  } catch {
+    return null;
+  }
+}
+
 const LIMITS_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), '../scripts/postfix-set-limits.sh');
 
 // Odczyt bezposredni (bez sudo), ten sam powod co getMailTlsStatus -
@@ -664,7 +689,7 @@ async function setSpamassassinThreshold(threshold) {
 
 export {
   installMail, readDisabledUsernames, setMailAccess, getMailQueueCount, checkMailCertTrusted,
-  getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, getPostfixLimits, setPostfixLimits,
+  getMailTlsStatus, setMailTlsSwap, syncMailSni, removeMailSni, listMailSni, getMailSniCertInfo, getPostfixLimits, setPostfixLimits,
   getDovecotLimits, setDovecotLimits, getMydestinationStatus, addMydestinationDomain,
   getDkimStatus, installDkim, getSpfDmarcInfo,
   getPostfwdStatus, installPostfwd, setPostfwdLimits,
