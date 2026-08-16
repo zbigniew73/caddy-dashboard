@@ -1166,42 +1166,6 @@ async function mailVirtualDkimSectionHtml(domain) {
   `;
 }
 
-// Kafelek SNI (obok DKIM/SPF/DMARC, 50/50 - patrz .card-row-50) - certyfikat
-// TLS per "mail.<domena>" dla Postfixa/Dovecota (server/scripts/
-// mail-sni-sync.sh), NIEZALEZNY od backendu skrzynek. Ma sens WYLACZNIE
-// dla domen zaczynajacych sie od "mail." (patrz komentarz przy isMailHost
-// w renderMailVirtualListHtml, ten sam powod) - dla kazdej innej domeny
-// (np. bazowej "autoai.qd.je") pokazuje neutralny stan "nie dotyczy"
-// zamiast przycisku, ktory i tak nigdy niczego by nie zsynchronizowal.
-async function mailVirtualSniSectionHtml(domain) {
-  const isMailHost = domain.startsWith('mail.');
-  if (!isMailHost) {
-    return `
-      <div class="system-info-card">
-        <h3 style="margin-bottom:8px;">${t('mail.sni_title')}</h3>
-        <div class="empty-state">${t('mail.sni_not_applicable')}</div>
-      </div>
-    `;
-  }
-  let sniDomains = [];
-  try {
-    ({ items: sniDomains } = await api('GET', '/mail/sni-domains'));
-  } catch {
-    sniDomains = [];
-  }
-  const synced = sniDomains.includes(domain);
-  return `
-    <div class="system-info-card">
-      <h3 style="margin-bottom:8px;">${t('mail.sni_title')}</h3>
-      <p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_description')}</p>
-      ${synced
-        ? `<p style="margin:0 0 16px;"><span class="status-badge active">${t('mail.sni_status_synced')}</span></p>`
-        : `<p style="margin:0 0 16px;color:var(--muted);font-size:13px;">${t('mail.sni_status_not_synced')}</p>`}
-      <button type="button" class="secondary" data-mail-sni-sync="${escapeHtml(domain)}">${synced ? t('mail.sni_resync_button') : t('mail.sni_sync_button')}</button>
-    </div>
-  `;
-}
-
 async function renderMailVirtualListHtml() {
   let domains;
   try {
@@ -1277,10 +1241,7 @@ async function renderMailVirtualManageHtml(domain) {
     </tr>
   `).join('');
 
-  const [dkimHtml, sniHtml] = await Promise.all([
-    mailVirtualDkimSectionHtml(domain),
-    mailVirtualSniSectionHtml(domain)
-  ]);
+  const dkimHtml = await mailVirtualDkimSectionHtml(domain);
 
   return `
     <div class="system-info-card">
@@ -1312,9 +1273,8 @@ async function renderMailVirtualManageHtml(domain) {
       <div class="action-msg" id="mail-virtual-msg"></div>
     </div>
 
-    <div class="card-row-50" style="margin-top:16px;">
+    <div style="margin-top:16px;">
       ${dkimHtml}
-      ${sniHtml}
     </div>
   `;
 }
@@ -1469,23 +1429,6 @@ function wireMailVirtualSection(content) {
     btn.onclick = async () => {
       mailVirtualSelectedDomain = btn.dataset.mailVirtualManage;
       await renderMailTab(content);
-    };
-  });
-
-  content.querySelectorAll('[data-mail-sni-sync]').forEach((btn) => {
-    btn.onclick = async () => {
-      const domain = btn.dataset.mailSniSync;
-      btn.disabled = true;
-      msgEl().textContent = t('mail.virtual_working');
-      msgEl().className = 'action-msg';
-      try {
-        await api('POST', `/mail/sni-sync/${encodeURIComponent(domain)}`);
-        await renderMailTab(content);
-      } catch (e) {
-        msgEl().textContent = e.message;
-        msgEl().className = 'action-msg error';
-        btn.disabled = false;
-      }
     };
   });
 
