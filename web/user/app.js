@@ -657,13 +657,13 @@ function databasesManageCardHtml(data) {
   const singleEngine = engines.length === 1 ? engines[0] : '';
 
   const createFormHtml = engines.length ? `
+    ${engines.length > 1 ? `
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('databases.field_engine')}</label>
+        <select id="db-new-engine">${engineOptions}</select>
+      </div>
+    ` : ''}
     <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;">
-      ${engines.length > 1 ? `
-        <div>
-          <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('databases.field_engine')}</label>
-          <select id="db-new-engine">${engineOptions}</select>
-        </div>
-      ` : ''}
       <div style="flex:1;min-width:180px;">
         <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('databases.field_name')}</label>
         <div style="display:flex;align-items:center;gap:4px;">
