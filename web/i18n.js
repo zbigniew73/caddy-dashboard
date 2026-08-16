@@ -11,8 +11,25 @@ function detectDefaultLang() {
   return SUPPORTED_LANGS.includes(browserLang) ? browserLang : 'en';
 }
 
+// Sciezka BEZWZGLEDNA ("/i18n/...", NIE wzgledna "i18n/...") - ten sam
+// skrypt jest wspoldzielony przez panel admina (strony pod "/") i panel
+// usera (strony pod "/user", "/user/cos" - roznia sie glebokoscia URL).
+// Wzgledny fetch rozwiazywalby sie WZGLEDEM aktualnego adresu strony, wiec
+// pod "/user/" dawaloby "/user/i18n/pl.json" (nieistniejaca sciezka, 404) -
+// pod "/user" bez koncowego slasha akurat by zadzialalo, ale to byla
+// niebezpieczna, przypadkowa poprawnosc, nie gwarancja.
+//
+// `?v=${Date.now()}` - cache-buster, KAZDE zaladowanie strony wymusza
+// swiezy fetch z serwera, ignorujac lokalny cache przegladarki (pliki sa
+// male, koszt bandwidth pomijalny) - bez tego user zglosil realny
+// przypadek 2026-08-16: nowo dodane klucze tlumaczen ("Kopiuj DKIM"/"Kopiuj
+// SPF"/"Kopiuj DMARC") nie pojawialy sie mimo poprawnego kodu i poprawnie
+// zaktualizowanych plikow i18n/*.json na serwerze - `t()` cicho zwracal
+// sam klucz zamiast tlumaczenia, bo dict/fallbackDict w pamieci
+// przegladarki zostal zaladowany ze starej, zcache'owanej odpowiedzi
+// sprzed dodania tych kluczy.
 async function loadLangDict(lang) {
-  const res = await fetch(`i18n/${lang}.json`);
+  const res = await fetch(`/i18n/${lang}.json?v=${Date.now()}`);
   if (!res.ok) throw new Error(`Brak pliku tlumaczen dla jezyka: ${lang}`);
   return res.json();
 }
