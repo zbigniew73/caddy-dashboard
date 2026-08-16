@@ -1481,12 +1481,12 @@ async function renderMailTab(content) {
         <div style="flex:1 1 0;min-width:320px;display:flex;flex-direction:column;gap:16px;">
           ${mailDomainSectionHtml(domainStatus)}
           ${statsHtml}
+          ${antispamHtml}
         </div>
         <div style="flex:1 1 0;min-width:320px;">${adminAddressHtml}</div>
       </div>
       <div style="margin-top:16px;">${accessHtml}</div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-top:16px;">
-        <div style="flex:1 1 0;min-width:320px;">${antispamHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${postfwdHtml}</div>
         <div style="flex:1 1 0;min-width:320px;">${spamassassinHtml}</div>
       </div>
