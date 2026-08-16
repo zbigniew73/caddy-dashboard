@@ -1203,18 +1203,15 @@ async function mailVirtualSniSectionHtml(domain) {
 }
 
 async function renderMailVirtualListHtml() {
-  let domains, siteDomains, sniDomains;
+  let domains, sniDomains;
   try {
-    [{ items: domains }, { items: siteDomains }, { items: sniDomains }] = await Promise.all([
+    [{ items: domains }, { items: sniDomains }] = await Promise.all([
       api('GET', '/mail/virtual/domains'),
-      api('GET', '/mail/virtual/site-domains'),
       api('GET', '/mail/sni-domains').catch(() => ({ items: [] }))
     ]);
   } catch (e) {
     return `<div class="system-info-card"><div class="empty-state">${escapeHtml(e.message)}</div></div>`;
   }
-  const virtualDomainSet = new Set(domains.map((d) => d.domain));
-  const availableSiteDomains = siteDomains.filter((s) => !virtualDomainSet.has(s.domain));
   const sniSyncedSet = new Set(sniDomains);
 
   // Kolumna SNI ma sens TYLKO dla "mail.<domena>" - to jedyne hostname'y,
@@ -1240,15 +1237,6 @@ async function renderMailVirtualListHtml() {
   `;
   }).join('');
 
-  const addFormHtml = availableSiteDomains.length ? `
-    <div style="display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;">
-      <select id="mail-virtual-add-select">
-        ${availableSiteDomains.map((s) => `<option value="${escapeHtml(s.domain)}" data-owner="${escapeHtml(s.username)}">${escapeHtml(s.domain)} (${escapeHtml(s.username)})</option>`).join('')}
-      </select>
-      <button type="button" id="mail-virtual-add-btn">${t('mail.virtual_add_domain_button')}</button>
-    </div>
-  ` : `<p style="margin:16px 0 0;color:var(--muted);font-size:13px;">${t('mail.virtual_add_domain_select_empty')}</p>`;
-
   return `
     <div class="system-info-card">
       <h3>${t('mail.virtual_title')}</h3>
@@ -1266,7 +1254,6 @@ async function renderMailVirtualListHtml() {
           <tbody>${rows}</tbody>
         </table>
       ` : `<div class="empty-state">${t('mail.virtual_empty')}</div>`}
-      ${addFormHtml}
       <div class="action-msg" id="mail-virtual-msg"></div>
     </div>
   `;
@@ -1530,26 +1517,6 @@ function wireMailVirtualSection(content) {
       }
     };
   });
-
-  const addBtn = document.getElementById('mail-virtual-add-btn');
-  if (addBtn) {
-    addBtn.onclick = async () => {
-      const select = document.getElementById('mail-virtual-add-select');
-      const domain = select.value;
-      const ownerAccount = select.selectedOptions[0]?.dataset.owner;
-      addBtn.disabled = true;
-      msgEl().textContent = t('mail.virtual_working');
-      msgEl().className = 'action-msg';
-      try {
-        await api('POST', '/mail/virtual/domains', { domain, ownerAccount });
-        await renderMailTab(content);
-      } catch (e) {
-        msgEl().textContent = e.message;
-        msgEl().className = 'action-msg error';
-        addBtn.disabled = false;
-      }
-    };
-  }
 }
 
 async function renderMailTab(content) {
