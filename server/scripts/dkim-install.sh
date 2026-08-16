@@ -19,9 +19,16 @@
 # Uzycie:
 #   dkim-install.sh install <domena>   - generuje (jesli trzeba) + zwraca rekord
 #   dkim-install.sh status <domena>    - TYLKO odczyt, bez generowania
-# Na stdout (poza pierwsza linia OK:...) dwie dodatkowe linie:
+# Na stdout (poza pierwsza linia OK:...) trzy dodatkowe linie:
 #   RECORD_NAME=<selektor>._domainkey.<domena>
-#   RECORD_VALUE=<pelna tresc rekordu TXT, jedna linia>
+#   RECORD_VALUE=<pelna tresc rekordu TXT, jedna linia, BEZ cudzyslowow>
+#   RECORD_VALUE_RAW=<ta sama tresc, ALE w oryginalnym formacie BIND z
+#     opendkim-genkey - kazdy fragment <=255 znakow we WLASNYCH
+#     cudzyslowach, oddzielone spacja (np. "v=DKIM1; k=rsa; p=AAAA..."
+#     "BBBB...") - niektorzy dostawcy DNS wymagaja WLASNIE tego formatu
+#     (pole akceptujace "surowy" wpis strefy), a nie plaskiego stringu bez
+#     cudzyslowow z RECORD_VALUE. User zglosil 2026-08-16, ze plaski string
+#     nie dzialal u jego dostawcy.
 # Jesli status i klucza jeszcze nie ma: tylko "MISSING" na stdout.
 
 set -uo pipefail
@@ -40,11 +47,16 @@ KEY_TABLE="/etc/opendkim/KeyTable"
 SIGNING_TABLE="/etc/opendkim/SigningTable"
 
 print_record() {
-  local record_value
+  local record_value record_value_raw
   record_value="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | sed 's/^"//;s/"$//' | tr -d '\n' | tr -s ' ')"
   [ -n "$record_value" ] || err "nie udalo sie odczytac rekordu DKIM z ${KEY_DIR}/${SELECTOR}.txt."
+  # Jak wyzej, ALE cudzyslowy ZOSTAJA - tylko newline miedzy fragmentami
+  # zamieniony na spacje (oryginalny plik opendkim-genkey ma kazdy
+  # fragment w cudzyslowach na wlasnej linii).
+  record_value_raw="$(grep -o '"[^"]*"' "${KEY_DIR}/${SELECTOR}.txt" | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
   echo "RECORD_NAME=${SELECTOR}._domainkey.${DOMAIN}"
   echo "RECORD_VALUE=${record_value}"
+  echo "RECORD_VALUE_RAW=${record_value_raw}"
 }
 
 if [ "$ACTION" = "status" ]; then

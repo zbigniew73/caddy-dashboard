@@ -394,11 +394,12 @@ const DKIM_SCRIPT_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)),
 function parseDkimOutput(stdout) {
   const lines = stdout.split('\n');
   if (lines[0]?.trim() === 'MISSING') {
-    return { installed: false, recordName: null, recordValue: null, message: null };
+    return { installed: false, recordName: null, recordValue: null, recordValueRaw: null, message: null };
   }
   const recordName = lines.find((l) => l.startsWith('RECORD_NAME='))?.slice('RECORD_NAME='.length) || null;
   const recordValue = lines.find((l) => l.startsWith('RECORD_VALUE='))?.slice('RECORD_VALUE='.length) || null;
-  return { installed: Boolean(recordName && recordValue), recordName, recordValue, message: lines[0] };
+  const recordValueRaw = lines.find((l) => l.startsWith('RECORD_VALUE_RAW='))?.slice('RECORD_VALUE_RAW='.length) || null;
+  return { installed: Boolean(recordName && recordValue), recordName, recordValue, recordValueRaw, message: lines[0] };
 }
 
 async function runDkimScript(action, domain) {

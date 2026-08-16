@@ -572,6 +572,7 @@
   "mail.copy_value_button": "Kopiuj",
   "mail.copy_value_done": "Skopiowano",
   "mail.dkim_install_button": "Zainstaluj DKIM",
+  "mail.dkim_copy_button": "Kopiuj DKIM",
   "mail.dkim_recheck_button": "Sprawdź ponownie",
   "mail.dkim_confirm_install": "Zainstalować/sprawdzić DKIM dla {domain}? Jeśli klucza jeszcze nie ma, zostanie wygenerowany (RSA 2048, selektor \"mail\") i podpięty do OpenDKIM.",
   "mail.spf_title": "SPF",

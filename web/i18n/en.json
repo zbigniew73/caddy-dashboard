@@ -572,6 +572,7 @@
   "mail.copy_value_button": "Copy",
   "mail.copy_value_done": "Copied",
   "mail.dkim_install_button": "Install DKIM",
+  "mail.dkim_copy_button": "Copy DKIM",
   "mail.dkim_recheck_button": "Re-check",
   "mail.dkim_confirm_install": "Install/check DKIM for {domain}? If no key exists yet, one will be generated (RSA 2048, selector \"mail\") and wired into OpenDKIM.",
   "mail.spf_title": "SPF",

@@ -995,10 +995,11 @@ function mailDkimSectionHtml(domains, selectedDomain, dkim, spfDmarc) {
       <dl>
         <dt>${t('mail.dkim_record_type_label')}</dt><dd style="font-family:var(--mono);">TXT</dd>
         <dt>${t('mail.dkim_record_name_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordName)}</dd>
-        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${copyableValueHtml(dkim.recordValue)}</dd>
+        <dt>${t('mail.dkim_record_value_label')}</dt><dd style="font-family:var(--mono);word-break:break-all;">${escapeHtml(dkim.recordValue)}</dd>
       </dl>
     ` : `<p style="margin:0 0 12px;color:var(--muted);font-size:13px;">${t('mail.dkim_not_installed_hint')}</p>`}
     <button type="button" id="dkim-install-btn">${dkim && dkim.installed ? t('mail.dkim_recheck_button') : t('mail.dkim_install_button')}</button>
+    ${dkim && dkim.installed ? `<span class="dkim-raw-value" style="display:none;">${escapeHtml(dkim.recordValueRaw || '')}</span><button type="button" class="secondary copy-value-btn" id="dkim-copy-btn">${t('mail.dkim_copy_button')}</button>` : ''}
     <div class="action-msg" id="dkim-msg"></div>
     ${spfDmarcHtml}
   `;
