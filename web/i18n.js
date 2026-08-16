@@ -11,27 +11,28 @@ function detectDefaultLang() {
   return SUPPORTED_LANGS.includes(browserLang) ? browserLang : 'en';
 }
 
-// Sciezka WZGLEDNA "i18n/..." (NIE "/i18n/...") - potwierdzone na zywym
-// serwerze 2026-08-16: bezwzgledna sciezka POPSULA CALY panel usera
-// (WSZYSTKIE tlumaczenia zniknely, nie tylko nowe klucze) - prawdziwa
-// przyczyna nieznana (najpewniej topologia wdrozenia/reverse proxy na tym
-// konkretnym serwerze), ale wzgledna sciezka byla juz PRZED tym
-// potwierdzona jako dzialajaca (Typ/Nazwa/Wartosc/Sprawdz ponownie
-// tlumaczyly sie poprawnie) - NIE ryzykowac tego ponownie, wrocono do
-// wzglednej.
+// Sciezka BEZWZGLEDNA "/i18n/..." - PRAWDZIWA przyczyna calej serii bledow
+// 2026-08-16 w koncu znaleziona i POTWIERDZONA w DevTools na zywym
+// serwerze: panel usera stoi pod "/user/" (ze slashem), wiec wzgledny
+// fetch "i18n/en.json" rozwiazywal sie do "/user/i18n/en.json" - istnial
+// tam ZAPOMNIANY, nieaktualny duplikat (web/user/i18n/*.json, ostatnio
+// modyfikowany 2026-08-15, zero nowych kluczy typu "Kopiuj DKIM") ktory
+// express.static cicho serwowal (status 200, poprawny JSON, po prostu
+// STARY) zamiast wlasciwego web/i18n/*.json. Panel admina (strona "/")
+// nigdy tego nie mial, bo tam wzgledna sciezka trafia wprost we
+// wlasciwy plik - stad admin dzialal poprawnie, user nie.
+// Duplikat USUNIETY (byl caly czas martwy, nic go nie referencjonowalo),
+// ALE sciezka bezwzgledna zostaje i tak - jedyny sposob zeby to samo NIE
+// powtorzylo sie w przyszlosci dla jakiejkolwiek strony pod "/user/*".
+// Potwierdzone NIEZALEZNIE przez `curl https://.../i18n/en.json` (ten sam,
+// poprawny wynik) - bezwzgledna sciezka jest wiec zweryfikowana jako
+// bezpieczna, nie tylko teoretyczna.
 //
 // `?v=${Date.now()}` - cache-buster, KAZDE zaladowanie strony wymusza
 // swiezy fetch z serwera, ignorujac lokalny cache przegladarki (pliki sa
-// male, koszt bandwidth pomijalny) - bez tego user zglosil realny
-// przypadek 2026-08-16: nowo dodane klucze tlumaczen ("Kopiuj DKIM"/"Kopiuj
-// SPF"/"Kopiuj DMARC") nie pojawialy sie mimo poprawnego kodu i poprawnie
-// zaktualizowanych plikow i18n/*.json na serwerze - `t()` cicho zwracal
-// sam klucz zamiast tlumaczenia, bo dict/fallbackDict w pamieci
-// przegladarki zostal zaladowany ze starej, zcache'owanej odpowiedzi
-// sprzed dodania tych kluczy. To NIE dotyczylo bezwzglednej sciezki -
-// zostaje wylacznie jako cache-buster na wzglednej sciezce.
+// male, koszt bandwidth pomijalny).
 async function loadLangDict(lang) {
-  const res = await fetch(`i18n/${lang}.json?v=${Date.now()}`);
+  const res = await fetch(`/i18n/${lang}.json?v=${Date.now()}`);
   if (!res.ok) throw new Error(`Brak pliku tlumaczen dla jezyka: ${lang}`);
   return res.json();
 }
