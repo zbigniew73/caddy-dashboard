@@ -168,6 +168,10 @@ declare(strict_types=1);
 \$config['des_key'] = '${DES_KEY}';
 \$config['product_name'] = 'Webmail';
 \$config['plugins'] = ['archive', 'managesieve'];
+// Jawnie 'Archive' (chociaz to i tak domyslna wartosc pluginu "archive") -
+// musi sie zgadzac z folderem special_use=\Archive tworzonym przez Dovecota
+// (mail-install.sh, 94-caddy-dashboard-mailboxes.conf).
+\$config['archive_mbox'] = 'Archive';
 \$config['temp_dir'] = '${DOCROOT}/temp';
 \$config['log_dir'] = '${DOCROOT}/logs';
 \$config['session_lifetime'] = 30;

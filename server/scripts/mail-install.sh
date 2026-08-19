@@ -253,10 +253,22 @@ EOF
 # wpis Junk bez special_use (folder nadal dziala, tylko klienci moga go nie
 # rozpoznac automatycznie jako "kosz spamu" - VERIFY na zywym serwerze przy
 # pierwszym uruchomieniu: `doveconf -n | grep -A3 "namespace inbox"`.
+#
+# Folder Archive (plugin "archive" w Roundcube, roundcube-install.sh,
+# domyslnie zapisuje do folderu o nazwie "Archive") - w ODROZNIENIU od Junk,
+# pakietowy 15-mailboxes.conf zazwyczaj NIE definiuje wpisu Archive (tylko
+# Drafts/Junk/Trash/Sent), wiec deklarujemy TU zarowno special_use = \Archive
+# JAK I auto=create od zera (nie ma z czym sie polaczyc). Jesli pakiet
+# jednak juz ma taki wpis, powtorzenie tej samej wartosci special_use nie
+# szkodzi (ten sam blok, ta sama flaga).
 cat > /etc/dovecot/conf.d/94-caddy-dashboard-mailboxes.conf <<'EOF'
 # Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
 namespace inbox {
   mailbox Junk {
+    auto = create
+  }
+  mailbox Archive {
+    special_use = \Archive
     auto = create
   }
 }
