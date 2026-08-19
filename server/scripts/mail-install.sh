@@ -188,6 +188,32 @@ EOF
 # Sieve script "~/.dovecot.sieve" dziala dla OBU typow kont bez rozgalezien,
 # bo oba juz dzis rozwiazuja "home" (PAM niejawnie z /etc/passwd, SQL
 # jawnie przez user_query w dovecot-sql-virtual.conf.ext nizej).
+# Globalny skrypt Sieve (sieve_before, patrz plugin{} nizej) - sortuje do
+# folderu Junk KAZDA wiadomosc oznaczona przez spamass-milter/SpamAssassin
+# naglowkiem "X-Spam-Flag: YES" (prog TAGOWANIA - domyslnie 5.0, edytowalny
+# w panelu, patrz spamassassin-set-threshold.sh; prog ODRZUCENIA - domyslnie
+# 12 - odrzuca wiadomosc calkowicie na poziomie SMTP, taka poczta NIGDY tu
+# nie dotrze). "stop;" konczy przetwarzanie CALEGO lancucha Sieve dla tej
+# wiadomosci - WLASNY skrypt usera (Filtry w Roundcube, ~/.dovecot.sieve)
+# NIE URUCHOMI SIE dla poczty juz zakwalifikowanej tu jako spam. To
+# SWIADOMY kompromis (prostszy i bezpieczniejszy niz probowanie polaczenia
+# globalnej klasyfikacji z prywatnymi regulami White/Blacklist), NIE
+# realizuje personalnej bialej/czarnej listy w SpamAssassinie samym w sobie
+# - to osobny, wiekszy temat (patrz komentarz przy instalacji SpamAssassin).
+mkdir -p /etc/dovecot/sieve
+cat > /etc/dovecot/sieve/global-spam-filter.sieve <<'EOF'
+require ["fileinto"];
+
+if header :contains "X-Spam-Flag" "YES" {
+    fileinto "Junk";
+    stop;
+}
+EOF
+sievec /etc/dovecot/sieve/global-spam-filter.sieve \
+  || err "Kompilacja globalnego skryptu Sieve (sortowanie spamu do Junk) nie powiodla sie."
+chmod 644 /etc/dovecot/sieve/global-spam-filter.sieve
+[ -f /etc/dovecot/sieve/global-spam-filter.svbin ] && chmod 644 /etc/dovecot/sieve/global-spam-filter.svbin
+
 cat > /etc/dovecot/conf.d/93-caddy-dashboard-sieve.conf <<EOF
 # Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
 protocol lmtp {
@@ -210,6 +236,29 @@ service managesieve {
 
 plugin {
   sieve = ~/.dovecot.sieve
+  sieve_before = /etc/dovecot/sieve/global-spam-filter.sieve
+}
+EOF
+
+# Folder Junk - tworzony AUTOMATYCZNIE (auto=create) przy pierwszym dostepie
+# (logowanie IMAP ALBO doreczenie przez "fileinto Junk" wyzej), dla OBU
+# typow kont, bez potrzeby migracji istniejacych skrzynek. Dopisujemy TYLKO
+# "auto = create" do JUZ ISTNIEJACEGO wpisu "Junk" z domyslnego pakietowego
+# 15-mailboxes.conf (ktory ma tam juz "special_use = \Junk") - Dovecot laczy
+# bloki namespace/mailbox o tej samej nazwie z roznych plikow conf.d w jeden,
+# WIEC NIE POWTARZAMY special_use tutaj (dwa foldery z ta sama flaga \Junk
+# myliłyby klienty IMAP/Roundcube co do tego, ktory folder jest "tym"
+# Junk/Spam). Zakladamy, ze pakietowy Junk istnieje pod ta nazwa - jesli nie
+# (np. inna wersja Dovecota), auto=create po prostu utworzy NOWY, wlasny
+# wpis Junk bez special_use (folder nadal dziala, tylko klienci moga go nie
+# rozpoznac automatycznie jako "kosz spamu" - VERIFY na zywym serwerze przy
+# pierwszym uruchomieniu: `doveconf -n | grep -A3 "namespace inbox"`.
+cat > /etc/dovecot/conf.d/94-caddy-dashboard-mailboxes.conf <<'EOF'
+# Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
+namespace inbox {
+  mailbox Junk {
+    auto = create
+  }
 }
 EOF
 
