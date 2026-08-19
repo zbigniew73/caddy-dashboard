@@ -5158,19 +5158,19 @@ async function renderPhpOpcacheSection(id) {
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.memory_label')}</label>
       <input type="number" id="phpopcache-memory-${id}" value="${memoryConsumptionMb}" min="16" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.memory_hint', '256 MB')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.memory_hint', '512 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.interned_strings_label')}</label>
       <input type="number" id="phpopcache-interned-${id}" value="${internedStringsBufferMb}" min="4" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.interned_strings_hint', '32 MB')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.interned_strings_hint', '64 MB')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.max_files_label')}</label>
       <input type="number" id="phpopcache-max-files-${id}" value="${maxAcceleratedFiles}" min="1000" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.max_files_hint', '50000')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.max_files_hint', '100000')}</div>
 
       <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.revalidate_freq_label')}</label>
       <input type="number" id="phpopcache-revalidate-${id}" value="${revalidateFreqSec}" min="0" style="width:100%;margin-bottom:4px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.revalidate_freq_hint', '2 s')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:14px;">${withSuggested('phpopcache.revalidate_freq_hint', '60 s')}</div>
 
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
         <input type="checkbox" id="phpopcache-validate-timestamps-${id}"${validateTimestamps ? ' checked' : ''}>

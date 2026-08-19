@@ -317,12 +317,14 @@ router.post('/:id/settings', async (req, res) => {
   }
   const exposePhp = body.exposePhp ? 'On' : 'Off';
 
-  // default_charset/realpath_cache_* to swiadome, stale wartosci
+  // default_charset/realpath_cache_*/pcre.jit to swiadome, stale wartosci
   // (wydajnosc) - nie sa polami w formularzu, zawsze dopisywane razem z
   // ustawieniami, ktore admin faktycznie wybiera. Zestaw pol i wartosci
   // zgodny z przykladem "Globalne PHP 8.5" z pierwotnego planu Runtime
   // Managera - expose_php byl tam tez stala (Off), ale user poprosil o
-  // realny przelacznik zamiast zaszytej wartosci.
+  // realny przelacznik zamiast zaszytej wartosci. pcre.jit dopisany
+  // pozniej (razem z opcache.jit w drugim pliku, patrz OPCACHE_SCRIPT) -
+  // JIT-uje tez silnik wyrazen regularnych, nie tylko kod PHP.
   const iniContent = `[PHP]
 expose_php = ${exposePhp}
 default_charset = "UTF-8"
@@ -336,6 +338,7 @@ post_max_size = ${uploadMax}M
 max_file_uploads = ${maxFileUploads}
 realpath_cache_size = 4096K
 realpath_cache_ttl = 600
+pcre.jit = 1
 `;
 
   try {
@@ -364,12 +367,15 @@ router.post('/:id/opcache', async (req, res) => {
   }
   const validateTimestamps = body.validateTimestamps ? 1 : 0;
 
-  // enable/enable_cli/save_comments/fast_shutdown to stale wartosci
+  // enable/enable_cli/save_comments/fast_shutdown/jit* to stale wartosci
   // (dokladnie jak w przykladzie "OPcache" z pierwotnego planu) - jedynie
   // rozmiary/limity i validate_timestamps sa realnie czeste do zmiany.
+  // JIT (opcache.jit=1255 - tryb "tracing" z domyslnymi progami CRTO,
+  // opcache.jit_buffer_size=128M) wymaga PHP 8.0+ (caly Runtime Manager
+  // instaluje tylko wersje 8.x, wiec bezpiecznie wlaczone zawsze).
   const iniContent = `[opcache]
 opcache.enable = 1
-opcache.enable_cli = 0
+opcache.enable_cli = 1
 opcache.memory_consumption = ${memoryConsumption}
 opcache.interned_strings_buffer = ${internedStringsBuffer}
 opcache.max_accelerated_files = ${maxAcceleratedFiles}
@@ -377,6 +383,8 @@ opcache.revalidate_freq = ${revalidateFreq}
 opcache.validate_timestamps = ${validateTimestamps}
 opcache.save_comments = 1
 opcache.fast_shutdown = 1
+opcache.jit = 1255
+opcache.jit_buffer_size = 128M
 `;
 
   try {
