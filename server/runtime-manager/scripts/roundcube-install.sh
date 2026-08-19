@@ -150,9 +150,24 @@ declare(strict_types=1);
 \$config['smtp_conn_options'] = [
     'ssl' => ['verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true],
 ];
+// ManageSieve (Filtry/Nieobecnosc) - laczy sie z Dovecotem na
+// 127.0.0.1:4190 (patrz mail-install.sh, service managesieve-login).
+// W ODROZNIENIU od IMAP/SMTP wyzej: ManageSieve (RFC 5804) NIE MA
+// wariantu z niejawnym TLS - wylacznie STARTTLS na jednym porcie, stad
+// brak prefiksu 'ssl://' i jawne managesieve_usetls (Dovecot ma globalnie
+// disable_plaintext_auth=yes + ssl=required, wiec bez STARTTLS polaczenie
+// zostanie odrzucone). Tolerancyjne opcje TLS - ten sam powod/tymczasowy
+// self-signed cert co imap_conn_options/smtp_conn_options wyzej.
+\$config['managesieve_host'] = 'localhost';
+\$config['managesieve_port'] = 4190;
+\$config['managesieve_usetls'] = true;
+\$config['managesieve_conn_options'] = [
+    'ssl' => ['verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true],
+];
+\$config['managesieve_vacation'] = 0;
 \$config['des_key'] = '${DES_KEY}';
 \$config['product_name'] = 'Webmail';
-\$config['plugins'] = ['archive'];
+\$config['plugins'] = ['archive', 'managesieve'];
 \$config['temp_dir'] = '${DOCROOT}/temp';
 \$config['log_dir'] = '${DOCROOT}/logs';
 \$config['session_lifetime'] = 30;

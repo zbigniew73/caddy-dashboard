@@ -55,6 +55,11 @@ getent group mail >/dev/null 2>&1 || err "Systemowa grupa 'mail' nie istnieje - 
 # zywym serwerze 2026-08-14.
 dnf install -y postfix dovecot opendkim opendkim-tools || err "Instalacja pakietow (postfix, dovecot, opendkim, opendkim-tools) nie powiodla sie."
 
+# Pigeonhole (Sieve/ManageSieve) - z tego samego repo co dovecot (bez
+# dodatkowego repozytorium), potrzebne dla Filtrow/Nieobecnosci w
+# Roundcube (patrz drop-in 93-caddy-dashboard-sieve.conf nizej).
+dnf install -y dovecot-pigeonhole || err "Instalacja pakietu dovecot-pigeonhole (Sieve/ManageSieve) nie powiodla sie."
+
 # Sterowniki mysql dla Postfixa/Dovecota (wirtualne domeny/skrzynki na
 # MariaDB, patrz sekcja nizej) - dokladne nazwy pakietow/sciezki
 # sterownikow NIE byly (jeszcze) potwierdzone na zywym serwerze (w
@@ -112,9 +117,20 @@ fi
 # aktualizacje) - /etc/dovecot/conf.d/ laduje pliki alfabetycznie,
 # pozniejszy nadpisuje wczesniejsze. ---
 mkdir -p /etc/dovecot/conf.d
+
+# DH parametry - generowane RAZ, nie regenerowane przy kazdym ponownym
+# uruchomieniu tego idempotentnego skryptu (ten sam wzorzec co self-signed
+# cert wyzej). 2048-bit (nie 4096) - wystarczajace wspolczesne minimum,
+# generowanie 4096-bit potrafi trwac bardzo dlugo na VPS o slabszej
+# entropii/CPU.
+DH_FILE="/etc/dovecot/dh.pem"
+if [ ! -f "$DH_FILE" ]; then
+  openssl dhparam -out "$DH_FILE" 2048 || err "Generowanie parametrow DH nie powiodlo sie."
+fi
+
 cat > /etc/dovecot/conf.d/90-caddy-dashboard.conf <<EOF
 # Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
-protocols = imap
+protocols = imap lmtp sieve
 
 mail_location = maildir:~/Maildir
 
@@ -123,6 +139,9 @@ mail_privileged_group = mail
 ssl = required
 ssl_cert = <${ACTIVE_CERT_FILE}
 ssl_key = <${ACTIVE_KEY_FILE}
+ssl_min_protocol = TLSv1.2
+ssl_prefer_server_ciphers = yes
+ssl_dh = <${DH_FILE}
 
 disable_plaintext_auth = yes
 
@@ -139,6 +158,58 @@ service auth {
     user = postfix
     group = postfix
   }
+}
+
+# LMTP - Postfix (agent local/virtual, patrz nizej) dorecza tu OSTATNI krok
+# zapisu do skrzynki, zamiast robic to sam - jedyny sposob, zeby Sieve
+# (plugin nizej) w ogole mial szanse sie wykonac (Sieve dziala WYLACZNIE
+# przy doreczaniu przez Dovecota, nigdy przy doreczaniu wbudowanymi
+# agentami Postfixa). Ten sam wzorzec unix_listenera co "service auth"
+# wyzej - socket lezy w chrootowanym katalogu kolejki Postfixa
+# (/var/spool/postfix/private/...), zeby Postfix mogl go widziec wzgledna
+# sciezka "private/dovecot-lmtp" mimo wlasnego chroota.
+service lmtp {
+  unix_listener /var/spool/postfix/private/dovecot-lmtp {
+    mode = 0660
+    user = postfix
+    group = postfix
+  }
+}
+EOF
+
+# --- Sieve/ManageSieve (Pigeonhole) - Filtry/Nieobecnosc w Roundcube. Wlasny
+# plik (nie dopisany do 90-caddy-dashboard.conf), zeby byl latwy do
+# znalezienia/usuniecia osobno (ten sam wzorzec co 91-.../92-...-sni.conf).
+# UWAGA: "service managesieve-login" (NIE "service managesieve") to ten,
+# ktory dostaje inet_listener - dokladnie jak imap-login/imap, "service
+# managesieve" samo w sobie to tylko post-auth worker bez listenera. Bind
+# na 127.0.0.1 - Roundcube i tak zawsze laczy sie przez localhost (patrz
+# roundcube-install.sh), wiec port 4190 NIE jest otwierany w firewallu.
+# Sieve script "~/.dovecot.sieve" dziala dla OBU typow kont bez rozgalezien,
+# bo oba juz dzis rozwiazuja "home" (PAM niejawnie z /etc/passwd, SQL
+# jawnie przez user_query w dovecot-sql-virtual.conf.ext nizej).
+cat > /etc/dovecot/conf.d/93-caddy-dashboard-sieve.conf <<EOF
+# Zarzadzane przez Caddy Dashboard - server/scripts/mail-install.sh
+protocol lmtp {
+  mail_plugins = \$mail_plugins sieve
+}
+
+protocol sieve {
+  managesieve_implementation_string = Dovecot Pigeonhole
+}
+
+service managesieve-login {
+  inet_listener sieve {
+    address = 127.0.0.1
+    port = 4190
+  }
+}
+
+service managesieve {
+}
+
+plugin {
+  sieve = ~/.dovecot.sieve
 }
 EOF
 
@@ -169,6 +240,15 @@ dovecot -n >/dev/null 2>&1 || err "Konfiguracja Dovecota (90-caddy-dashboard.con
 # na zywym serwerze 2026-08-14 (test cdadmin<->konto hostingowe, poczta
 # znikala).
 postconf -e "home_mailbox=Maildir/"
+# mailbox_transport (NIE local_transport!) - przekierowuje TYLKO ostatni
+# krok doreczenia (zapis do skrzynki) na Dovecot LMTP (service lmtp,
+# patrz 90-caddy-dashboard.conf), zeby Sieve mial szanse sie wykonac
+# (Filtry/Nieobecnosc w Roundcube - patrz plugin sieve w
+# 93-caddy-dashboard-sieve.conf). local_transport zostaje domyslny (Postfixowy
+# agent "local"), zeby /etc/aliases i ~/.forward nadal dzialaly jak
+# wczesniej - local(8) sam obsluguje alias/forward expansion, dopiero
+# potem przekazuje finalny zapis do mailbox_transport.
+postconf -e 'mailbox_transport = lmtp:unix:private/dovecot-lmtp'
 # Domyslny main.cf z pakietu RPM (AlmaLinux/Rocky) ma "inet_interfaces =
 # localhost" (swiadomie bezpieczny stan przy instalacji) - bez tego
 # Postfix NIGDY nie nasluchuje na publicznym interfejsie na porcie 25,
@@ -180,6 +260,13 @@ postconf -e 'inet_interfaces = all'
 postconf -e "smtpd_tls_cert_file=${ACTIVE_CERT_FILE}"
 postconf -e "smtpd_tls_key_file=${ACTIVE_KEY_FILE}"
 postconf -e 'smtpd_tls_security_level = may'
+# Force TLSv1.3 or TLSv1.2 - wylacz przestarzale/niebezpieczne protokoly
+# (SSLv2/v3, TLSv1.0/1.1) zarowno dla polaczen przychodzacych (smtpd_)
+# jak i wychodzacych (smtp_ - Postfix jako klient przy relay do innych MTA).
+postconf -e 'smtpd_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1'
+postconf -e 'smtpd_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1'
+postconf -e 'smtp_tls_mandatory_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1'
+postconf -e 'smtp_tls_protocols = !SSLv2, !SSLv3, !TLSv1, !TLSv1.1'
 
 # --- SNI: certyfikaty TLS per "mail.<domena>" dla wlasnych domen mailowych
 # klientow (Strony -> "Wlacz obsluge poczty" w panelu usera, patrz
@@ -570,7 +657,7 @@ postconf -e "virtual_alias_maps=mysql:${MYSQL_VIRTUAL_ALIASES_CF}"
 postconf -e "virtual_uid_maps=static:${VMAIL_UID}"
 postconf -e "virtual_gid_maps=static:${VMAIL_GID}"
 postconf -e "virtual_minimum_uid=${VMAIL_UID}"
-postconf -e 'virtual_transport = virtual'
+postconf -e 'virtual_transport = lmtp:unix:private/dovecot-lmtp'
 # Postfixowy WLASNY, STALY domyslny virtual_mailbox_limit (51200000 B,
 # ~51MB) jest NIEZALEZNY od mailbox_size_limit mimo podobnej nazwy - jesli
 # message_size_limit jest juz wiekszy (np. admin podniosl go wczesniej w
@@ -581,6 +668,13 @@ postconf -e 'virtual_transport = virtual'
 # dopasowujemy go tu od razu do aktualnego mailbox_size_limit, zeby swiezy
 # install (albo re-run na juz dzialajacym message_size_limit) nigdy nie
 # zaczynal w tym zepsutym stanie.
+# NIEAKTUALNE od przejscia na LMTP wyzej (2026-08-19): ten limit dziala
+# TYLKO wewnatrz Postfixowego wbudowanego agenta `virtual`, ktorego juz nie
+# uzywamy - `postconf -e` ponizej jest teraz NIESZKODLIWYM, ale MARTWYM
+# ustawieniem (Postfix je ignoruje bez agenta ktory by je czytal). Zostawione
+# celowo (nie usuwane), zeby nie gubic historii/kontekstu bledu wyzej -
+# limity rozmiaru skrzynki po LMTP wymagalyby pluginu quota Dovecota
+# (osobny, nie zaimplementowany temat).
 postconf -e "virtual_mailbox_limit=$(postconf -h mailbox_size_limit 2>/dev/null || echo 0)"
 
 # Potwierdza, ze DZIALAJACY binarny postfix faktycznie zglasza "mysql"
