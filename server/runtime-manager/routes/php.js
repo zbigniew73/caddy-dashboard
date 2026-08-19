@@ -174,12 +174,22 @@ function requireIntInRange(value, min, max, label) {
 
 const PHP_INI_SETTINGS_KEYS = [
   'date.timezone', 'memory_limit', 'upload_max_filesize', 'post_max_size',
-  'max_execution_time', 'max_input_time', 'max_input_vars', 'max_file_uploads', 'expose_php'
+  'max_execution_time', 'max_input_time', 'max_input_vars', 'max_file_uploads', 'expose_php',
+  'pcre.jit'
 ];
 const PHP_INI_OPCACHE_KEYS = [
   'opcache.memory_consumption', 'opcache.interned_strings_buffer',
-  'opcache.max_accelerated_files', 'opcache.revalidate_freq', 'opcache.validate_timestamps'
+  'opcache.max_accelerated_files', 'opcache.revalidate_freq', 'opcache.validate_timestamps',
+  'opcache.enable_cli', 'opcache.jit', 'opcache.jit_buffer_size'
 ];
+// opcache.jit akceptuje w PHP wiele formatow (aliasy "tracing"/"function",
+// surowe 4-cyfrowe kody CRTO...) - zamiast probowac walidowac/rozumiec
+// caly ten zapis, kafelek w UI oferuje TYLKO wlacz/wylacz (checkbox),
+// mapowany na te dwie, w pelni bezpieczne, udokumentowane wartosci.
+// Recznej edycji bardziej egzotycznego kodu nikt nie zabrania bezposrednio
+// w pliku .ini na serwerze.
+const OPCACHE_JIT_ON = '1255';
+const OPCACHE_JIT_OFF = '0';
 const SETTINGS_INI_FILENAME = '99-caddy-dashboard.ini';
 const OPCACHE_INI_FILENAME = '98-caddy-dashboard-opcache.ini';
 
@@ -267,7 +277,8 @@ router.get('/:id/settings', async (req, res) => {
       maxInputTime: parseInt(values['max_input_time'], 10) ?? null,
       maxInputVars: parseInt(values['max_input_vars'], 10) ?? null,
       maxFileUploads: parseInt(values['max_file_uploads'], 10) ?? null,
-      exposePhp: iniBool(values['expose_php'])
+      exposePhp: iniBool(values['expose_php']),
+      pcreJit: iniBool(values['pcre.jit'])
     });
   } catch (e) {
     res.status(500).json({ error: `Nie udalo sie odczytac biezacej konfiguracji PHP ${versionLabel(id)}.` });
@@ -286,7 +297,10 @@ router.get('/:id/opcache', async (req, res) => {
       internedStringsBufferMb: parseInt(values['opcache.interned_strings_buffer'], 10) ?? null,
       maxAcceleratedFiles: parseInt(values['opcache.max_accelerated_files'], 10) ?? null,
       revalidateFreqSec: parseInt(values['opcache.revalidate_freq'], 10) ?? null,
-      validateTimestamps: iniBool(values['opcache.validate_timestamps'])
+      validateTimestamps: iniBool(values['opcache.validate_timestamps']),
+      enableCli: iniBool(values['opcache.enable_cli']),
+      jitEnabled: String(values['opcache.jit']).trim() !== OPCACHE_JIT_OFF,
+      jitBufferSizeMb: parseIniSizeToMb(values['opcache.jit_buffer_size'])
     });
   } catch (e) {
     res.status(500).json({ error: `Nie udalo sie odczytac biezacej konfiguracji OPcache PHP ${versionLabel(id)}.` });
@@ -316,15 +330,17 @@ router.post('/:id/settings', async (req, res) => {
     return res.status(e.status || 400).json({ error: e.message });
   }
   const exposePhp = body.exposePhp ? 'On' : 'Off';
+  const pcreJit = body.pcreJit ? 1 : 0;
 
-  // default_charset/realpath_cache_*/pcre.jit to swiadome, stale wartosci
+  // default_charset/realpath_cache_* to swiadome, stale wartosci
   // (wydajnosc) - nie sa polami w formularzu, zawsze dopisywane razem z
   // ustawieniami, ktore admin faktycznie wybiera. Zestaw pol i wartosci
   // zgodny z przykladem "Globalne PHP 8.5" z pierwotnego planu Runtime
   // Managera - expose_php byl tam tez stala (Off), ale user poprosil o
-  // realny przelacznik zamiast zaszytej wartosci. pcre.jit dopisany
-  // pozniej (razem z opcache.jit w drugim pliku, patrz OPCACHE_SCRIPT) -
-  // JIT-uje tez silnik wyrazen regularnych, nie tylko kod PHP.
+  // realny przelacznik zamiast zaszytej wartosci. pcre.jit - jak
+  // expose_php - realny checkbox w formularzu (JIT-uje tez silnik
+  // wyrazen regularnych, nie tylko kod PHP - patrz tez opcache.jit w
+  // drugim pliku, OPCACHE_SCRIPT).
   const iniContent = `[PHP]
 expose_php = ${exposePhp}
 default_charset = "UTF-8"
@@ -338,7 +354,7 @@ post_max_size = ${uploadMax}M
 max_file_uploads = ${maxFileUploads}
 realpath_cache_size = 4096K
 realpath_cache_ttl = 600
-pcre.jit = 1
+pcre.jit = ${pcreJit}
 `;
 
   try {
@@ -356,26 +372,29 @@ router.post('/:id/opcache', async (req, res) => {
   }
 
   const body = req.body || {};
-  let memoryConsumption, internedStringsBuffer, maxAcceleratedFiles, revalidateFreq;
+  let memoryConsumption, internedStringsBuffer, maxAcceleratedFiles, revalidateFreq, jitBufferSize;
   try {
     memoryConsumption = requireIntInRange(body.memoryConsumptionMb, 16, 4096, 'opcache.memory_consumption (MB)');
     internedStringsBuffer = requireIntInRange(body.internedStringsBufferMb, 4, 256, 'opcache.interned_strings_buffer (MB)');
     maxAcceleratedFiles = requireIntInRange(body.maxAcceleratedFiles, 1000, 1000000, 'opcache.max_accelerated_files');
     revalidateFreq = requireIntInRange(body.revalidateFreqSec, 0, 3600, 'opcache.revalidate_freq (s)');
+    jitBufferSize = requireIntInRange(body.jitBufferSizeMb, 0, 1024, 'opcache.jit_buffer_size (MB)');
   } catch (e) {
     return res.status(e.status || 400).json({ error: e.message });
   }
   const validateTimestamps = body.validateTimestamps ? 1 : 0;
+  const enableCli = body.enableCli ? 1 : 0;
+  // opcache.jit akceptuje wiele formatow (aliasy/surowe kody CRTO) - w UI
+  // to tylko wlacz/wylacz, patrz OPCACHE_JIT_ON/OFF wyzej dla uzasadnienia.
+  const jit = body.jitEnabled ? OPCACHE_JIT_ON : OPCACHE_JIT_OFF;
 
-  // enable/enable_cli/save_comments/fast_shutdown/jit* to stale wartosci
-  // (dokladnie jak w przykladzie "OPcache" z pierwotnego planu) - jedynie
-  // rozmiary/limity i validate_timestamps sa realnie czeste do zmiany.
-  // JIT (opcache.jit=1255 - tryb "tracing" z domyslnymi progami CRTO,
-  // opcache.jit_buffer_size=128M) wymaga PHP 8.0+ (caly Runtime Manager
-  // instaluje tylko wersje 8.x, wiec bezpiecznie wlaczone zawsze).
+  // enable/save_comments/fast_shutdown to stale wartosci (dokladnie jak w
+  // przykladzie "OPcache" z pierwotnego planu) - reszta to realne pola
+  // formularza. JIT wymaga PHP 8.0+ (caly Runtime Manager instaluje tylko
+  // wersje 8.x, wiec bezpiecznie dostepne zawsze).
   const iniContent = `[opcache]
 opcache.enable = 1
-opcache.enable_cli = 1
+opcache.enable_cli = ${enableCli}
 opcache.memory_consumption = ${memoryConsumption}
 opcache.interned_strings_buffer = ${internedStringsBuffer}
 opcache.max_accelerated_files = ${maxAcceleratedFiles}
@@ -383,8 +402,8 @@ opcache.revalidate_freq = ${revalidateFreq}
 opcache.validate_timestamps = ${validateTimestamps}
 opcache.save_comments = 1
 opcache.fast_shutdown = 1
-opcache.jit = 1255
-opcache.jit_buffer_size = 128M
+opcache.jit = ${jit}
+opcache.jit_buffer_size = ${jitBufferSize}M
 `;
 
   try {

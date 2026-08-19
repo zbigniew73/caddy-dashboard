@@ -5039,6 +5039,7 @@ async function renderPhpSettingsSection(id) {
   const maxInputVars = current.maxInputVars ?? 5000;
   const maxFileUploads = current.maxFileUploads ?? 50;
   const exposePhp = current.exposePhp ?? false;
+  const pcreJit = current.pcreJit ?? true;
   const readFailedBanner = readFailed
     ? `<div class="action-msg error" style="margin-bottom:14px;">${t('phpsettings.read_failed')}</div>`
     : '';
@@ -5084,6 +5085,12 @@ async function renderPhpSettingsSection(id) {
       </select>
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpsettings.expose_php_hint', 'Off')}</div>
 
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="phpsettings-pcre-jit-${id}"${pcreJit ? ' checked' : ''}>
+        ${t('phpsettings.pcre_jit_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpsettings.pcre_jit_hint')}</div>
+
       <button type="button" id="phpsettings-save-btn-${id}">${t('phpsettings.save_button')}</button>
       <div class="action-msg" id="phpsettings-msg-${id}"></div>
     </div>
@@ -5104,6 +5111,7 @@ function wirePhpSettingsSection(id) {
     const maxInputVars = parseInt(document.getElementById(`phpsettings-max-input-vars-${id}`).value, 10);
     const maxFileUploads = parseInt(document.getElementById(`phpsettings-max-file-uploads-${id}`).value, 10);
     const exposePhp = document.getElementById(`phpsettings-expose-php-${id}`).value === 'on';
+    const pcreJit = document.getElementById(`phpsettings-pcre-jit-${id}`).checked;
 
     if (!timezone || ![memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads].every(Number.isInteger)) {
       msgEl.textContent = t('phpsettings.invalid_values');
@@ -5117,7 +5125,7 @@ function wirePhpSettingsSection(id) {
     msgEl.className = 'action-msg';
     try {
       await api('POST', `/php/${id}/settings`, {
-        timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads, exposePhp
+        timezone, memoryLimitMb, uploadMaxMb, maxExecutionTime, maxInputTime, maxInputVars, maxFileUploads, exposePhp, pcreJit
       });
       msgEl.textContent = t('phpsettings.save_success');
       msgEl.className = 'action-msg success';
@@ -5146,6 +5154,9 @@ async function renderPhpOpcacheSection(id) {
   const maxAcceleratedFiles = current.maxAcceleratedFiles ?? 50000;
   const revalidateFreqSec = current.revalidateFreqSec ?? 2;
   const validateTimestamps = current.validateTimestamps ?? true;
+  const enableCli = current.enableCli ?? true;
+  const jitEnabled = current.jitEnabled ?? true;
+  const jitBufferSizeMb = current.jitBufferSizeMb ?? 128;
   const readFailedBanner = readFailed
     ? `<div class="action-msg error" style="margin-bottom:14px;">${t('phpopcache.read_failed')}</div>`
     : '';
@@ -5178,6 +5189,22 @@ async function renderPhpOpcacheSection(id) {
       </label>
       <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpopcache.validate_timestamps_hint')}</div>
 
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="phpopcache-enable-cli-${id}"${enableCli ? ' checked' : ''}>
+        ${t('phpopcache.enable_cli_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpopcache.enable_cli_hint')}</div>
+
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px;">
+        <input type="checkbox" id="phpopcache-jit-enabled-${id}"${jitEnabled ? ' checked' : ''}>
+        ${t('phpopcache.jit_enabled_label')}
+      </label>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${t('phpopcache.jit_enabled_hint')}</div>
+
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px;">${t('phpopcache.jit_buffer_label')}</label>
+      <input type="number" id="phpopcache-jit-buffer-${id}" value="${jitBufferSizeMb}" min="0" style="width:100%;margin-bottom:4px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:16px;">${withSuggested('phpopcache.jit_buffer_hint', '128 MB')}</div>
+
       <button type="button" id="phpopcache-save-btn-${id}">${t('phpopcache.save_button')}</button>
       <div class="action-msg" id="phpopcache-msg-${id}"></div>
     </div>
@@ -5195,8 +5222,11 @@ function wirePhpOpcacheSection(id) {
     const maxAcceleratedFiles = parseInt(document.getElementById(`phpopcache-max-files-${id}`).value, 10);
     const revalidateFreqSec = parseInt(document.getElementById(`phpopcache-revalidate-${id}`).value, 10);
     const validateTimestamps = document.getElementById(`phpopcache-validate-timestamps-${id}`).checked;
+    const enableCli = document.getElementById(`phpopcache-enable-cli-${id}`).checked;
+    const jitEnabled = document.getElementById(`phpopcache-jit-enabled-${id}`).checked;
+    const jitBufferSizeMb = parseInt(document.getElementById(`phpopcache-jit-buffer-${id}`).value, 10);
 
-    if (![memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec].every(Number.isInteger)) {
+    if (![memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, jitBufferSizeMb].every(Number.isInteger)) {
       msgEl.textContent = t('phpopcache.invalid_values');
       msgEl.className = 'action-msg error';
       return;
@@ -5208,7 +5238,8 @@ function wirePhpOpcacheSection(id) {
     msgEl.className = 'action-msg';
     try {
       await api('POST', `/php/${id}/opcache`, {
-        memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, validateTimestamps
+        memoryConsumptionMb, internedStringsBufferMb, maxAcceleratedFiles, revalidateFreqSec, validateTimestamps,
+        enableCli, jitEnabled, jitBufferSizeMb
       });
       msgEl.textContent = t('phpopcache.save_success');
       msgEl.className = 'action-msg success';
